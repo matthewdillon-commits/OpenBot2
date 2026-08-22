@@ -47,6 +47,15 @@ Bots can also message each other. `message_agent` opens or reuses a 1:1 between 
 
 Bots can send and read mail when an administrator has stored a write-only email credential under Admin → Credentials. `send_email` needs SMTP; `read_email` lists recent inbox messages or reads one by id and needs IMAP. Store both protocols to offer both tools. Every call goes through the gateway (`intent == "email"` or the tool name), and the trail records destination, subject and the decision as `email.sent` / `email.send_refused` or `email.read` / `email.read_refused` — never the body and never the password. Absent credential, the tools are not offered.
 
+An administrator can also give a coworker standing work that is not a chat turn. Admin → Schedules
+creates a cron job, an inbound webhook, or an inbound email trigger. Email triggers need the IMAP
+credential above: when a new message arrives, the poller wakes the named coworker with the job
+brief plus from, subject, id, and enough of the body to act. Creating and firing go through the
+gateway (`intent == "schedule"`). The HTTP webhook still requires its secret; only the in-process
+fetcher may fire an email job as trusted. The brief is posted to a hidden task channel and the
+coworker is woken afterwards. Due times and the inbox cursor live in Postgres so a restart still
+sees work that is due and does not re-fire old mail.
+
 A Bot can hand a bounded chunk of work to a sub-agent with `spawn_subagent`: a goal, success criteria, and what to report back. The call returns an id immediately; the parent stays available. The child is a background run of that same coworker, not a new profile in the directory, and it does not talk to the person. When it finishes — or hits a real blocker — it reports and the parent is woken, the same way a `message_agent` recipient is. A follow-up or correction passes that same id so the work stays on that worker. A second spawn without an id is a second independent worker. Spawn is governed (`intent == "spawn"` or `tool.name == "spawn_subagent"`) and lands on the trail as `subagent.started` or `subagent.refused`. The child has no composer; the record is the audit trail.
 
 Each channel routes through a channel-local proxy agent id, pinned to that channel's thread id, then forwards to the coworker runtime id.

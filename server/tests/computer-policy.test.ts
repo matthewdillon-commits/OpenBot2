@@ -492,6 +492,29 @@ describe("describing a refusal", () => {
     expect(decision.reason).not.toContain(" on  ");
   });
 
+  test("a refused schedule names the tool, not an empty host", () => {
+    const decision = evaluateActionPolicy(
+      { mode: "enforce", deny: ['intent == "schedule"'], allow: ["true"] },
+      {
+        tool: { name: "create_schedule" },
+        bot: { id: "risk" },
+        actor: { id: "dev-local-user" },
+        page: { url: "", host: "" },
+        element: { ref: "", role: "", name: "", type: "" },
+        key: "",
+        file: { path: "", name: "", extension: "" },
+        command: "",
+        intent: "schedule",
+        channel: { id: "" },
+        recipient: { id: "risk" },
+      },
+    );
+
+    expect(decision.allowed).toBe(false);
+    expect(decision.reason).toContain("create_schedule");
+    expect(decision.reason).not.toContain(" on  ");
+  });
+
   test("a refused spawn names the tool, not an empty host", () => {
     const decision = evaluateActionPolicy(
       { mode: "enforce", deny: ['intent == "spawn"'], allow: ["true"] },

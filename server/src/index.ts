@@ -24,6 +24,9 @@ import {
 import { createChannelStore } from "./channels/routes";
 import { messagingTools } from "./channels/tools";
 import { createAgentWakeRunner, createWakeQueue } from "./channels/wake";
+import { createScheduleGateway } from "./jobs/gateway";
+import { startSchedulePoller } from "./jobs/poller";
+import { createScheduledJobStore } from "./jobs/store";
 import {
   createSubagentGateway,
   SPAWN_SUBAGENT_TOOL,
@@ -446,6 +449,25 @@ subagentRunner.current = createSubagentRunner({
 });
 
 /**
+ * Standing jobs. Durable in Postgres; dispatched in-process on this replica,
+ * the same limit message wakes have. See jobs/poller.ts.
+ */
+const scheduleGateway = createScheduleGateway({
+  jobs: createScheduledJobStore(database),
+  profiles: agentProfileStore,
+  channels: channelStore,
+  messages: channelMessageStore,
+  auditStore: bootAuditStore,
+  policy: () => policyStore.get(),
+  deploymentTimezone: config.deploymentTimezone,
+  wake: async (job) => {
+    if (!wakeRunner.current) return null;
+    return wakeRunner.current(job);
+  },
+});
+const schedulePoller = startSchedulePoller(scheduleGateway);
+
+/**
  * What one Bot may call, for the person asking, rebuilt each request.
  *
  * MCP grants still go through the plugin store. Company knowledge, web search, agent messaging,
@@ -627,6 +649,7 @@ const app = createApp(
     return tool ? tool.execute(args) : null;
   },
   channelMessageStore,
+  scheduleGateway,
 );
 
 /**
@@ -792,6 +815,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
       channelActivityListener.stop(),
       policyListener.stop(),
       Promise.resolve(auditRetention.stop()),
+      Promise.resolve(schedulePoller.stop()),
     ]).finally(() => process.exit(0));
   });
 }

@@ -92,6 +92,13 @@
       "when": 1787366272069,
       "tag": "0012_email_credential_kind",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1787367055052,
+      "tag": "0013_scheduled_jobs",
+      "breakpoints": true
     }
   ]
 }
