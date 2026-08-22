@@ -70,7 +70,8 @@ const SECTIONS: {
       },
       {
         title: "Boundaries",
-        description: "Rules that decide what a Bot may never do.",
+        description:
+          "Whether Bots may use a browser, and the rules that decide what they may never do.",
         icon: IconShieldCheck,
         linkOptions: { to: "/admin/boundaries" },
       },

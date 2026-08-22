@@ -25,6 +25,7 @@ import { eq, sql } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { actionPolicy } from "../db/schema";
 import type { ActionPolicy } from "./policy";
+import { isBrowserEnabled } from "./policy";
 
 /** There is one boundary per deployment, so there is one row. */
 const CURRENT = "current";
@@ -53,6 +54,7 @@ export const DEFAULT_ACTION_POLICY: ActionPolicy = {
   mode: "enforce",
   deny: [],
   allow: ["true"],
+  browserEnabled: true,
 };
 
 export type PolicyStore = {
@@ -102,6 +104,7 @@ export function createPolicyStore(
               mode: next.mode,
               deny: next.deny,
               allow: next.allow,
+              browserEnabled: isBrowserEnabled(next),
               updatedBy: by ?? null,
               updatedAt: new Date(),
             })
@@ -111,6 +114,7 @@ export function createPolicyStore(
                 mode: next.mode,
                 deny: next.deny,
                 allow: next.allow,
+                browserEnabled: isBrowserEnabled(next),
                 updatedBy: by ?? null,
                 updatedAt: new Date(),
               },
@@ -148,11 +152,7 @@ export function createPolicyStore(
         .limit(1);
       if (!row) return "configuration";
 
-      current = {
-        mode: row.mode as ActionPolicy["mode"],
-        deny: [...row.deny],
-        allow: [...row.allow],
-      };
+      current = policyFromRow(row);
       return "the database";
     },
 
@@ -167,13 +167,7 @@ export function createPolicyStore(
       // No row means somebody reset it, and reset means this deployment goes back to what
       // configuration says. Leaving the last saved rules in memory here would make a reset apply on
       // the server that served it and nowhere else, which is the bug this function exists to fix.
-      current = row
-        ? {
-            mode: row.mode as ActionPolicy["mode"],
-            deny: [...row.deny],
-            allow: [...row.allow],
-          }
-        : clone(configured);
+      current = row ? policyFromRow(row) : clone(configured);
     },
   };
 }
@@ -199,11 +193,27 @@ async function announce(database: Pick<Database, "execute">): Promise<void> {
   }
 }
 
+function policyFromRow(row: {
+  mode: string;
+  deny: string[];
+  allow: string[];
+  browserEnabled: boolean | null;
+}): ActionPolicy {
+  return {
+    mode: row.mode as ActionPolicy["mode"],
+    deny: [...row.deny],
+    allow: [...row.allow],
+    // A row written before this column existed has null, which meant on.
+    browserEnabled: row.browserEnabled !== false,
+  };
+}
+
 function clone(policy: ActionPolicy): ActionPolicy {
   return {
     mode: policy.mode,
     deny: [...policy.deny],
     allow: [...policy.allow],
+    browserEnabled: isBrowserEnabled(policy),
   };
 }
 
@@ -243,5 +253,18 @@ export function parseActionPolicy(
     lists[key] = value as string[];
   }
 
-  return { ok: true, policy: { mode, deny: lists.deny, allow: lists.allow } };
+  const browserEnabled = candidate.browserEnabled;
+  if (browserEnabled !== undefined && typeof browserEnabled !== "boolean") {
+    return { ok: false, error: "browserEnabled must be true or false." };
+  }
+
+  return {
+    ok: true,
+    policy: {
+      mode,
+      deny: lists.deny,
+      allow: lists.allow,
+      browserEnabled: browserEnabled !== false,
+    },
+  };
 }

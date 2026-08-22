@@ -1,4 +1,5 @@
 import { useFrontendTool } from "@copilotkit/react-core/v2";
+import { useQuery } from "@tanstack/react-query";
 import { z } from "zod";
 import { ToolLine } from "@/components/channels/tool-line";
 import { CommandOutput } from "@/components/computer/command-output";
@@ -6,6 +7,7 @@ import { ComputerView } from "@/components/computer/computer-view";
 import { tryClient } from "@/lib/client";
 import { noteBrowsed, recordActivity } from "@/lib/computers/activity";
 import { type ControlState, readControl } from "@/lib/computers/control";
+import { computerCapabilityQueryOptions } from "@/lib/computers/queries";
 import { useActiveBotHolder } from "./active-bot";
 import { reportComputerActivity } from "./computer-activity";
 
@@ -227,7 +229,22 @@ function didNotWork(outcome: ComputerOutcome): boolean {
   return outcome.ok === false && outcome.refused !== true;
 }
 
+/**
+ * Offered only while the administrator has left the browser on.
+ *
+ * The registrations are hooks, so they live in a child that is not mounted when the switch is off.
+ * Asking the same hooks behind an `if` would break the rules of hooks the moment the flag flipped.
+ * Pending is nothing: registering first and taking the tools away a moment later is a flicker of
+ * hands a Bot should not have been told it had.
+ */
 export function ComputerTools() {
+  const capability = useQuery(computerCapabilityQueryOptions());
+  if (capability.isPending) return null;
+  if (capability.error || capability.data?.browserEnabled !== true) return null;
+  return <RegisteredComputerTools />;
+}
+
+function RegisteredComputerTools() {
   const bot = useActiveBotHolder();
 
   useFrontendTool({

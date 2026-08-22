@@ -5,8 +5,8 @@ import {
   DEFAULT_ACTION_POLICY,
 } from "../src/computer/policy-store";
 import { createDatabase } from "../src/db/client";
-import { TEST_POOL } from "./support/database";
 import { actionPolicy } from "../src/db/schema";
+import { TEST_POOL } from "./support/database";
 
 /**
  * The boundary has to survive a restart.
@@ -86,6 +86,21 @@ describe("a boundary set while running", () => {
 
     const [row] = await database.select().from(actionPolicy);
     expect(row?.updatedBy).toBe("admin@example.test");
+  });
+
+  test("switching the browser off survives a restart", async () => {
+    const before = createPolicyStore(configured, database);
+    await before.load();
+    await before.set({
+      mode: "enforce",
+      deny: [],
+      allow: ["true"],
+      browserEnabled: false,
+    });
+
+    const after = createPolicyStore(configured, database);
+    expect(await after.load()).toBe("the database");
+    expect(after.get().browserEnabled).toBe(false);
   });
 
   test("without a database it still works, in memory", async () => {

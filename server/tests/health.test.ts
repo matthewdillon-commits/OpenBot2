@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createApp } from "../src/app";
+import type { ComputerGateway } from "../src/computer/gateway";
+import type { PolicyStore } from "../src/computer/policy-store";
 import { loadConfig } from "../src/config";
 import { testEnvironment } from "./support/environment";
 
@@ -31,6 +33,8 @@ describe("runtime capabilities", () => {
       // A boolean, not a list: naming the registered providers would tell anybody who loads the
       // sign-in page which companies use this deployment.
       ssoConfigured: false,
+      // No computer is mounted in this app, so Bots are not offered a browser.
+      browserEnabled: false,
     });
   });
 
@@ -49,9 +53,46 @@ describe("runtime capabilities", () => {
       "durableHistory",
       "authProviders",
       "ssoConfigured",
+      "browserEnabled",
     ]);
     // The provider list is names, never the clients and secrets behind them.
     expect(body).not.toContain("google-client-secret");
+  });
+
+  test("reports browserEnabled from the live policy when a computer is mounted", async () => {
+    let browserEnabled = true;
+    const withComputer = createApp(
+      loadConfig(testEnvironment()),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {} as ComputerGateway,
+      {
+        get: () => ({
+          mode: "enforce",
+          deny: [],
+          allow: ["true"],
+          browserEnabled,
+        }),
+      } as PolicyStore,
+    );
+
+    await expect(
+      (
+        await withComputer.request("http://openbot.local/api/capabilities")
+      ).json(),
+    ).resolves.toMatchObject({ browserEnabled: true });
+
+    browserEnabled = false;
+    await expect(
+      (
+        await withComputer.request("http://openbot.local/api/capabilities")
+      ).json(),
+    ).resolves.toMatchObject({ browserEnabled: false });
   });
 });
 

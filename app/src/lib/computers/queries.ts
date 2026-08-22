@@ -32,12 +32,30 @@ export type ActionPolicy = {
   mode: PolicyMode;
   deny: string[];
   allow: string[];
+  /**
+   * Whether Bots are offered a browser at all.
+   *
+   * Absent or `true` is on. `false` is the kill switch: the chat surface does not register the
+   * tools, and the gateway refuses every computer action. MCP tools are not this.
+   */
+  browserEnabled?: boolean;
+};
+
+/**
+ * Whether this deployment is offering Bots a browser right now.
+ *
+ * From the public capabilities endpoint, because the chat surface has to know and the policy
+ * route is administrator-only.
+ */
+export type ComputerCapability = {
+  browserEnabled: boolean;
 };
 
 export const computerKeys = {
   all: ["computers"] as const,
   fleet: () => ["computers", "fleet"] as const,
   policy: () => ["computers", "policy"] as const,
+  capability: () => ["computers", "capability"] as const,
 };
 
 /**
@@ -66,5 +84,19 @@ export function actionPolicyQueryOptions() {
       client("/api/computers/policy", "policy", {
         fallback: "The boundary could not be read.",
       }),
+  });
+}
+
+/** The whole body, not an envelope. `browserEnabled` is only true when the server said so. */
+export function computerCapabilityQueryOptions() {
+  return queryOptions({
+    queryKey: computerKeys.capability(),
+    queryFn: async (): Promise<ComputerCapability> => {
+      const response = await client("/api/capabilities", {
+        fallback: "Could not load computer capability.",
+      });
+      const body = (await response.json()) as { browserEnabled?: unknown };
+      return { browserEnabled: body.browserEnabled === true };
+    },
   });
 }

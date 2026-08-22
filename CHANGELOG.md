@@ -46,6 +46,7 @@ Sessions survive and nobody signs in again.
 
 ### Added
 
+- **An administrator can switch browser use off**, under Admin → Boundaries, so Bots are not offered the computer tools and do not try to open pages. The switch is not a CEL rule and is not dry-runnable: the chat surface skips the tools, built-in Bots are not told they have a computer, and the gateway refuses every computer action. MCP tools are not this — a deployment that has turned the browser off can still let a Bot talk to Jira. A deployment that has never said otherwise stays on.
 - **A Bot can answer from a connected source, as the person asking.** The connectors have been
   writing `documents`, `chunks` and `document_acls` and nothing ever read them back, so a deployment
   that connected a source got rows in PostgreSQL and still no citation. A Bot now has a

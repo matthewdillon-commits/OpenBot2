@@ -30,12 +30,13 @@ import type { SandboxedStore } from "./components/sandboxed";
 import { createSandboxedRoutes } from "./components/sandboxed-routes";
 import type { ComponentStore } from "./components/store";
 import type { ComputerGateway } from "./computer/gateway";
+import { isBrowserEnabled } from "./computer/policy";
 import type { PolicyStore } from "./computer/policy-store";
 import { createComputerRoutes } from "./computer/routes";
 import { configuredAuthProviders, type DeploymentConfig } from "./config";
 import type { ConnectorAdminService } from "./connectors";
-import { createIntelligenceClient } from "./intelligence-client";
 import type { CredentialAdminService, CredentialInput } from "./credentials";
+import { createIntelligenceClient } from "./intelligence-client";
 import type { PeopleStore } from "./people/store";
 import { createPluginRoutes } from "./plugins/routes";
 import type { PluginStore } from "./plugins/store";
@@ -177,6 +178,18 @@ export function createApp(
        * companies use this deployment, which is not theirs to have before they sign in.
        */
       ssoConfigured: ((await identityProviders?.list()) ?? []).length > 0,
+      /*
+       * Whether Bots are offered a browser.
+       *
+       * Answered here, not only on the administrator-only policy route, because the chat surface has
+       * to know whether to register the tools. False when this process has no computer, or an
+       * administrator switched the browser off. MCP tools are not this.
+       */
+      browserEnabled: Boolean(
+        computerGateway &&
+          computerPolicy &&
+          isBrowserEnabled(computerPolicy.get()),
+      ),
     }),
   );
   /*

@@ -33,6 +33,7 @@ export {
 import {
   type ActionPolicy,
   evaluateActionPolicy,
+  isBrowserEnabled,
   type PolicyContext,
   type PolicyDecision,
 } from "./policy";
@@ -421,7 +422,41 @@ export function createComputerGateway(
       command: subject.command ?? "",
     };
 
-    const decision = evaluateActionPolicy(options.policy(), context);
+    const policy = options.policy();
+    /*
+     * The administrator's kill switch, asked before CEL and not dry-runnable.
+     *
+     * A deny rule still lets the model try: the tools are offered, the guidance still describes a
+     * computer, and dry-run records a refusal then carries the click out. Switching the browser off
+     * means none of that. MCP is not this — those calls keep going through evaluateActionPolicy on
+     * their own path, so turning the browser off does not silence Jira.
+     */
+    if (policy && !isBrowserEnabled(policy)) {
+      const decision: PolicyDecision = {
+        allowed: false,
+        mode: "enforce",
+        matched: null,
+        source: "default",
+        forward: false,
+        reason:
+          "Browser use is switched off. Turn it back on under Admin → Boundaries.",
+      };
+      await write(auditStore, {
+        toolName,
+        botId,
+        actor,
+        element,
+        ref,
+        ...(subject.key ? { key: subject.key } : {}),
+        ...(subject.command ? { command: subject.command } : {}),
+        filePath,
+        pageUrl,
+        decision,
+      });
+      throw new ActionRefusedError(decision.reason, decision.matched);
+    }
+
+    const decision = evaluateActionPolicy(policy, context);
     await write(auditStore, {
       toolName,
       botId,

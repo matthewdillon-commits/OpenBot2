@@ -1,7 +1,23 @@
+import { IconWorld } from "@tabler/icons-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { PageSection, PageShell } from "@/components/layout/page-shell";
+import {
+  PageRows,
+  PageSection,
+  PageShell,
+} from "@/components/layout/page-shell";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemMedia,
+  ItemTitle,
+} from "@/components/ui/item";
+import { Switch } from "@/components/ui/switch";
 import { saveActionPolicyMutationOptions } from "@/lib/computers/mutations";
 import {
   type ActionPolicy,
@@ -9,8 +25,6 @@ import {
   type PolicyMode,
 } from "@/lib/computers/queries";
 import { queryClient } from "@/query-client";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 
 /**
  * CEL computer-action boundary editor. Rules are shown as the gateway evaluates them, and denied
@@ -103,6 +117,37 @@ function BoundariesPage() {
       }
       title="Boundaries"
     >
+      <PageSection
+        description="Whether any Bot is offered a browser at all. Switching this off is not a rule and cannot be tried in dry-run: the tools are not registered, built-in Bots are not told they have a computer, and every computer action is refused."
+        title="Browser"
+      >
+        <PageRows>
+          <Item size="sm">
+            <ItemMedia variant="icon">
+              <IconWorld />
+            </ItemMedia>
+            <ItemContent>
+              <ItemTitle>Browser use</ItemTitle>
+              <ItemDescription>
+                {policy.browserEnabled !== false
+                  ? "Bots may open pages and act on them."
+                  : "No Bot may use a browser."}
+              </ItemDescription>
+            </ItemContent>
+            <ItemActions>
+              <Switch
+                aria-label="Browser use"
+                checked={policy.browserEnabled !== false}
+                disabled={saving}
+                onCheckedChange={(checked) =>
+                  void save({ ...policy, browserEnabled: checked })
+                }
+              />
+            </ItemActions>
+          </Item>
+        </PageRows>
+      </PageSection>
+
       <PageSection
         description="Enforce stops the action. Record it and allow it writes the same row and lets the action through, which is how a rule is tried on real traffic before it starts refusing anybody."
         title="When a rule matches"

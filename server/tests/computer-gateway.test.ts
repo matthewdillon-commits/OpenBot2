@@ -228,6 +228,23 @@ describe("the computer gateway", () => {
     expect(rows[0]?.targetId).toBe("bot-1");
   });
 
+  test("switching the browser off never reaches the computer, even in dry-run", async () => {
+    const { gateway, calls, rows } = await gatewayWith({
+      ...PERMISSIVE,
+      mode: "dry-run",
+      browserEnabled: false,
+    });
+
+    await expect(
+      gateway.click("bot-1", ACTOR, { ref: "e9", snapshotId: 7 }),
+    ).rejects.toThrow(/Browser use is switched off/);
+
+    // Not a CEL rule: dry-run still stops the action, and the computer is never called.
+    expect(calls).toEqual([]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.eventType).toBe("computer.action_refused");
+  });
+
   test("a refused action never reaches the computer", async () => {
     const { gateway, calls, rows } = await gatewayWith({
       ...PERMISSIVE,

@@ -1,0 +1,1 @@
+ALTER TABLE "action_policy" ADD COLUMN "browser_enabled" boolean;

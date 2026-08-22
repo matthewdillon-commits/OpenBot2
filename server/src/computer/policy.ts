@@ -31,7 +31,26 @@ export type ActionPolicy = {
   deny: string[];
   /** Any expression true means permitted. Empty means nothing is permitted. */
   allow: string[];
+  /**
+   * Whether Bots are offered a browser at all.
+   *
+   * Absent or `true` is on, which is what a deployment that has never said otherwise gets. `false`
+   * is the kill switch: the surface does not register the tools, built-in Bots are not told they
+   * have a computer, and the gateway refuses every computer action. It is not a CEL rule and it is
+   * not dry-runnable — an administrator who switched the browser off meant it.
+   *
+   * MCP tools are not this. They have their own grants. A deployment that has turned the browser
+   * off can still let a Bot talk to Jira.
+   */
+  browserEnabled?: boolean;
 };
+
+/** Whether this policy lets Bots use a browser. Absent means on. */
+export function isBrowserEnabled(
+  policy: ActionPolicy | null | undefined,
+): boolean {
+  return policy?.browserEnabled !== false;
+}
 
 /**
  * The attributes a rule can be written against.

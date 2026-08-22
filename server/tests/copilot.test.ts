@@ -103,6 +103,55 @@ describe("registered Copilot agents", () => {
     });
   });
 
+  test("appends computer guidance only when this deployment is offering a computer", () => {
+    expect(
+      builtInAgentConfiguration(
+        {
+          id: "general-assistant",
+          name: "General Assistant",
+          type: "built_in",
+          systemPrompt: "Be helpful.",
+        },
+        { provider: "openai", defaultModel: "gpt-4.1" },
+        "openai-secret",
+        [],
+        "You have a computer.",
+      ),
+    ).toMatchObject({
+      prompt: "Be helpful.\n\nYou have a computer.",
+    });
+  });
+
+  test("asks for computer guidance on each request, so switching the browser off applies to the next turn", async () => {
+    let asks = 0;
+    const factory = createRequestAgents(
+      async () => ({ id: "user-7", role: "user" as const }),
+      async () => [
+        {
+          id: "general-assistant",
+          name: "General Assistant",
+          type: "built_in",
+          systemPrompt: "Be helpful.",
+        },
+      ],
+      { provider: "openai", defaultModel: "gpt-4.1" },
+      async () => "openai-secret",
+      undefined,
+      undefined,
+      undefined,
+      () => {
+        asks += 1;
+        return asks === 1 ? "You have a computer." : undefined;
+      },
+    );
+    const request = new Request("http://openbot.test/api/copilotkit");
+
+    await factory({ request });
+    await factory({ request });
+
+    expect(asks).toBe(2);
+  });
+
   test("fails an unavailable built-in agent through the AG-UI lifecycle", async () => {
     const agents = await buildAgents(
       [

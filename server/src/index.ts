@@ -1,4 +1,5 @@
 import { serve } from "bun";
+import { COMPUTER_GUIDANCE } from "../../shared/bot-prompt";
 import { mintRunAssertion } from "./agents/callback-token";
 import { createAgentProfileStore } from "./agents/profile-store";
 import { createRuntimeAgentLoader } from "./agents/runtime-agents";
@@ -21,6 +22,7 @@ import { createThreadIdentity } from "./channels/thread-identity";
 import { createSandboxedStore } from "./components/sandboxed";
 import { createComponentStore } from "./components/store";
 import { createComputerGateway } from "./computer/gateway";
+import { isBrowserEnabled } from "./computer/policy";
 import { startPolicyListener } from "./computer/policy-listener";
 import {
   createPolicyStore,
@@ -435,6 +437,15 @@ const app = createApp(
      */
     (actorId) => (botId, runId) =>
       mintRunAssertion({ botId, actorId, runId }, config.keyEncryptionKey),
+    /*
+     * Asked per request so switching the browser off under Boundaries applies to the next turn.
+     * Remote Bots still carry their own baked guidance; not registering the tools and refusing at
+     * the gateway is what stops them acting on it.
+     */
+    config.computer
+      ? () =>
+          isBrowserEnabled(policyStore.get()) ? COMPUTER_GUIDANCE : undefined
+      : undefined,
   ),
   // The only path to an acting call.
   computerGateway,

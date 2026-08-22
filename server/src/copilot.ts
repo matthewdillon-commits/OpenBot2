@@ -478,8 +478,14 @@ export function createRequestAgents(
   loadToolsForActor?: (actorId: string) => LoadToolsForBot,
   /** Resolved per request, because what it signs is who this request turned out to be. */
   signRunForActor?: (actorId: string) => SignRun,
-  /** What every built-in Bot is told about the computer. Absent means this deployment has none. */
-  computerGuidance?: string,
+  /**
+   * What every built-in Bot is told about the computer.
+   *
+   * A factory so switching the browser off applies to the next turn without a restart. A string is
+   * also accepted, which is what a test that does not care about the switch wants. Absent means this
+   * deployment has no computer, or the caller has already decided not to mention one.
+   */
+  computerGuidance?: string | (() => string | undefined),
 ) {
   return async ({ request }: { request: Request }) => {
     const actor = await identifyActor(request);
@@ -490,7 +496,9 @@ export function createRequestAgents(
       stallGuard,
       loadToolsForActor?.(actor.id),
       signRunForActor?.(actor.id),
-      computerGuidance,
+      typeof computerGuidance === "function"
+        ? computerGuidance()
+        : computerGuidance,
     );
   };
 }
@@ -517,6 +525,14 @@ export function mountCopilotRuntime(
   stallGuard: StallGuard,
   loadToolsForActor?: (actorId: string) => LoadToolsForBot,
   signRunForActor?: (actorId: string) => SignRun,
+  /**
+   * What built-in Bots are told about the computer, asked per request.
+   *
+   * A factory so an administrator switching the browser off applies to the next turn without a
+   * restart. Absent means this deployment has no computer, or the caller has already decided not to
+   * mention one; when a computer is configured and nothing is passed, the shipped guidance is used.
+   */
+  computerGuidance?: string | (() => string | undefined),
   basePath = "/api/copilotkit",
 ) {
   const { intelligence } = config.runtime;
@@ -550,12 +566,14 @@ export function mountCopilotRuntime(
       loadToolsForActor,
       signRunForActor,
       /*
-       * Only when a computer exists. The tools themselves are registered by the surface, so a Bot is
-       * offered them without this and the guidance is what tells it how they go together: snapshot
-       * before acting, and ask a person to take the wheel at a sign-in rather than reporting the task
-       * as impossible. Absent computer, absent guidance: a Bot is not told about hands it has not got.
+       * Only when a computer exists, and only while the administrator has left the browser on.
+       * The tools themselves are registered by the surface, so a Bot is offered them without this
+       * and the guidance is what tells it how they go together: snapshot before acting, and ask a
+       * person to take the wheel at a sign-in rather than reporting the task as impossible. Absent
+       * computer, or the browser switched off, absent guidance: a Bot is not told about hands it
+       * has not got.
        */
-      config.computer ? COMPUTER_GUIDANCE : undefined,
+      computerGuidance ?? (config.computer ? COMPUTER_GUIDANCE : undefined),
     ) as never,
   });
 

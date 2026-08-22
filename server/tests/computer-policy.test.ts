@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   type ActionPolicy,
   evaluateActionPolicy,
+  isBrowserEnabled,
   type PolicyContext,
 } from "../src/computer/policy";
 import { parseActionPolicy } from "../src/computer/policy-store";
@@ -184,6 +185,38 @@ describe("evaluateActionPolicy", () => {
   });
 });
 
+describe("whether Bots are offered a browser", () => {
+  test("absent or true is on, and only false is off", () => {
+    expect(isBrowserEnabled(undefined)).toBe(true);
+    expect(isBrowserEnabled(null)).toBe(true);
+    expect(isBrowserEnabled(permissive)).toBe(true);
+    expect(isBrowserEnabled({ ...permissive, browserEnabled: true })).toBe(
+      true,
+    );
+    expect(isBrowserEnabled({ ...permissive, browserEnabled: false })).toBe(
+      false,
+    );
+  });
+
+  test("the policy engine does not honour the switch, so an MCP call is not this", () => {
+    // The kill switch lives in the computer gateway and the tool registrations, not here.
+    // A Jira call goes through this function; putting the switch in it would silence every plugin.
+    const decision = evaluateActionPolicy(
+      { ...permissive, browserEnabled: false },
+      context({
+        tool: { name: "mcp__jira__searchJiraIssuesUsingJql" },
+        mcp: {
+          server: "jira",
+          tool: "searchJiraIssuesUsingJql",
+          effect: "read",
+        },
+        intent: "read_tool",
+      }),
+    );
+    expect(decision.allowed).toBe(true);
+  });
+});
+
 describe("parseActionPolicy", () => {
   test("accepts a well-formed policy", () => {
     const result = parseActionPolicy({
@@ -195,6 +228,8 @@ describe("parseActionPolicy", () => {
     if (result.ok) {
       expect(result.policy.mode).toBe("dry-run");
       expect(result.policy.deny).toHaveLength(1);
+      // A body that never mentioned the switch is on, which is what every existing client meant.
+      expect(result.policy.browserEnabled).toBe(true);
     }
   });
 
@@ -205,6 +240,26 @@ describe("parseActionPolicy", () => {
       expect(result.policy.deny).toEqual([]);
       expect(result.policy.allow).toEqual([]);
     }
+  });
+
+  test("keeps an explicit browserEnabled false, and rejects a non-boolean", () => {
+    const off = parseActionPolicy({
+      mode: "enforce",
+      deny: [],
+      allow: ["true"],
+      browserEnabled: false,
+    });
+    expect(off.ok).toBe(true);
+    if (off.ok) expect(off.policy.browserEnabled).toBe(false);
+
+    expect(
+      parseActionPolicy({
+        mode: "enforce",
+        deny: [],
+        allow: ["true"],
+        browserEnabled: "no",
+      }).ok,
+    ).toBe(false);
   });
 
   test.each([

@@ -4,7 +4,13 @@
  * Split by owner so two people can add tables all day without touching the same lines. Add tables
  * here; never edit core.ts or coworker.ts to do it.
  */
-import { integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  integer,
+  pgTable,
+  text,
+  timestamp,
+} from "drizzle-orm/pg-core";
 import { jsonb } from "./json";
 
 /**
@@ -28,6 +34,12 @@ export const actionPolicy = pgTable("action_policy", {
   mode: text("mode").notNull(),
   deny: text("deny").array().notNull(),
   allow: text("allow").array().notNull(),
+  /**
+   * Whether Bots are offered a browser. Null is on, which is what every row written before this
+   * column existed meant. The application treats null as true; do not tighten this to NOT NULL in
+   * the same release that adds it.
+   */
+  browserEnabled: boolean("browser_enabled"),
   /** Who last changed it, for the Admin page and the trail. */
   updatedBy: text("updated_by"),
   updatedAt: timestamp("updated_at", { withTimezone: true })
