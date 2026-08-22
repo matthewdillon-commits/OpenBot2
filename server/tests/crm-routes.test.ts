@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { createApp } from "../src/app";
+import { loadConfig } from "../src/config";
 import type {
   CrmCreatedBy,
   CrmPage,
   CrmPerson,
   CrmStore,
 } from "../src/crm/store";
-import { loadConfig } from "../src/config";
 import { testEnvironment } from "./support/environment";
 
 const USER = {
@@ -90,7 +90,7 @@ function appWith(people: CrmPerson[]): {
       api: { getSession: async () => ({ user: USER }) },
     } as never,
     { rolesForUser: async () => ["user"] },
-    ...(Array.from({ length: 19 }) as never[]),
+    ...(Array.from({ length: 20 }) as never[]),
     store as never,
   );
 
