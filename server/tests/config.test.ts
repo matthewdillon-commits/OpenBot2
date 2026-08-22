@@ -470,7 +470,9 @@ describe("accessibility", () => {
       ).toBe(true);
     },
   );
+});
 
+describe("deployment timezone", () => {
   test("defaults cron evaluation to UTC", () => {
     expect(loadConfig(baseEnvironment).deploymentTimezone).toBe("UTC");
   });

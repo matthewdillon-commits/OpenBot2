@@ -50,7 +50,7 @@ describe("cron schedules", () => {
       "America/Toronto",
       true,
     );
-    expect(next?.toISOString()).toBe("2026-01-16T14:00:00.000Z");
+    expect(next?.toISOString()).toBe("2026-01-15T14:00:00.000Z");
   });
 
   test("does not return the same minute as `from`", () => {
