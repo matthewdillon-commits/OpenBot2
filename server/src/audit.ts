@@ -241,6 +241,17 @@ export const auditEventTypes = [
   "subagent.started",
   "subagent.refused",
   "subagent.reported",
+  /**
+   * A Bot read or wrote a CRM record, or the boundary stopped it.
+   *
+   * The same four steps as every other governed action: resolve, decide, write the row, then
+   * act. `crm.record_refused` is the attempt the policy stopped, so a trail can tell "it was
+   * not allowed" from "it was never asked". The payload names the kind and the id, not the
+   * notes — a contact's notes are somebody else's words under another name.
+   */
+  "crm.record_read",
+  "crm.record_written",
+  "crm.record_refused",
 ] as const;
 
 export type AuditEventType = (typeof auditEventTypes)[number];

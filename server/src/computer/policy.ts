@@ -131,7 +131,14 @@ export type PolicyContext = {
      * coworker DMs, and the other way around. `tool.name == "spawn_subagent"` names the start;
      * `intent == "spawn"` covers the start and the report.
      */
-    | "spawn";
+    | "spawn"
+    /**
+     * A Bot reading or writing this deployment's CRM.
+     *
+     * Its own intent because a customer record is neither a computer action nor an MCP write.
+     * A rule can name `tool.name == "crm_create"` or `intent == "crm"`.
+     */
+    | "crm";
   /**
    * The file a `computer_read_file` or `computer_write_file` call is aimed at.
    *
@@ -366,7 +373,8 @@ function describeRefusal(context: PolicyContext, expression: string): string {
     context.intent === "read_tool" ||
     context.intent === "write_tool" ||
     context.intent === "message" ||
-    context.intent === "spawn"
+    context.intent === "spawn" ||
+    context.intent === "crm"
   ) {
     return (
       `This deployment's policy does not allow that: ${context.tool.name} ` +

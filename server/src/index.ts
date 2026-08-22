@@ -63,6 +63,9 @@ import {
 import { createDatabase } from "./db/client";
 import { askerFor, createKnowledgeSearch } from "./knowledge/search";
 import { knowledgeSearchTool } from "./knowledge/tool";
+import { createCrmGateway } from "./crm/gateway";
+import { createCrmStore } from "./crm/store";
+import { crmTools } from "./crm/tools";
 import { createPeopleStore } from "./people/store";
 import { createPluginStore } from "./plugins/store";
 import {
@@ -197,6 +200,7 @@ const peopleStore = createPeopleStore(
   database,
   config.auth?.initialAdminEmails ?? [],
 );
+const crmStore = createCrmStore(database);
 const identityProviderStore = createIdentityProviderStore(database);
 /*
  * Built before `auth` for the same reason the people store is: sign-in writes to the trail, and the
@@ -417,6 +421,12 @@ const messagingGateway = createMessagingGateway({
   policy: () => policyStore.get(),
   wake: wakeQueue,
 });
+const crmGateway = createCrmGateway({
+  store: crmStore,
+  database,
+  auditStore: bootAuditStore,
+  policy: () => policyStore.get(),
+});
 wakeRunner.current = createAgentWakeRunner({
   profiles: agentProfileStore,
   messages: channelMessageStore,
@@ -444,8 +454,8 @@ subagentRunner.current = createSubagentRunner({
 /**
  * What one Bot may call, for the person asking, rebuilt each request.
  *
- * MCP grants still go through the plugin store. Company knowledge, web search, agent messaging
- * and sub-agents sit beside them rather than inside it: they are this deployment's own tools,
+ * MCP grants still go through the plugin store. Company knowledge, web search, agent messaging,
+ * sub-agents and CRM sit beside them rather than inside it: they are this deployment's own tools,
  * offered when there is something to search or a coworker to reach, not when an administrator
  * ticked a grant. A framework Bot calls the same list back through `/api/agent-tools/call`.
  *
@@ -507,6 +517,13 @@ const loadToolsForActor =
         }),
       );
     }
+    extra.push(
+      ...crmTools({
+        crm: crmGateway,
+        botId,
+        actor,
+      }),
+    );
     return extra.length === 0 ? granted : [...granted, ...extra];
   };
 
@@ -607,6 +624,7 @@ const app = createApp(
     return tool ? tool.execute(args) : null;
   },
   channelMessageStore,
+  crmStore,
 );
 
 /**

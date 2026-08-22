@@ -17,6 +17,12 @@ import {
   connectorCursors,
   connectorInstances,
   credentials,
+  crmCampaigns,
+  crmCompanies,
+  crmConversations,
+  crmCreatedByKind,
+  crmOpportunities,
+  crmPeople,
   documentAcls,
   documents,
   intelligenceChannelMappings,
@@ -349,6 +355,57 @@ describe("OpenBot database schema", () => {
     );
     expect(normalizedMigration).toContain(
       `CREATE INDEX "agent_profiles_visibility_deleted_idx" ON "agent_profiles" USING btree ("visibility","deleted_at")`,
+    );
+  });
+
+  test("defines CRM tables separately from signed-in people", () => {
+    expect(
+      [
+        crmPeople,
+        crmCompanies,
+        crmOpportunities,
+        crmCampaigns,
+        crmConversations,
+      ].map(getTableName),
+    ).toEqual([
+      "crm_people",
+      "crm_companies",
+      "crm_opportunities",
+      "crm_campaigns",
+      "crm_conversations",
+    ]);
+    expect(crmCreatedByKind.enumName).toBe("crm_created_by_kind");
+    expect(crmCreatedByKind.enumValues).toEqual(["user", "bot", "system"]);
+
+    const people = getTableConfig(crmPeople);
+    expect(people.columns.map((column) => column.name)).toEqual([
+      "id",
+      "name",
+      "emails",
+      "phones",
+      "job_title",
+      "company_id",
+      "notes",
+      "created_by_kind",
+      "created_by_id",
+      "created_by_name",
+      "created_at",
+      "updated_at",
+    ]);
+  });
+
+  test("adds the CRM tables in their own migration", async () => {
+    const migration = await readFile(
+      new URL("../drizzle/0012_crm.sql", import.meta.url),
+      "utf8",
+    );
+    expect(migration).toContain(`CREATE TABLE "crm_people"`);
+    expect(migration).toContain(`CREATE TABLE "crm_companies"`);
+    expect(migration).toContain(`CREATE TABLE "crm_opportunities"`);
+    expect(migration).toContain(`CREATE TABLE "crm_campaigns"`);
+    expect(migration).toContain(`CREATE TABLE "crm_conversations"`);
+    expect(migration).toContain(
+      `CREATE TYPE "public"."crm_created_by_kind" AS ENUM('user', 'bot', 'system')`,
     );
   });
 

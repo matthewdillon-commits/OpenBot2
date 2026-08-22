@@ -38,6 +38,8 @@ import { configuredAuthProviders, type DeploymentConfig } from "./config";
 import type { ConnectorAdminService } from "./connectors";
 import type { CredentialAdminService, CredentialInput } from "./credentials";
 import { createIntelligenceClient } from "./intelligence-client";
+import { createCrmRoutes } from "./crm/routes";
+import type { CrmStore } from "./crm/store";
 import type { PeopleStore } from "./people/store";
 import { createPluginRoutes } from "./plugins/routes";
 import type { PluginStore } from "./plugins/store";
@@ -165,6 +167,11 @@ export function createApp(
   }) => Promise<string | null>,
   /** Bot-posted channel messages. Absent leaves GET /:id/messages unregistered. */
   channelMessages?: ChannelMessageStore,
+  /**
+   * This deployment's CRM. Absent leaves /api/crm answering 404 rather than an empty list:
+   * "nobody is in the book" and "this deployment cannot tell you" are different answers.
+   */
+  crmStore?: CrmStore,
 ) {
   const app = new Hono<{ Variables: AppVariables }>();
 
@@ -830,6 +837,10 @@ export function createApp(
       "/api/sandboxed",
       createSandboxedRoutes(sandboxedStore, requireUser),
     );
+  }
+
+  if (crmStore) {
+    app.route("/api/crm", createCrmRoutes(crmStore, requireUser));
   }
 
   if (threadIdentity) {
