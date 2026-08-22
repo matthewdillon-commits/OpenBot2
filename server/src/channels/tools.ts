@@ -8,9 +8,7 @@ import {
 } from "./messaging";
 
 const agentParameters = z.object({
-  agent_id: z
-    .string()
-    .describe("The coworker to message, by their id."),
+  agent_id: z.string().describe("The coworker to message, by their id."),
   text: z
     .string()
     .describe(

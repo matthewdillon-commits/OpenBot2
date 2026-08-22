@@ -6,11 +6,11 @@ import {
   MESSAGE_AGENT_TOOL,
   MESSAGE_CHANNEL_TOOL,
 } from "../src/channels/messaging";
-import type { ChannelMessageStore, ChannelPostedMessage } from "../src/channels/messages";
 import type {
-  AgentChannel,
-  ChannelStore,
-} from "../src/channels/routes";
+  ChannelMessageStore,
+  ChannelPostedMessage,
+} from "../src/channels/messages";
+import type { AgentChannel, ChannelStore } from "../src/channels/routes";
 import { messagingTools } from "../src/channels/tools";
 import type { WakeJob, WakeQueue } from "../src/channels/wake";
 import type { ActionPolicy } from "../src/computer/policy";
@@ -158,9 +158,7 @@ function memoryChannels(
   };
 }
 
-function wakeCapture(
-  running: string[] = [],
-): WakeQueue & { jobs: WakeJob[] } {
+function wakeCapture(running: string[] = []): WakeQueue & { jobs: WakeJob[] } {
   const jobs: WakeJob[] = [];
   return {
     jobs,
@@ -217,7 +215,9 @@ describe("a Bot messaging another Bot", () => {
     expect(channels.created[0]?.kind).toBe("direct");
     expect(channels.created[0]?.agentIds).toEqual(["risk", "knowledge"]);
     expect(messages.rows).toHaveLength(1);
-    expect(messages.rows[0]?.body).toBe("Please pull the latest vendor policy.");
+    expect(messages.rows[0]?.body).toBe(
+      "Please pull the latest vendor policy.",
+    );
     expect(messages.rows[0]?.hop).toBe(1);
     expect(wake.jobs).toEqual([
       expect.objectContaining({

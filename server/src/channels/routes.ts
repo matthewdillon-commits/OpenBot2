@@ -318,7 +318,11 @@ export function createChannelStore(
               recipientId ?? "",
             );
             if (existingId) {
-              const existing = await readChannel(transaction, actor, existingId);
+              const existing = await readChannel(
+                transaction,
+                actor,
+                existingId,
+              );
               if (existing) return existing;
             }
           }
@@ -780,7 +784,8 @@ function parseChannelName(
   | { ok: true; value: string | undefined }
   | { ok: false; error: string }
   | undefined {
-  if (value === undefined || value === null) return { ok: true, value: undefined };
+  if (value === undefined || value === null)
+    return { ok: true, value: undefined };
   if (typeof value !== "string") {
     return { ok: false, error: "Name must be a string." };
   }

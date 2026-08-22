@@ -12,8 +12,7 @@ export function transcriptMessages(
   seed: Message | null,
   posted: readonly ChannelPostedMessage[] = [],
 ): readonly Message[] {
-  const base =
-    messages.length > 0 || seed === null ? [...messages] : [seed];
+  const base = messages.length > 0 || seed === null ? [...messages] : [seed];
   const seen = new Set(base.map((message) => message.id));
   const extra: Message[] = [];
   for (const message of posted) {

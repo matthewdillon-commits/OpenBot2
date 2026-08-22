@@ -259,7 +259,10 @@ describe("channel routes", () => {
     const store = fakeStore({
       async update(receivedActor, channelId, patch) {
         store.calls.push(["update", receivedActor, channelId, patch]);
-        return channel({ id: channelId, name: patch.name ?? "Assistant channel" });
+        return channel({
+          id: channelId,
+          name: patch.name ?? "Assistant channel",
+        });
       },
     });
     const response = await appFor(store).request(

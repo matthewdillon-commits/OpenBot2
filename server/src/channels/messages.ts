@@ -21,10 +21,7 @@ export type ChannelMessageStore = {
     body: string;
     hop: number;
   }): Promise<ChannelPostedMessage>;
-  list(
-    actor: AgentActor,
-    channelId: string,
-  ): Promise<ChannelPostedMessage[]>;
+  list(actor: AgentActor, channelId: string): Promise<ChannelPostedMessage[]>;
 };
 
 export function createChannelMessageStore(

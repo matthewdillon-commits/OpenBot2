@@ -44,8 +44,7 @@ export const channelKeys = {
   all: ["channels"] as const,
   list: () => ["channels", "list"] as const,
   detail: (channelId: string) => ["channels", "detail", channelId] as const,
-  messages: (channelId: string) =>
-    ["channels", "messages", channelId] as const,
+  messages: (channelId: string) => ["channels", "messages", channelId] as const,
 };
 
 /** One page of channels, and where the next one starts. */

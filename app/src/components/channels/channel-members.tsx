@@ -44,7 +44,9 @@ export function ChannelMembers({ channel }: { channel: AgentChannel }) {
       await update.mutateAsync({ channelId: channel.id, name: trimmed });
     } catch (caught) {
       setError(
-        caught instanceof Error ? caught.message : "Could not rename the channel.",
+        caught instanceof Error
+          ? caught.message
+          : "Could not rename the channel.",
       );
     }
   };
