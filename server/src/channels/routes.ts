@@ -20,8 +20,14 @@ import {
   type ChannelActivityEvent,
   type ChannelEventHub,
 } from "./events";
+import { ChannelNotFoundError } from "./errors";
+import type { ChannelMessageStore } from "./messages";
 import { upgradeWebSocket } from "./socket";
 import type { ThreadIdentity } from "./thread-identity";
+
+export { ChannelNotFoundError } from "./errors";
+
+export type ChannelKind = "channel" | "direct";
 
 export type AgentChannel = {
   id: string;
@@ -29,6 +35,18 @@ export type AgentChannel = {
   agentIds: string[];
   threadId: string;
   active: boolean;
+  kind: ChannelKind;
+};
+
+export type ChannelCreateOptions = {
+  name?: string;
+  kind?: ChannelKind;
+};
+
+export type ChannelUpdate = {
+  name?: string;
+  addAgentIds?: string[];
+  removeAgentIds?: string[];
 };
 
 /** A channel plus the last thing said in it, which is what a roster renders. */
@@ -94,7 +112,11 @@ function decodeChannelCursor(
 }
 
 export type ChannelStore = {
-  create(actor: AgentActor, agentIds: string[]): Promise<AgentChannel>;
+  create(
+    actor: AgentActor,
+    agentIds: string[],
+    options?: ChannelCreateOptions,
+  ): Promise<AgentChannel>;
   get(actor: AgentActor, channelId: string): Promise<AgentChannel | null>;
   list(actor: AgentActor, query?: ChannelQuery): Promise<ChannelPage>;
   recordActivity(
@@ -102,9 +124,32 @@ export type ChannelStore = {
     channelId: string,
     activity: ChannelActivity,
   ): Promise<void>;
+  update(
+    actor: AgentActor,
+    channelId: string,
+    patch: ChannelUpdate,
+  ): Promise<AgentChannel>;
+  /**
+   * The existing 1:1 between these two Bots for this person, or a new one.
+   *
+   * Reused so two Bots texting each other keep one thread rather than opening a room per send.
+   * Only `kind = direct` rows match; a room that happens to hold the same pair is a different
+   * conversation.
+   */
+  findDirect(
+    actor: AgentActor,
+    senderAgentId: string,
+    recipientAgentId: string,
+  ): Promise<AgentChannel | null>;
+  findOrCreateDirect(
+    actor: AgentActor,
+    senderAgentId: string,
+    recipientAgentId: string,
+  ): Promise<AgentChannel>;
 };
 
 const PRIVATE_AGENT_CHANNEL_DESCRIPTION = "Private agent channel.";
+const DIRECT_AGENT_CHANNEL_DESCRIPTION = "Direct agent channel.";
 const MAX_CHANNEL_NAME_CODE_POINTS = 120;
 const MAX_ACTIVITY_CODE_POINTS = 200;
 /** Same ceiling the compose screen uses. Enforced here so the UI cap is not ornamental. */
@@ -133,13 +178,100 @@ function channelName(names: string[]) {
   return `${codePoints.slice(0, MAX_CHANNEL_NAME_CODE_POINTS - 1).join("")}…`;
 }
 
+function asChannelKind(value: string): ChannelKind {
+  return value === "direct" ? "direct" : "channel";
+}
+
+async function readChannel(
+  executor: Pick<Database, "select">,
+  actor: AgentActor,
+  channelId: string,
+): Promise<AgentChannel | null> {
+  const rows = await executor
+    .select({
+      id: channels.id,
+      name: channels.name,
+      kind: channels.kind,
+      agentId: channelAgents.agentId,
+      threadId: intelligenceChannelMappings.threadId,
+      deletedAt: agentProfiles.deletedAt,
+    })
+    .from(channels)
+    .innerJoin(
+      channelMemberships,
+      and(
+        eq(channelMemberships.channelId, channels.id),
+        eq(channelMemberships.userId, actor.id),
+      ),
+    )
+    .innerJoin(
+      intelligenceChannelMappings,
+      and(
+        eq(intelligenceChannelMappings.channelId, channels.id),
+        eq(intelligenceChannelMappings.userId, actor.id),
+      ),
+    )
+    .innerJoin(channelAgents, eq(channelAgents.channelId, channels.id))
+    .innerJoin(agentProfiles, eq(agentProfiles.agentId, channelAgents.agentId))
+    .where(eq(channels.id, channelId))
+    .orderBy(asc(channelAgents.position), asc(channelAgents.agentId));
+
+  const first = rows[0];
+  if (!first) return null;
+  return {
+    id: first.id,
+    name: first.name,
+    agentIds: rows.map((row) => row.agentId),
+    threadId: first.threadId,
+    active: rows.every((row) => row.deletedAt === null),
+    kind: asChannelKind(first.kind),
+  };
+}
+
+async function findDirectChannel(
+  database: Pick<Database, "select">,
+  userId: string,
+  senderAgentId: string,
+  recipientAgentId: string,
+): Promise<string | null> {
+  const pair = [senderAgentId, recipientAgentId];
+  const rows = await database
+    .select({
+      channelId: channelAgents.channelId,
+      agentId: channelAgents.agentId,
+    })
+    .from(channelAgents)
+    .innerJoin(channels, eq(channels.id, channelAgents.channelId))
+    .innerJoin(
+      channelMemberships,
+      and(
+        eq(channelMemberships.channelId, channelAgents.channelId),
+        eq(channelMemberships.userId, userId),
+      ),
+    )
+    .where(eq(channels.kind, "direct"));
+
+  const byChannel = new Map<string, string[]>();
+  for (const row of rows) {
+    const list = byChannel.get(row.channelId) ?? [];
+    list.push(row.agentId);
+    byChannel.set(row.channelId, list);
+  }
+
+  for (const [channelId, agentIds] of byChannel) {
+    if (agentIds.length !== 2) continue;
+    if (pair.every((id) => agentIds.includes(id))) return channelId;
+  }
+  return null;
+}
+
 export function createChannelStore(
   database: Database,
   profileStore: AgentProfileStore,
   threadIdentity: ThreadIdentity,
 ): ChannelStore {
   return {
-    create(actor, agentIds) {
+    create(actor, agentIds, options = {}) {
       return database.transaction(
         async (transaction) => {
           // Validated on this transaction, not through `profileStore.get`: the read has to share
@@ -164,18 +296,41 @@ export function createChannelStore(
           // in a project that may hold more than one. See thread-identity.ts.
           const threadId = threadIdentity.mint();
           // Named from the caller's ordering, which is the order the channel presents its agents in.
-          const name = channelName(
+          // A supplied name wins, so a room can be called something other than the member list.
+          const derived = channelName(
             agentIds.map((agentId) => {
               const profile = profilesById.get(agentId);
               if (!profile) throw new AgentNotFoundError(agentId);
               return profile.name;
             }),
           );
+          const name = options.name ?? derived;
+          const kind = options.kind ?? "channel";
+
+          // Agent-row locks above serialize two first-sends of the same pair. Look again
+          // before inserting so the second waiter reuses the row the first just wrote.
+          if (kind === "direct" && agentIds.length === 2) {
+            const [senderId, recipientId] = agentIds;
+            const existingId = await findDirectChannel(
+              transaction,
+              actor.id,
+              senderId ?? "",
+              recipientId ?? "",
+            );
+            if (existingId) {
+              const existing = await readChannel(transaction, actor, existingId);
+              if (existing) return existing;
+            }
+          }
 
           await transaction.insert(channels).values({
             id,
             name,
-            description: PRIVATE_AGENT_CHANNEL_DESCRIPTION,
+            kind,
+            description:
+              kind === "direct"
+                ? DIRECT_AGENT_CHANNEL_DESCRIPTION
+                : PRIVATE_AGENT_CHANNEL_DESCRIPTION,
           });
           await transaction.insert(channelMemberships).values({
             channelId: id,
@@ -194,54 +349,14 @@ export function createChannelStore(
             threadId,
           });
 
-          return { id, name, agentIds, threadId, active: true };
+          return { id, name, agentIds, threadId, active: true, kind };
         },
         { isolationLevel: "read committed" },
       );
     },
 
     async get(actor, channelId) {
-      const rows = await database
-        .select({
-          id: channels.id,
-          name: channels.name,
-          agentId: channelAgents.agentId,
-          threadId: intelligenceChannelMappings.threadId,
-          deletedAt: agentProfiles.deletedAt,
-        })
-        .from(channels)
-        .innerJoin(
-          channelMemberships,
-          and(
-            eq(channelMemberships.channelId, channels.id),
-            eq(channelMemberships.userId, actor.id),
-          ),
-        )
-        .innerJoin(
-          intelligenceChannelMappings,
-          and(
-            eq(intelligenceChannelMappings.channelId, channels.id),
-            eq(intelligenceChannelMappings.userId, actor.id),
-          ),
-        )
-        .innerJoin(channelAgents, eq(channelAgents.channelId, channels.id))
-        .innerJoin(
-          agentProfiles,
-          eq(agentProfiles.agentId, channelAgents.agentId),
-        )
-        .where(eq(channels.id, channelId))
-        .orderBy(asc(channelAgents.position), asc(channelAgents.agentId));
-
-      const first = rows[0];
-      if (!first) return null;
-
-      return {
-        id: first.id,
-        name: first.name,
-        agentIds: rows.map((row) => row.agentId),
-        threadId: first.threadId,
-        active: rows.every((row) => row.deletedAt === null),
-      };
+      return readChannel(database, actor, channelId);
     },
 
     async list(actor, query = {}) {
@@ -299,6 +414,7 @@ export function createChannelStore(
         .select({
           id: channels.id,
           name: channels.name,
+          kind: channels.kind,
           agentId: channelAgents.agentId,
           threadId: intelligenceChannelMappings.threadId,
           deletedAt: agentProfiles.deletedAt,
@@ -361,6 +477,7 @@ export function createChannelStore(
           agentIds: [row.agentId],
           threadId: row.threadId,
           active: row.deletedAt === null,
+          kind: asChannelKind(row.kind),
           lastMessage: row.lastMessage,
           lastMessageAt: row.lastMessageAt,
           lastMessageAgentId: row.lastMessageAgentId,
@@ -445,21 +562,133 @@ export function createChannelStore(
         { isolationLevel: "read committed" },
       );
     },
+
+    update(actor, channelId, patch) {
+      return database.transaction(
+        async (transaction) => {
+          const current = await readChannel(transaction, actor, channelId);
+          if (!current) throw new ChannelNotFoundError(channelId);
+
+          const addAgentIds = patch.addAgentIds ?? [];
+          const removeAgentIds = new Set(patch.removeAgentIds ?? []);
+          if (
+            current.kind === "direct" &&
+            (addAgentIds.length > 0 || removeAgentIds.size > 0)
+          ) {
+            throw new ChannelMembershipError(
+              "A direct channel is always those two coworkers.",
+            );
+          }
+          const nextAgentIds = [
+            ...current.agentIds.filter((id) => !removeAgentIds.has(id)),
+            ...addAgentIds.filter((id) => !current.agentIds.includes(id)),
+          ];
+
+          if (nextAgentIds.length === 0) {
+            throw new ChannelMembershipError(
+              "A channel needs at least one coworker.",
+            );
+          }
+          if (nextAgentIds.length > MAX_CHANNEL_AGENTS) {
+            throw new ChannelMembershipError(
+              "A channel can have at most 8 coworkers.",
+            );
+          }
+
+          for (const agentId of [...nextAgentIds].sort()) {
+            const profile = await profileStore.getWithin(
+              transaction,
+              actor,
+              agentId,
+            );
+            if (!profile) throw new AgentNotFoundError(agentId);
+          }
+
+          const name = patch.name ?? current.name;
+
+          await transaction
+            .update(channels)
+            .set({ name, updatedAt: new Date() })
+            .where(eq(channels.id, channelId));
+
+          if (removeAgentIds.size > 0) {
+            await transaction
+              .delete(channelAgents)
+              .where(
+                and(
+                  eq(channelAgents.channelId, channelId),
+                  inArray(channelAgents.agentId, [...removeAgentIds]),
+                ),
+              );
+          }
+
+          const newcomers = addAgentIds.filter(
+            (id) => !current.agentIds.includes(id),
+          );
+          if (newcomers.length > 0) {
+            const start = current.agentIds.filter(
+              (id) => !removeAgentIds.has(id),
+            ).length;
+            await transaction.insert(channelAgents).values(
+              newcomers.map((agentId, index) => ({
+                channelId,
+                agentId,
+                position: start + index,
+              })),
+            );
+          }
+
+          const updated = await readChannel(transaction, actor, channelId);
+          if (!updated) throw new ChannelNotFoundError(channelId);
+          return updated;
+        },
+        { isolationLevel: "read committed" },
+      );
+    },
+
+    async findDirect(actor, senderAgentId, recipientAgentId) {
+      const existing = await findDirectChannel(
+        database,
+        actor.id,
+        senderAgentId,
+        recipientAgentId,
+      );
+      return existing ? this.get(actor, existing) : null;
+    },
+
+    async findOrCreateDirect(actor, senderAgentId, recipientAgentId) {
+      if (senderAgentId === recipientAgentId) {
+        throw new ChannelMembershipError(
+          "A Bot cannot open a direct channel with itself.",
+        );
+      }
+
+      const existing = await this.findDirect(
+        actor,
+        senderAgentId,
+        recipientAgentId,
+      );
+      if (existing) return existing;
+
+      return this.create(actor, [senderAgentId, recipientAgentId], {
+        kind: "direct",
+      });
+    },
   };
 }
 
-export class ChannelNotFoundError extends Error {
-  constructor(id: string) {
-    super(`Channel ${id} was not found.`);
-    this.name = "ChannelNotFoundError";
+export class ChannelMembershipError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ChannelMembershipError";
   }
 }
 
 type ChannelInputParseResult =
-  | { ok: true; value: { agentIds: string[] } }
+  | { ok: true; value: { agentIds: string[]; name?: string } }
   | { ok: false; error: string };
 
-type ChannelInputObject = { agentIds?: unknown };
+type ChannelInputObject = { agentIds?: unknown; name?: unknown };
 
 export function parseChannelInput(input: unknown): ChannelInputParseResult {
   if (!isChannelInputObject(input)) {
@@ -489,8 +718,102 @@ export function parseChannelInput(input: unknown): ChannelInputParseResult {
     };
   }
 
+  const name = parseChannelName(input.name);
+  if (name && !name.ok) return name;
+
   // Request order is To: order. Sorting would make the lead alphabetical.
-  return { ok: true, value: { agentIds } };
+  return {
+    ok: true,
+    value: {
+      agentIds,
+      ...(name?.ok && name.value ? { name: name.value } : {}),
+    },
+  };
+}
+
+type ChannelUpdateParseResult =
+  | { ok: true; value: ChannelUpdate }
+  | { ok: false; error: string };
+
+export function parseChannelUpdate(input: unknown): ChannelUpdateParseResult {
+  if (!isChannelInputObject(input)) {
+    return { ok: false, error: "Channel update must be a JSON object." };
+  }
+  const object = input as {
+    name?: unknown;
+    addAgentIds?: unknown;
+    removeAgentIds?: unknown;
+  };
+
+  const patch: ChannelUpdate = {};
+  if (object.name !== undefined) {
+    const name = parseChannelName(object.name);
+    if (name && !name.ok) return name;
+    if (name?.ok && name.value) patch.name = name.value;
+  }
+
+  if (object.addAgentIds !== undefined) {
+    const parsed = parseAgentIdList(object.addAgentIds, "addAgentIds");
+    if (!parsed.ok) return parsed;
+    patch.addAgentIds = parsed.value;
+  }
+  if (object.removeAgentIds !== undefined) {
+    const parsed = parseAgentIdList(object.removeAgentIds, "removeAgentIds");
+    if (!parsed.ok) return parsed;
+    patch.removeAgentIds = parsed.value;
+  }
+
+  if (
+    patch.name === undefined &&
+    patch.addAgentIds === undefined &&
+    patch.removeAgentIds === undefined
+  ) {
+    return { ok: false, error: "Nothing to update." };
+  }
+
+  return { ok: true, value: patch };
+}
+
+function parseChannelName(
+  value: unknown,
+):
+  | { ok: true; value: string | undefined }
+  | { ok: false; error: string }
+  | undefined {
+  if (value === undefined || value === null) return { ok: true, value: undefined };
+  if (typeof value !== "string") {
+    return { ok: false, error: "Name must be a string." };
+  }
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return { ok: true, value: undefined };
+  const codePoints = Array.from(trimmed);
+  if (codePoints.length > MAX_CHANNEL_NAME_CODE_POINTS) {
+    return {
+      ok: false,
+      error: `Name must be at most ${MAX_CHANNEL_NAME_CODE_POINTS} characters.`,
+    };
+  }
+  return { ok: true, value: trimmed };
+}
+
+function parseAgentIdList(
+  value: unknown,
+  field: string,
+): { ok: true; value: string[] } | { ok: false; error: string } {
+  if (!Array.isArray(value)) {
+    return { ok: false, error: `${field} must be an array of agent IDs.` };
+  }
+  const agentIds: string[] = [];
+  for (const agentId of value) {
+    if (typeof agentId !== "string" || agentId.trim().length === 0) {
+      return { ok: false, error: "Agent IDs must be non-empty strings." };
+    }
+    agentIds.push(agentId.trim());
+  }
+  if (new Set(agentIds).size !== agentIds.length) {
+    return { ok: false, error: "Agent IDs must be unique." };
+  }
+  return { ok: true, value: agentIds };
 }
 
 function isChannelInputObject(input: unknown): input is ChannelInputObject {
@@ -543,6 +866,8 @@ export function createChannelRoutes(
   requireUser: MiddlewareHandler<{ Variables: AppVariables }>,
   /** Absent in tests and wherever live updates are not wanted; the routes still work without it. */
   events?: ChannelEventHub,
+  /** Absent leaves GET /:id/messages unregistered: a deployment without the table has no rows. */
+  messages?: ChannelMessageStore,
 ) {
   const routes = new Hono<{ Variables: AppVariables }>();
 
@@ -577,6 +902,7 @@ export function createChannelRoutes(
       const channel = await store.create(
         context.var.actor,
         parsed.value.agentIds,
+        parsed.value.name ? { name: parsed.value.name } : undefined,
       );
       return context.json({ channel: channelDto(channel) }, 201);
     } catch (error) {
@@ -637,6 +963,48 @@ export function createChannelRoutes(
     }
   });
 
+  routes.patch("/:channelId", requireUser, async (context) => {
+    const parsed = parseChannelUpdate(
+      await context.req.json().catch(() => null),
+    );
+    if (!parsed.ok) return context.json({ error: parsed.error }, 400);
+
+    try {
+      const channel = await store.update(
+        context.var.actor,
+        context.req.param("channelId"),
+        parsed.value,
+      );
+      return context.json({ channel: channelDto(channel) });
+    } catch (error) {
+      return mapStoreError(context, error);
+    }
+  });
+
+  if (messages) {
+    routes.get("/:channelId/messages", requireUser, async (context) => {
+      try {
+        const posted = await messages.list(
+          context.var.actor,
+          context.req.param("channelId"),
+        );
+        return context.json({
+          messages: posted.map((message) => ({
+            id: message.id,
+            channelId: message.channelId,
+            senderAgentId: message.senderAgentId,
+            senderName: message.senderName,
+            body: message.body,
+            hop: message.hop,
+            createdAt: message.createdAt.toISOString(),
+          })),
+        });
+      } catch (error) {
+        return mapStoreError(context, error);
+      }
+    });
+  }
+
   return routes;
 }
 
@@ -647,6 +1015,7 @@ function channelDto(channel: AgentChannel): AgentChannel {
     agentIds: channel.agentIds,
     threadId: channel.threadId,
     active: channel.active,
+    kind: channel.kind,
   };
 }
 
@@ -667,6 +1036,9 @@ function mapStoreError(context: Context, error: unknown): Response {
   }
   if (error instanceof ChannelNotFoundError) {
     return context.json({ error: "Channel not found." }, 404);
+  }
+  if (error instanceof ChannelMembershipError) {
+    return context.json({ error: error.message }, 400);
   }
   throw error;
 }

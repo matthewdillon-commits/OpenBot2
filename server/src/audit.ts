@@ -219,6 +219,17 @@ export const auditEventTypes = [
   "bot.deleted",
   "bot.callback_token_issued",
   "bot.callback_token_revoked",
+  /**
+   * A Bot messaged another Bot or a channel it belongs to.
+   *
+   * The trail already records every computer click and every MCP call; a message that wakes
+   * another Bot is the same kind of governed action. `channel.message_refused` is the attempt
+   * the boundary stopped, so a reader can tell "it was not allowed" from "it was never sent".
+   * The body is recorded (it is not a secret); empty acknowledgements are refused before this
+   * row is written, because they are not an action that happened.
+   */
+  "channel.message_sent",
+  "channel.message_refused",
 ] as const;
 
 export type AuditEventType = (typeof auditEventTypes)[number];

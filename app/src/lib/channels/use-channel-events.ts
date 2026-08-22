@@ -75,7 +75,7 @@ export function useChannelEvents() {
             // An unknown channel id means the roster is stale; refetch rather than patch.
             if (holdingPage === -1) {
               void queryClient.invalidateQueries({
-                queryKey: channelKeys.list(),
+                queryKey: channelKeys.all,
               });
               return data;
             }
@@ -100,6 +100,9 @@ export function useChannelEvents() {
 
             const pages = data.pages.slice();
             pages[holdingPage] = { ...page, channels: next };
+            void queryClient.invalidateQueries({
+              queryKey: channelKeys.messages(activity.channelId),
+            });
             return { ...data, pages };
           },
         );

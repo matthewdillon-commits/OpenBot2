@@ -227,6 +227,14 @@ export const channels = pgTable(
   {
     id: text("id").primaryKey(),
     name: text("name").notNull(),
+    /**
+     * How this channel was opened.
+     *
+     * `channel` is a room a person started — one coworker or several, optionally named.
+     * `direct` is a 1:1 between two Bots, opened when one of them messaged the other. The two
+     * stay separate so a room that happens to hold the same pair is not reused as their DM.
+     */
+    kind: text("kind").notNull().default("channel"),
     description: text("description").notNull(),
     suggestedPrompts: text("suggested_prompts").array().notNull().default([]),
     /**

@@ -19,7 +19,10 @@ import {
 } from "@/components/channels/transcript-messages";
 import { agentListQueryOptions } from "@/lib/agents/queries";
 import { recordChannelActivityMutationOptions } from "@/lib/channels/mutations";
-import type { AgentChannel } from "@/lib/channels/queries";
+import {
+  type AgentChannel,
+  channelMessagesQueryOptions,
+} from "@/lib/channels/queries";
 import { useActiveBot } from "@/lib/copilot/active-bot";
 import { ConversationProvider } from "@/lib/copilot/conversation";
 import { repairUnansweredToolCalls } from "@/lib/copilot/repair-history";
@@ -60,6 +63,9 @@ export function ChannelChat({
   // The core attaches the frontend tool registry; direct agent runs do not.
   const { copilotkit } = useCopilotKit();
   const { data: agentProfiles } = useQuery(agentListQueryOptions());
+  const { data: postedMessages } = useQuery(
+    channelMessagesQueryOptions(channel.id),
+  );
   /**
    * First-message seed from the compose screen. It is taken once per mount and retained until the
    * agent has its own messages because joining a fresh thread can temporarily empty the agent.
@@ -432,7 +438,11 @@ export function ChannelChat({
         commands={skillCommands}
         // Readiness is handled by `say`; deletion is the only disabled-chat state.
         disabled={!channel.active}
-        messages={transcriptMessages(agent.messages, seed.message)}
+        messages={transcriptMessages(
+          agent.messages,
+          seed.message,
+          postedMessages ?? [],
+        )}
         notice={
           channel.active ? null : (
             <p className="pb-2 text-sm text-muted-foreground" role="status">

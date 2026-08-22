@@ -44,6 +44,8 @@ describe("audit payload redaction", () => {
         "knowledge.searched",
         "web.searched",
         "web.search_refused",
+        "channel.message_sent",
+        "channel.message_refused",
         "agent.invoked",
         "mcp.call_succeeded",
         "mcp.call_rejected",

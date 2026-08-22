@@ -56,6 +56,7 @@ Policy rules can inspect:
 - `key`
 - `file.path`, `file.name`, `file.extension`
 - `mcp.server`, `mcp.tool`, `mcp.effect`
+- `channel.id`, `recipient.id` (agent messaging)
 
 Rules use CEL expressions plus case-insensitive `contains()` and `matches()`.
 Deny rules are evaluated before allow rules. The policy engine fails closed: a
@@ -101,7 +102,7 @@ A coworker is a durable Bot profile:
 - `agent_profiles` stores name, title, role, owner, visibility, and deletion state.
 - `agent_preferences` stores per-user roster state.
 
-A channel is a conversation with one coworker and a CopilotKit Intelligence thread mapping. Starting a new channel creates a new thread.
+A channel is a conversation with one or more coworkers and a CopilotKit Intelligence thread mapping. Starting a new channel creates a new thread. A Bot may message another Bot or post to a room it belongs to; that send is a governed action (`channel.message_sent` / `channel.message_refused`) and wakes the recipient asynchronously. Posted Bot messages are stored in `channel_messages`. The wake itself is in-process: a second server replica will not run a job this one accepted; the message is still stored and visible.
 
 Who may reach one is decided by membership: every channel route resolves the caller in
 `channel_memberships` and refuses without a row. `channels.allowed_groups` is declared in the

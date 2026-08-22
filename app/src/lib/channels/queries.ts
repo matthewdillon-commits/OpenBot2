@@ -8,12 +8,26 @@ import { client } from "@/lib/client";
  * `active` is false once a linked coworker has been deleted: the transcript stays readable, but
  * nothing more can be said in it.
  */
+export type ChannelKind = "channel" | "direct";
+
 export type AgentChannel = {
   id: string;
   name: string;
   agentIds: string[];
   threadId: string;
   active: boolean;
+  kind: ChannelKind;
+};
+
+/** A message a Bot posted to this channel, including 1:1 DMs between coworkers. */
+export type ChannelPostedMessage = {
+  id: string;
+  channelId: string;
+  senderAgentId: string | null;
+  senderName: string | null;
+  body: string;
+  hop: number;
+  createdAt: string;
 };
 
 /** A channel plus the last thing said in it, which is what the roster renders. */
@@ -30,6 +44,8 @@ export const channelKeys = {
   all: ["channels"] as const,
   list: () => ["channels", "list"] as const,
   detail: (channelId: string) => ["channels", "detail", channelId] as const,
+  messages: (channelId: string) =>
+    ["channels", "messages", channelId] as const,
 };
 
 /** One page of channels, and where the next one starts. */
@@ -73,6 +89,17 @@ export function channelQueryOptions(channelId: string) {
     queryFn: async (): Promise<AgentChannel> => {
       return client(`/api/channels/${channelId}`, "channel", {
         fallback: "Could not load this channel",
+      });
+    },
+  });
+}
+
+export function channelMessagesQueryOptions(channelId: string) {
+  return queryOptions({
+    queryKey: channelKeys.messages(channelId),
+    queryFn: async (): Promise<ChannelPostedMessage[]> => {
+      return client(`/api/channels/${channelId}/messages`, "messages", {
+        fallback: "Could not load channel messages",
       });
     },
   });

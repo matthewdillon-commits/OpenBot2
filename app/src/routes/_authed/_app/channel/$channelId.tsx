@@ -7,6 +7,7 @@ import { z } from "zod";
 import { AgentProfile } from "@/components/agents/agent-profile";
 import { ChannelAvatar } from "@/components/channels/avatar";
 import { ChannelChat } from "@/components/channels/channel-chat";
+import { ChannelMembers } from "@/components/channels/channel-members";
 import { ActivityLog } from "@/components/computer/activity-log";
 import { ComputerView } from "@/components/computer/computer-view";
 import { useNeedsYouAmong } from "@/components/computer/needs-you";
@@ -218,7 +219,10 @@ function RouteComponent() {
             name={speakerProfile?.name}
           />
         ) : (
-          <AgentProfile agentId={watchAgentId} />
+          <div className="flex min-h-0 flex-1 flex-col">
+            {channel.data ? <ChannelMembers channel={channel.data} /> : null}
+            <AgentProfile agentId={watchAgentId} />
+          </div>
         )
       }
     >

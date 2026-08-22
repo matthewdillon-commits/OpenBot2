@@ -15,7 +15,11 @@ import {
   createChannelEventHub,
   startChannelActivityListener,
 } from "./channels/events";
+import { createChannelMessageStore } from "./channels/messages";
+import { createMessagingGateway } from "./channels/messaging";
 import { createChannelStore } from "./channels/routes";
+import { messagingTools } from "./channels/tools";
+import { createAgentWakeRunner, createWakeQueue } from "./channels/wake";
 import { websocket as channelSocket } from "./channels/socket";
 import { createStallGuard } from "./channels/stall-guard";
 import { createThreadIdentity } from "./channels/thread-identity";
@@ -145,6 +149,7 @@ const channelStore = createChannelStore(
   agentProfileStore,
   threadIdentity,
 );
+const channelMessageStore = createChannelMessageStore(database);
 const channelEvents = createChannelEventHub();
 /**
  * Which components each Bot may answer with.
@@ -370,12 +375,39 @@ const webSearch = config.tavilyApiKey
   : undefined;
 
 /**
+ * Recipients run after the sender's tool call has already returned.
+ *
+ * The runner is assigned after the gateway exists, because a wake reply posts through the same
+ * governed path the original send did. Jobs accepted in the gap wait on `current` being set,
+ * which is the next statement.
+ */
+const wakeRunner: {
+  current: ReturnType<typeof createAgentWakeRunner> | null;
+} = { current: null };
+const wakeQueue = createWakeQueue(async (job) => {
+  if (!wakeRunner.current) return null;
+  return wakeRunner.current(job);
+});
+const messagingGateway = createMessagingGateway({
+  channels: channelStore,
+  messages: channelMessageStore,
+  auditStore: bootAuditStore,
+  policy: () => policyStore.get(),
+  wake: wakeQueue,
+});
+wakeRunner.current = createAgentWakeRunner({
+  profiles: agentProfileStore,
+  messages: channelMessageStore,
+  messaging: () => messagingGateway,
+});
+
+/**
  * What one Bot may call, for the person asking, rebuilt each request.
  *
- * MCP grants still go through the plugin store. Company knowledge and web search sit beside them
- * rather than inside it: they are this deployment's own tools, offered when there is something to
- * search or a key to spend, not when an administrator ticked a grant. A framework Bot calls the
- * same list back through `/api/agent-tools/call`.
+ * MCP grants still go through the plugin store. Company knowledge, web search and agent messaging
+ * sit beside them rather than inside it: they are this deployment's own tools, offered when there
+ * is something to search or a coworker to reach, not when an administrator ticked a grant. A
+ * framework Bot calls the same list back through `/api/agent-tools/call`.
  */
 const loadToolsForActor = (actorId: string) => async (botId: string) => {
   const granted = await grantedTools({
@@ -383,7 +415,13 @@ const loadToolsForActor = (actorId: string) => async (botId: string) => {
     botId,
     actorId,
   });
-  const extra: GrantedTool[] = [];
+  const extra: GrantedTool[] = [
+    ...messagingTools({
+      messaging: messagingGateway,
+      botId,
+      actor: { id: actorId, role: "user" },
+    }),
+  ];
   if (await knowledgeSearch.anyDocuments()) {
     extra.push(
       knowledgeSearchTool({
@@ -497,6 +535,7 @@ const app = createApp(
     const tool = tools.find((one) => one.name === name);
     return tool ? tool.execute(args) : null;
   },
+  channelMessageStore,
 );
 
 /**

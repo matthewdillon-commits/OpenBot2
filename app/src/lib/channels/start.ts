@@ -21,8 +21,12 @@ export function useStartChannel() {
       agentIds: string[],
       text: string,
       speakerId: string | null = null,
+      name?: string,
     ) => {
-      const channel = await createChannel.mutateAsync(agentIds);
+      const channel = await createChannel.mutateAsync({
+        agentIds,
+        ...(name ? { name } : {}),
+      });
       queryClient.setQueryData(channelKeys.detail(channel.id), channel);
       stashFirstMessage(channel.id, text, speakerId);
       await navigate({

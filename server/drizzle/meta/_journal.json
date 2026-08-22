@@ -71,6 +71,13 @@
       "when": 1787362000000,
       "tag": "0009_channel_agents_position",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1787363822386,
+      "tag": "0010_agent_messaging",
+      "breakpoints": true
     }
   ]
 }

@@ -21,6 +21,7 @@ import {
 } from "./auth/guards";
 import type { IdentityProviderStore } from "./auth/identity-provider-store";
 import type { ChannelEventHub } from "./channels/events";
+import type { ChannelMessageStore } from "./channels/messages";
 import { type ChannelStore, createChannelRoutes } from "./channels/routes";
 import type { ThreadIdentity } from "./channels/thread-identity";
 import { createThreadRoutes } from "./channels/thread-routes";
@@ -161,6 +162,8 @@ export function createApp(
     botId: string;
     actorId: string;
   }) => Promise<string | null>,
+  /** Bot-posted channel messages. Absent leaves GET /:id/messages unregistered. */
+  channelMessages?: ChannelMessageStore,
 ) {
   const app = new Hono<{ Variables: AppVariables }>();
 
@@ -706,7 +709,12 @@ export function createApp(
   if (channelStore) {
     app.route(
       "/api/channels",
-      createChannelRoutes(channelStore, requireUser, channelEvents),
+      createChannelRoutes(
+        channelStore,
+        requireUser,
+        channelEvents,
+        channelMessages,
+      ),
     );
   }
 

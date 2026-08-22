@@ -124,7 +124,7 @@ as one replica for now.
 | -------------------- | ------------------------------------------------------------------ |
 | `/`                  | Start and browse channels.                                         |
 | `/agents`            | Create, edit, duplicate, hide, delete, and launch coworkers.       |
-| `/channel/:id`       | Converse with one coworker, watch its screen, and see what it ran. |
+| `/channel/:id`       | Converse with one or more coworkers, watch a speaker's screen, and see what it ran. |
 | `/bot`               | Direct chat with a Bot; `?agent=<id>` selects one.                 |
 | `/skills`            | Create and enable personal skills.                                 |
 | `/settings`          | User preferences.                                                  |

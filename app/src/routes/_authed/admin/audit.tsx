@@ -37,7 +37,7 @@ const FILTERS = [
     label: "Blocked",
     // Include every refusal family, not only browser policy refusals.
     search:
-      "?eventType=computer.action_refused,mcp.call_rejected,component.refused,component.function_refused,web.search_refused",
+      "?eventType=computer.action_refused,mcp.call_rejected,component.refused,component.function_refused,web.search_refused,channel.message_refused",
   },
   {
     label: "Did not happen",
@@ -141,7 +141,8 @@ function Row({
     event.eventType === "component.refused" ||
     event.eventType === "component.function_refused" ||
     event.eventType === "mcp.call_rejected" ||
-    event.eventType === "web.search_refused";
+    event.eventType === "web.search_refused" ||
+    event.eventType === "channel.message_refused";
   const urls = Array.isArray(payload.urls)
     ? payload.urls.filter((url): url is string => typeof url === "string")
     : [];
@@ -165,7 +166,12 @@ function Row({
           : event.eventType === "web.searched" ||
               event.eventType === "web.search_refused"
             ? "search_web"
-            : event.eventType}
+            : event.eventType === "channel.message_sent" ||
+                event.eventType === "channel.message_refused"
+              ? typeof payload.tool === "string"
+                ? payload.tool
+                : "message"
+              : event.eventType}
       </td>
       <td className="px-4 py-2">
         {/* Named targets and file paths are the audit subject before page elements. */}
@@ -291,6 +297,7 @@ const NAMED_TARGETS = new Set([
   "mcp_server",
   "skill",
   "credential",
+  "channel",
 ]);
 
 const DECISIONS: Record<string, string> = {
@@ -327,6 +334,9 @@ const DECISIONS: Record<string, string> = {
 
   "web.searched": "Searched the public web",
   "web.search_refused": "Blocked",
+
+  "channel.message_sent": "Messaged a coworker",
+  "channel.message_refused": "Blocked",
 
   "configuration.changed": "Configuration changed",
   "credential.created": "Credential saved",

@@ -1,4 +1,5 @@
 import type { Message } from "@ag-ui/core";
+import type { ChannelPostedMessage } from "@/lib/channels/queries";
 
 /**
  * What a transcript shows while a brand-new channel is still joining.
@@ -9,11 +10,22 @@ import type { Message } from "@ag-ui/core";
 export function transcriptMessages(
   messages: readonly Message[],
   seed: Message | null,
+  posted: readonly ChannelPostedMessage[] = [],
 ): readonly Message[] {
-  if (messages.length > 0 || seed === null) {
-    return messages;
+  const base =
+    messages.length > 0 || seed === null ? [...messages] : [seed];
+  const seen = new Set(base.map((message) => message.id));
+  const extra: Message[] = [];
+  for (const message of posted) {
+    if (seen.has(message.id)) continue;
+    extra.push({
+      id: message.id,
+      role: "assistant",
+      content: message.body,
+      ...(message.senderName ? { name: message.senderName } : {}),
+    });
   }
-  return [seed];
+  return extra.length === 0 ? base : [...base, ...extra];
 }
 
 /** The person's message, in the shape the transcript and the agent both take. */

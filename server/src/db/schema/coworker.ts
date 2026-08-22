@@ -6,13 +6,14 @@
  */
 import {
   index,
+  integer,
   pgEnum,
   pgTable,
   primaryKey,
   text,
   timestamp,
 } from "drizzle-orm/pg-core";
-import { agents, users } from "./core";
+import { agents, channels, users } from "./core";
 
 const createdAt = () =>
   timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
@@ -75,4 +76,37 @@ export const agentPreferences = pgTable(
     hiddenAt: timestamp("hidden_at", { withTimezone: true }),
   },
   (table) => [primaryKey({ columns: [table.userId, table.agentId] })],
+);
+
+/**
+ * A message a Bot posted to a channel, including 1:1 DMs it opened with another Bot.
+ *
+ * Human turns still live on the Intelligence thread. These rows are what a Bot wrote when it
+ * messaged a coworker or a room: the wake runner and the transcript both read them, and they
+ * exist without Intelligence so a send can be tested and audited on this side.
+ */
+export const channelMessages = pgTable(
+  "channel_messages",
+  {
+    id: text("id").primaryKey(),
+    channelId: text("channel_id")
+      .notNull()
+      .references(() => channels.id, { onDelete: "cascade" }),
+    senderAgentId: text("sender_agent_id").references(() => agents.id, {
+      onDelete: "set null",
+    }),
+    body: text("body").notNull(),
+    /**
+     * Distance from a human-started send. A Bot's own tool call is 1; the recipient's wake
+     * reply is 2. The wake runner will not post past that, so two Bots cannot bounce forever.
+     */
+    hop: integer("hop").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index("channel_messages_channel_created_idx").on(
+      table.channelId,
+      table.createdAt,
+    ),
+  ],
 );

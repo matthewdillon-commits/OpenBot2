@@ -2,6 +2,24 @@ import { mutationOptions, type QueryClient } from "@tanstack/react-query";
 import { client, tryClient } from "@/lib/client";
 import { type AgentChannel, channelKeys } from "./queries";
 
+export type ChannelInput = {
+  agentIds: string[];
+  name?: string;
+};
+
+export type ChannelUpdateInput = {
+  channelId: string;
+  name?: string;
+  addAgentIds?: string[];
+  removeAgentIds?: string[];
+};
+
+const FALLBACK = "Could not start a channel";
+
+function invalidateChannels(queryClient: QueryClient) {
+  return queryClient.invalidateQueries({ queryKey: channelKeys.all });
+}
+
 /**
  * Start a new channel with one or more coworkers.
  *
@@ -9,16 +27,30 @@ import { type AgentChannel, channelKeys } from "./queries";
  */
 export function createChannelMutationOptions(queryClient: QueryClient) {
   return mutationOptions({
-    mutationFn: async (agentIds: string[]): Promise<AgentChannel> => {
+    mutationFn: async (input: ChannelInput): Promise<AgentChannel> => {
       const response = await client("/api/channels", {
         method: "POST",
-        body: { agentIds },
-        fallback: "Could not start a channel",
+        body: input,
+        fallback: FALLBACK,
       });
       return ((await response.json()) as { channel: AgentChannel }).channel;
     },
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: channelKeys.all }),
+    onSuccess: () => invalidateChannels(queryClient),
+  });
+}
+
+export function updateChannelMutationOptions(queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: async (input: ChannelUpdateInput): Promise<AgentChannel> => {
+      const { channelId, ...body } = input;
+      const response = await client(`/api/channels/${channelId}`, {
+        method: "PATCH",
+        body,
+        fallback: "Could not update this channel",
+      });
+      return ((await response.json()) as { channel: AgentChannel }).channel;
+    },
+    onSuccess: () => invalidateChannels(queryClient),
   });
 }
 

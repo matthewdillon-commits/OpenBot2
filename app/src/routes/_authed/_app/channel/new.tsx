@@ -36,6 +36,7 @@ function RouteComponent() {
   // Optimistic seed shown before the first channel record exists.
   const [sent, setSent] = useState<Message | null>(null);
   const [recipients, setRecipients] = useState<Recipient[]>([]);
+  const [channelName, setChannelName] = useState("");
   const [draft, setDraft] = useState<ComposerDraft | null>(null);
   const seededFromUrl = useRef<string | null>(null);
 
@@ -71,6 +72,20 @@ function RouteComponent() {
   return (
     <div className="flex h-full flex-col">
       <RecipientField onChange={setRecipients} recipients={recipients} />
+      {recipients.length >= 2 ? (
+        <div className="border-b border-border px-4 py-2">
+          <div className="mx-auto flex w-full max-w-2xl items-center gap-2">
+            <span className="text-sm text-muted-foreground">Name:</span>
+            <input
+              aria-label="Channel name"
+              className="h-8 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+              onChange={(event) => setChannelName(event.target.value)}
+              placeholder="Optional room name"
+              value={channelName}
+            />
+          </div>
+        </div>
+      ) : null}
       <ConversationView
         agents={toAgentOptions(profiles)}
         // Commands must be loaded before the first channel message is sent.
@@ -98,7 +113,12 @@ function RouteComponent() {
           setSent(seedMessage(submitted.text, newId()));
 
           try {
-            await start(memberIds, submitted.text, speakerId);
+            await start(
+              memberIds,
+              submitted.text,
+              speakerId,
+              channelName.trim() || undefined,
+            );
           } catch (caught) {
             // Preserve the unsent draft when channel creation fails.
             setSent(null);

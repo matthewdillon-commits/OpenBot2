@@ -29,6 +29,29 @@ describe("transcriptMessages", () => {
   test("is unaffected by a seed on an established channel", () => {
     expect(transcriptMessages([STORED], null)).toEqual([STORED]);
   });
+
+  test("appends Bot-posted channel messages that are not already in the thread", () => {
+    const posted = [
+      {
+        id: "msg_1",
+        channelId: "channel-1",
+        senderAgentId: "risk",
+        senderName: "Risk",
+        body: "Please review vendor 12.",
+        hop: 1,
+        createdAt: "2026-08-22T00:00:00.000Z",
+      },
+    ];
+    expect(transcriptMessages([STORED], null, posted)).toEqual([
+      STORED,
+      {
+        id: "msg_1",
+        role: "assistant",
+        content: "Please review vendor 12.",
+        name: "Risk",
+      },
+    ]);
+  });
 });
 
 describe("seedMessage", () => {

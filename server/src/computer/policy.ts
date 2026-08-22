@@ -116,7 +116,14 @@ export type PolicyContext = {
     // editJiraIssue, transitionJiraIssue, addCommentToJiraIssue and the six others".
     | "read_tool"
     | "write_tool"
-    | "run_command";
+    | "run_command"
+    /**
+     * A Bot messaging another Bot or a channel it belongs to.
+     *
+     * Its own intent because it is neither a computer action nor an MCP write: there is no page,
+     * no file and no vendor. A rule can name `tool.name == "message_agent"` or `intent == "message"`.
+     */
+    | "message";
   /**
    * The file a `computer_read_file` or `computer_write_file` call is aimed at.
    *
@@ -162,6 +169,15 @@ export type PolicyContext = {
    * and no list catches them all. The boundary is the container the command runs in.
    */
   command?: string;
+  /**
+   * The channel a `message_agent` / `message_channel` call is aimed at, and who it is for.
+   *
+   * Optional and empty on every other action, the way `mcp` is empty on a click: a rule about a
+   * channel must not become unevaluable just because the context grew. `recipient.id` is empty
+   * when the send is to a room rather than one coworker.
+   */
+  channel?: { id: string };
+  recipient?: { id: string };
 };
 
 export type PolicyDecision = {
@@ -338,7 +354,11 @@ function describeRefusal(context: PolicyContext, expression: string): string {
   }
   // A first-party tool call has no page, no file and no MCP server. Falling through would produce
   // "a search_web action on " with an empty host.
-  if (context.intent === "read_tool" || context.intent === "write_tool") {
+  if (
+    context.intent === "read_tool" ||
+    context.intent === "write_tool" ||
+    context.intent === "message"
+  ) {
     return (
       `This deployment's policy does not allow that: ${context.tool.name} ` +
       `is blocked by the rule \`${expression}\`.`

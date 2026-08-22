@@ -17,6 +17,7 @@ import {
   createChannelRoutes,
   createChannelStore,
   parseChannelInput,
+  parseChannelUpdate,
 } from "../src/channels/routes";
 import { createThreadIdentity } from "../src/channels/thread-identity";
 import { loadConfig } from "../src/config";
@@ -46,6 +47,7 @@ function channel(overrides: Partial<AgentChannel> = {}): AgentChannel {
     agentIds: ["agent-1", "agent-2"],
     threadId: "thread-1",
     active: true,
+    kind: "channel",
     ...overrides,
   };
 }
@@ -57,13 +59,30 @@ function fakeStore(
 ): ChannelStore & { calls: StoreCall[] } {
   const calls: StoreCall[] = [];
   const base: ChannelStore = {
-    async create(receivedActor, agentIds) {
-      calls.push(["create", receivedActor, agentIds]);
-      return channel({ agentIds });
+    async create(receivedActor, agentIds, options) {
+      calls.push(["create", receivedActor, agentIds, options]);
+      return channel({
+        agentIds,
+        ...(options?.name ? { name: options.name } : {}),
+        ...(options?.kind ? { kind: options.kind } : {}),
+      });
     },
     async get(receivedActor, id) {
       calls.push(["get", receivedActor, id]);
       return channel({ id });
+    },
+    async list() {
+      return { channels: [], nextCursor: null };
+    },
+    async recordActivity() {},
+    async update(_actor, channelId) {
+      return channel({ id: channelId });
+    },
+    async findDirect() {
+      return null;
+    },
+    async findOrCreateDirect() {
+      return channel();
     },
   };
 
@@ -128,16 +147,53 @@ describe("channel input parser", () => {
     expect(parseChannelInput({ agentIds })).toEqual({ ok: false, error });
   });
 
+  test("accepts an optional room name", () => {
+    expect(
+      parseChannelInput({
+        agentIds: ["agent-1", "agent-2"],
+        name: "  Vendor review  ",
+      }),
+    ).toEqual({
+      ok: true,
+      value: { agentIds: ["agent-1", "agent-2"], name: "Vendor review" },
+    });
+  });
+
   test("trims and preserves To: order", () => {
     expect(
       parseChannelInput({
         agentIds: [" agent-2 ", "agent-1"],
         id: "forged-channel",
-        name: "forged name",
         threadId: "forged-thread",
         active: false,
       }),
     ).toEqual({ ok: true, value: { agentIds: ["agent-2", "agent-1"] } });
+  });
+});
+
+describe("channel update parser", () => {
+  test("accepts a rename and membership changes", () => {
+    expect(
+      parseChannelUpdate({
+        name: "  Ops desk  ",
+        addAgentIds: [" agent-3 "],
+        removeAgentIds: ["agent-2"],
+      }),
+    ).toEqual({
+      ok: true,
+      value: {
+        name: "Ops desk",
+        addAgentIds: ["agent-3"],
+        removeAgentIds: ["agent-2"],
+      },
+    });
+  });
+
+  test("rejects a non-object root", () => {
+    expect(parseChannelUpdate(["agent-1"])).toEqual({
+      ok: false,
+      error: "Channel update must be a JSON object.",
+    });
   });
 });
 
@@ -174,8 +230,55 @@ describe("channel routes", () => {
     expect(created.status).toBe(201);
     expect(fetched.status).toBe(200);
     expect(store.calls).toEqual([
-      ["create", actor, ["agent-2", "agent-1"]],
+      ["create", actor, ["agent-2", "agent-1"], undefined],
       ["get", actor, "channel-1"],
+    ]);
+  });
+
+  test("passes an optional room name through to create", async () => {
+    const store = fakeStore();
+    const created = await appFor(store).request("http://openbot.test/", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        agentIds: ["agent-1", "agent-2"],
+        name: "Vendor review",
+      }),
+    });
+
+    expect(created.status).toBe(201);
+    expect(store.calls).toEqual([
+      ["create", actor, ["agent-1", "agent-2"], { name: "Vendor review" }],
+    ]);
+    expect(await json(created)).toMatchObject({
+      channel: { name: "Vendor review", kind: "channel" },
+    });
+  });
+
+  test("patches a room through the store", async () => {
+    const store = fakeStore({
+      async update(receivedActor, channelId, patch) {
+        store.calls.push(["update", receivedActor, channelId, patch]);
+        return channel({ id: channelId, name: patch.name ?? "Assistant channel" });
+      },
+    });
+    const response = await appFor(store).request(
+      "http://openbot.test/channel-1",
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "Ops desk", addAgentIds: ["agent-3"] }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(store.calls).toEqual([
+      [
+        "update",
+        actor,
+        "channel-1",
+        { name: "Ops desk", addAgentIds: ["agent-3"] },
+      ],
     ]);
   });
 
@@ -205,6 +308,7 @@ describe("channel routes", () => {
         agentIds: ["agent-1"],
         threadId: "thread-1",
         active: true,
+        kind: "channel",
       },
     });
     expect(fetched.status).toBe(200);
@@ -671,6 +775,95 @@ describe("channel store integration", () => {
     }
   });
 
+  test("creates a named room and seats every coworker", async () => {
+    const actor = await createPersistentUser();
+    const firstId = await createPersistentAgent({
+      name: "Risk",
+      owner: actor,
+    });
+    const secondId = await createPersistentAgent({
+      name: "Knowledge",
+      owner: actor,
+    });
+
+    const created = await persistentStore.create(actor, [firstId, secondId], {
+      name: "Vendor review",
+    });
+    createdChannelIds.push(created.id);
+
+    expect(created).toMatchObject({
+      name: "Vendor review",
+      agentIds: [firstId, secondId],
+      kind: "channel",
+      active: true,
+    });
+    expect((await persistentStore.get(actor, created.id))?.agentIds).toEqual([
+      firstId,
+      secondId,
+    ]);
+  });
+
+  test("adds and removes coworkers on an existing room", async () => {
+    const actor = await createPersistentUser();
+    const firstId = await createPersistentAgent({
+      name: "Risk",
+      owner: actor,
+    });
+    const secondId = await createPersistentAgent({
+      name: "Knowledge",
+      owner: actor,
+    });
+    const thirdId = await createPersistentAgent({
+      name: "General",
+      owner: actor,
+    });
+    const created = await persistentStore.create(actor, [firstId], {
+      name: "Ops",
+    });
+    createdChannelIds.push(created.id);
+
+    const seated = await persistentStore.update(actor, created.id, {
+      addAgentIds: [secondId, thirdId],
+    });
+    expect(seated.agentIds).toEqual([firstId, secondId, thirdId]);
+
+    const trimmed = await persistentStore.update(actor, created.id, {
+      removeAgentIds: [secondId],
+      name: "Ops desk",
+    });
+    expect(trimmed.agentIds).toEqual([firstId, thirdId]);
+    expect(trimmed.name).toBe("Ops desk");
+  });
+
+  test("refuses to add a third coworker to a direct channel", async () => {
+    const actor = await createPersistentUser();
+    const firstId = await createPersistentAgent({
+      name: "Risk",
+      owner: actor,
+    });
+    const secondId = await createPersistentAgent({
+      name: "Knowledge",
+      owner: actor,
+    });
+    const thirdId = await createPersistentAgent({
+      name: "General",
+      owner: actor,
+    });
+    const created = await persistentStore.create(actor, [firstId, secondId], {
+      kind: "direct",
+    });
+    createdChannelIds.push(created.id);
+
+    expect(created.kind).toBe("direct");
+    await expect(
+      persistentStore.update(actor, created.id, { addAgentIds: [thirdId] }),
+    ).rejects.toThrow("A direct channel is always those two coworkers.");
+    expect((await persistentStore.get(actor, created.id))?.agentIds).toEqual([
+      firstId,
+      secondId,
+    ]);
+  });
+
   test("persists every agent and derives its name in To: order", async () => {
     const actor = await createPersistentUser();
     const firstId = await createPersistentAgent({
@@ -694,6 +887,7 @@ describe("channel store integration", () => {
       agentIds,
       threadId: created.threadId,
       active: true,
+      kind: "channel",
     });
     const persisted = await persistedChannel(created.id);
     expect(persisted.channelRow?.name).toBe("Zulu, Alpha");
