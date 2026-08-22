@@ -632,7 +632,9 @@ export function createComputerGateway(
      * tried.
      */
     async stopComputer(botId: string, actor: ActionActor) {
-      const result = await provider.stop(isolation(botId, actor.orgId).computerId);
+      const result = await provider.stop(
+        isolation(botId, actor.orgId).computerId,
+      );
       await writeControlEvent(auditStore, "computer.stopped", {
         botId,
         actor,

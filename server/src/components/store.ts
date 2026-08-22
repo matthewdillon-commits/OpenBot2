@@ -75,11 +75,20 @@ export type ComponentStore = {
    * The one decision point. Everything that wants to know whether a Bot may use a component asks
    * here, so there is a single place where the answer is decided and a single place to audit it.
    */
-  decide(name: string, agentId: string, orgId?: string): Promise<ComponentDecision>;
+  decide(
+    name: string,
+    agentId: string,
+    orgId?: string,
+  ): Promise<ComponentDecision>;
   /** Stop holding this Bot back from this component. Takes no actor: it writes no row. */
   grant(name: string, agentId: string, orgId?: string): Promise<void>;
   /** Hold this Bot back from this one component. Every other Bot is unaffected. */
-  revoke(name: string, agentId: string, by: string, orgId?: string): Promise<void>;
+  revoke(
+    name: string,
+    agentId: string,
+    by: string,
+    orgId?: string,
+  ): Promise<void>;
   grantFunction(
     name: string,
     functionName: string,

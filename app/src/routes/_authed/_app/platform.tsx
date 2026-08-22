@@ -73,7 +73,11 @@ function PlatformPage() {
             placeholder="Company name"
             aria-label="Company name"
           />
-          <Button type="submit" size="sm" disabled={createOrg.isPending || !name.trim()}>
+          <Button
+            type="submit"
+            size="sm"
+            disabled={createOrg.isPending || !name.trim()}
+          >
             <IconPlus />
             {createOrg.isPending ? "Creating…" : "Create organization"}
           </Button>
@@ -140,7 +144,8 @@ function PlatformPage() {
                   <ItemContent>
                     <ItemTitle>{organization.name}</ItemTitle>
                     <ItemDescription className="line-clamp-none">
-                      {organization.slug} · {organization.status} · {organization.id}
+                      {organization.slug} · {organization.status} ·{" "}
+                      {organization.id}
                     </ItemDescription>
                   </ItemContent>
                   <ItemActions>
@@ -159,7 +164,9 @@ function PlatformPage() {
                         })
                       }
                     >
-                      {organization.status === "suspended" ? "Restore" : "Suspend"}
+                      {organization.status === "suspended"
+                        ? "Restore"
+                        : "Suspend"}
                     </Button>
                   </ItemActions>
                 </Item>

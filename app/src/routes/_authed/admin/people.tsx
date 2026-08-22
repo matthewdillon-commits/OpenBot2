@@ -1,4 +1,9 @@
-import { IconLock, IconMail, IconShieldCheck, IconUser } from "@tabler/icons-react";
+import {
+  IconLock,
+  IconMail,
+  IconShieldCheck,
+  IconUser,
+} from "@tabler/icons-react";
 import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";

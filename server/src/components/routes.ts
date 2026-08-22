@@ -374,7 +374,12 @@ export function createComponentRoutes(
     const name = context.req.param("name");
     const agentId = context.req.param("agentId");
     try {
-      await store.revoke(name, agentId, context.var.actor.email, orgOf(context));
+      await store.revoke(
+        name,
+        agentId,
+        context.var.actor.email,
+        orgOf(context),
+      );
     } catch (error) {
       if (error instanceof ComponentNotFoundError) {
         return context.json({ error: error.message }, 404);

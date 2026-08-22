@@ -134,9 +134,7 @@ export function createKnowledgeSearch(database: Database): KnowledgeSearch {
       const [row] = await database
         .select({ id: documents.id })
         .from(documents)
-        .where(
-          and(isNull(documents.deletedAt), eq(documents.orgId, orgId)),
-        )
+        .where(and(isNull(documents.deletedAt), eq(documents.orgId, orgId)))
         .limit(1);
       return row !== undefined;
     },

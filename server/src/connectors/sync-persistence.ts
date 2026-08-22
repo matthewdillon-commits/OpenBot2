@@ -83,15 +83,13 @@ export function createSyncPersistence(
             );
           }
           if (change.acls.length) {
-            await transaction
-              .insert(documentAcls)
-              .values(
-                change.acls.map((acl) => ({
-                  orgId,
-                  documentId: document.id,
-                  ...acl,
-                })),
-              );
+            await transaction.insert(documentAcls).values(
+              change.acls.map((acl) => ({
+                orgId,
+                documentId: document.id,
+                ...acl,
+              })),
+            );
           }
         }
         await transaction.insert(syncRuns).values({

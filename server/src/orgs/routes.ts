@@ -75,7 +75,10 @@ export function createOrganizationRoutes(
       return context.json({ error: "Organization was not found." }, 404);
     }
     try {
-      const current = await organizations.setActive(context.var.actor.id, target.id);
+      const current = await organizations.setActive(
+        context.var.actor.id,
+        target.id,
+      );
       return context.json({ organization: current });
     } catch (error) {
       if (error instanceof OrganizationSuspendedError) {
@@ -167,7 +170,10 @@ export function createOrganizationRoutes(
       status?: unknown;
     } | null;
     if (body?.status !== "active" && body?.status !== "suspended") {
-      return context.json({ error: 'status must be "active" or "suspended".' }, 400);
+      return context.json(
+        { error: 'status must be "active" or "suspended".' },
+        400,
+      );
     }
     try {
       const organization = await organizations.setStatus(
@@ -200,7 +206,10 @@ export function createOrganizationRoutes(
       return context.json({ error: "An invite needs an email address." }, 400);
     }
     if (role === "owner" && context.var.actor.orgRole !== "owner") {
-      return context.json({ error: "Only an owner may invite another owner." }, 403);
+      return context.json(
+        { error: "Only an owner may invite another owner." },
+        403,
+      );
     }
     const invited = await organizations.invite({
       orgId,

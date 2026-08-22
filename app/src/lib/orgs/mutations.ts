@@ -11,9 +11,11 @@ function invalidateOrgs(queryClient: QueryClient) {
 export function activateOrganizationMutationOptions(queryClient: QueryClient) {
   return mutationOptions({
     mutationFn: (input: { slug: string }): Promise<void> =>
-      client("/api/orgs/current", { method: "POST", body: input, fallback: FALLBACK }).then(
-        () => undefined,
-      ),
+      client("/api/orgs/current", {
+        method: "POST",
+        body: input,
+        fallback: FALLBACK,
+      }).then(() => undefined),
     onSuccess: () => invalidateOrgs(queryClient),
   });
 }

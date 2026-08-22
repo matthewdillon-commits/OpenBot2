@@ -139,9 +139,7 @@ export function createPolicyStore(
       const id = resolve(orgId);
       if (database) {
         await database.transaction(async (transaction) => {
-          await transaction
-            .delete(actionPolicy)
-            .where(eq(actionPolicy.id, id));
+          await transaction.delete(actionPolicy).where(eq(actionPolicy.id, id));
           await announce(transaction);
         });
       }

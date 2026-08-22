@@ -61,7 +61,9 @@ export function currentOrganizationQueryOptions() {
 export function platformOrganizationListQueryOptions() {
   return queryOptions({
     queryKey: orgKeys.platform(),
-    queryFn: (): Promise<{ id: string; slug: string; name: string; status: string; plan: string }[]> =>
+    queryFn: (): Promise<
+      { id: string; slug: string; name: string; status: string; plan: string }[]
+    > =>
       client("/api/platform/organizations", "organizations", {
         fallback: "Could not load organizations",
       }),

@@ -7,7 +7,13 @@ import {
   PageSection,
   PageShell,
 } from "@/components/layout/page-shell";
-import { Item, ItemActions, ItemContent, ItemMedia, ItemTitle } from "@/components/ui/item";
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemMedia,
+  ItemTitle,
+} from "@/components/ui/item";
 import { Separator } from "@/components/ui/separator";
 import { activateOrganizationMutationOptions } from "@/lib/orgs/mutations";
 import { organizationListQueryOptions } from "@/lib/orgs/queries";
@@ -20,7 +26,9 @@ export const Route = createFileRoute("/_authed/_app/o")({
 function OrganizationsPage() {
   const navigate = useNavigate();
   const orgs = useQuery(organizationListQueryOptions());
-  const activate = useMutation(activateOrganizationMutationOptions(queryClient));
+  const activate = useMutation(
+    activateOrganizationMutationOptions(queryClient),
+  );
 
   return (
     <PageShell
@@ -33,7 +41,9 @@ function OrganizationsPage() {
             Could not load organizations.
           </p>
         ) : orgs.data?.organizations.length === 0 ? (
-          <PageEmpty>You have not been invited to an organization yet.</PageEmpty>
+          <PageEmpty>
+            You have not been invited to an organization yet.
+          </PageEmpty>
         ) : (
           <PageRows>
             {orgs.data?.organizations.map((organization, index) => (
