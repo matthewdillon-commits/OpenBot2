@@ -47,6 +47,8 @@ Bots can also message each other. `message_agent` opens or reuses a 1:1 between 
 
 A Bot can hand a bounded chunk of work to a sub-agent with `spawn_subagent`: a goal, success criteria, and what to report back. The call returns an id immediately; the parent stays available. The child is a background run of that same coworker, not a new profile in the directory, and it does not talk to the person. When it finishes — or hits a real blocker — it reports and the parent is woken, the same way a `message_agent` recipient is. A follow-up or correction passes that same id so the work stays on that worker. A second spawn without an id is a second independent worker. Spawn is governed (`intent == "spawn"` or `tool.name == "spawn_subagent"`) and lands on the trail as `subagent.started` or `subagent.refused`. The child has no composer; the record is the audit trail.
 
+The child uses the same computer the parent does — browser, files, and shell — through the computer gateway. Isolation in this product is per Bot, not per run, so two runs of the same coworker take turns rather than sharing a mouse. A person sees the work on Activity and the audit trail. If the child hits a login or needs a secret, it reports `blocked` to the parent with what they must do; it does not hang waiting for take-the-wheel.
+
 Each channel routes through a channel-local proxy agent id, pinned to that channel's thread id, then forwards to the coworker runtime id.
 
 ## Deleting and hiding

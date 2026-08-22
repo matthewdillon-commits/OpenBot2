@@ -49,6 +49,14 @@ export class StaleSnapshotError extends Error {
   }
 }
 
+/** A person has the wheel. The caller must wait or hand off — not treat this as a stale ref. */
+export class HumanHasControlError extends Error {
+  constructor(reason: string) {
+    super(reason);
+    this.name = "HumanHasControlError";
+  }
+}
+
 /**
  * Transport options used inside the computer gateway.
  *
@@ -206,6 +214,15 @@ function throwMappedError(
   const detail =
     typeof body?.error === "string" ? body.error : `HTTP ${status}`;
   if (status === 409) {
+    // A person holding the wheel is the same HTTP status as a stale ref. They are not the
+    // same instruction: one means snapshot again, the other means stop and wait (or, on a
+    // child run, report blocked).
+    if (
+      body?.humanHasControl === true ||
+      /a person has control/i.test(detail)
+    ) {
+      throw new HumanHasControlError(detail);
+    }
     throw new StaleSnapshotError(detail);
   }
   if (status === 403) {

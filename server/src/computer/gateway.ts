@@ -19,11 +19,13 @@
  */
 import { type AuditStore, recordAuditEvent } from "../audit";
 import { ComputerUnavailableError, createComputerTransport } from "./client";
+import { withComputerLock } from "./lock";
 import { checkComputerAddress } from "./target";
 
 export {
   ComputerUnavailableError,
   ElementNotFoundError,
+  HumanHasControlError,
   NavigationRefusedError,
   StaleSnapshotError,
   WorkspaceRefusedError,
@@ -291,7 +293,9 @@ export function createComputerGateway(
 
   /** Read-only, so it passes straight through. Nothing has changed and there is nothing to decide. */
   async function screenshot(botId: string): Promise<ScreenshotResult> {
-    return get<ScreenshotResult>(botId, "/screenshot");
+    return withComputerLock(botId, () =>
+      get<ScreenshotResult>(botId, "/screenshot"),
+    );
   }
 
   /**
@@ -305,24 +309,26 @@ export function createComputerGateway(
    * on the store.
    */
   async function snapshot(botId: string): Promise<SnapshotResult> {
-    const result = await transport.call<SnapshotResult>(
-      await locate(botId),
-      botId,
-      "/snapshot",
-      { method: "POST" },
-    );
-    await snapshots.save(botId, {
-      snapshotId: result.snapshotId,
-      url: result.url,
-      elements: new Map(
-        result.elements.map((element) => [element.ref, element]),
-      ),
+    return withComputerLock(botId, async () => {
+      const result = await transport.call<SnapshotResult>(
+        await locate(botId),
+        botId,
+        "/snapshot",
+        { method: "POST" },
+      );
+      await snapshots.save(botId, {
+        snapshotId: result.snapshotId,
+        url: result.url,
+        elements: new Map(
+          result.elements.map((element) => [element.ref, element]),
+        ),
+      });
+      return result;
     });
-    return result;
   }
 
   async function read(botId: string): Promise<ReadResult> {
-    return get<ReadResult>(botId, "/read");
+    return withComputerLock(botId, () => get<ReadResult>(botId, "/read"));
   }
 
   /**
@@ -368,6 +374,26 @@ export function createComputerGateway(
       /** The command a shell call is about to run, so a rule can be written against it. */
       command?: string;
       /** The person's Stop, on its way to the browser. See the acting methods below. */
+      signal?: AbortSignal;
+    },
+    run: () => Promise<T>,
+  ): Promise<T> {
+    return withComputerLock(botId, () =>
+      decideAndAct(toolName, botId, actor, subject, run),
+    );
+  }
+
+  async function decideAndAct<T>(
+    toolName: string,
+    botId: string,
+    actor: ActionActor,
+    subject: {
+      ref?: string;
+      snapshotId?: number;
+      filePath?: string;
+      targetUrl?: string;
+      key?: string;
+      command?: string;
       signal?: AbortSignal;
     },
     run: () => Promise<T>,
@@ -529,40 +555,48 @@ export function createComputerGateway(
      * an investigator wants is that a human drove this browser between two times.
      */
     async requestHelp(botId: string, actor: ActionActor, reason: string) {
-      const state = await post<ControlState>(botId, "/control/request", {
-        reason,
+      return withComputerLock(botId, async () => {
+        const state = await post<ControlState>(botId, "/control/request", {
+          reason,
+        });
+        await writeControlEvent(auditStore, "computer.help_requested", {
+          botId,
+          actor,
+          reason,
+        });
+        return state;
       });
-      await writeControlEvent(auditStore, "computer.help_requested", {
-        botId,
-        actor,
-        reason,
-      });
-      return state;
     },
 
     async takeControl(botId: string, actor: ActionActor) {
-      const state = await post<ControlState>(botId, "/control/take", {});
-      await writeControlEvent(auditStore, "computer.control_taken", {
-        botId,
-        actor,
-        // Carried onto the row so the trail says what the person was handed, not merely that they
-        // took over.
-        reason: state.reason,
+      return withComputerLock(botId, async () => {
+        const state = await post<ControlState>(botId, "/control/take", {});
+        await writeControlEvent(auditStore, "computer.control_taken", {
+          botId,
+          actor,
+          // Carried onto the row so the trail says what the person was handed, not merely that they
+          // took over.
+          reason: state.reason,
+        });
+        return state;
       });
-      return state;
     },
 
     async releaseControl(botId: string, actor: ActionActor) {
-      const state = await post<ControlState>(botId, "/control/release", {});
-      await writeControlEvent(auditStore, "computer.control_released", {
-        botId,
-        actor,
+      return withComputerLock(botId, async () => {
+        const state = await post<ControlState>(botId, "/control/release", {});
+        await writeControlEvent(auditStore, "computer.control_released", {
+          botId,
+          actor,
+        });
+        return state;
       });
-      return state;
     },
 
     control(botId: string): Promise<ControlState> {
-      return get<ControlState>(botId, "/control");
+      return withComputerLock(botId, () =>
+        get<ControlState>(botId, "/control"),
+      );
     },
 
     /** Return every computer that the configured provider owns. */
@@ -633,47 +667,55 @@ export function createComputerGateway(
       actor: ActionActor,
       input: SecretRequest,
     ) {
-      const state = await post<ControlState>(botId, "/control/secret", input);
-      await writeControlEvent(auditStore, "computer.secret_requested", {
-        botId,
-        actor,
-        reason: `${input.label} (into ${input.ref})`,
+      return withComputerLock(botId, async () => {
+        const state = await post<ControlState>(botId, "/control/secret", input);
+        await writeControlEvent(auditStore, "computer.secret_requested", {
+          botId,
+          actor,
+          reason: `${input.label} (into ${input.ref})`,
+        });
+        return state;
       });
-      return state;
     },
 
     async supplySecret(botId: string, actor: ActionActor, text: string) {
-      const result = await post<SecretResult>(botId, "/human/secret", { text });
-      await writeControlEvent(auditStore, "computer.secret_supplied", {
-        botId,
-        actor,
-        // Length, never content. Enough to show something real was entered.
-        reason: `${result.characters} characters`,
+      return withComputerLock(botId, async () => {
+        const result = await post<SecretResult>(botId, "/human/secret", {
+          text,
+        });
+        await writeControlEvent(auditStore, "computer.secret_supplied", {
+          botId,
+          actor,
+          // Length, never content. Enough to show something real was entered.
+          reason: `${result.characters} characters`,
+        });
+        return result;
       });
-      return result;
     },
 
     async humanInput(
       botId: string,
       input: HumanInput,
     ): Promise<HumanInputResult> {
-      const { kind, ...payload } = input;
-      /*
-       * Checked here as well as at the route, because this is where it becomes a path.
-       *
-       * `kind` is typed as one of four gestures and a type is not a check: the route casts a parsed
-       * body to this shape, so whatever arrived is whatever the caller sent. Interpolated into the
-       * path below, a value like `../exec` reaches a different endpoint of the computer's API
-       * altogether, carrying this deployment's computer token. This method is also the one acting
-       * path that writes no audit row, deliberately, so a call that went somewhere else leaves
-       * nothing behind that would say so.
-       */
-      if (!HUMAN_GESTURES.has(kind)) {
-        throw new Error(
-          `A person's input is one of ${[...HUMAN_GESTURES].join(", ")}, not ${JSON.stringify(kind)}.`,
-        );
-      }
-      return post<HumanInputResult>(botId, `/human/${kind}`, payload);
+      return withComputerLock(botId, async () => {
+        const { kind, ...payload } = input;
+        /*
+         * Checked here as well as at the route, because this is where it becomes a path.
+         *
+         * `kind` is typed as one of four gestures and a type is not a check: the route casts a parsed
+         * body to this shape, so whatever arrived is whatever the caller sent. Interpolated into the
+         * path below, a value like `../exec` reaches a different endpoint of the computer's API
+         * altogether, carrying this deployment's computer token. This method is also the one acting
+         * path that writes no audit row, deliberately, so a call that went somewhere else leaves
+         * nothing behind that would say so.
+         */
+        if (!HUMAN_GESTURES.has(kind)) {
+          throw new Error(
+            `A person's input is one of ${[...HUMAN_GESTURES].join(", ")}, not ${JSON.stringify(kind)}.`,
+          );
+        }
+        return post<HumanInputResult>(botId, `/human/${kind}`, payload);
+      });
     },
 
     /**

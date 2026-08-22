@@ -3,6 +3,8 @@ import type { AuditEventInput, AuditStore } from "../src/audit";
 import {
   ActionRefusedError,
   createComputerGateway,
+  HumanHasControlError,
+  StaleSnapshotError,
   WorkspaceRefusedError,
 } from "../src/computer/gateway";
 import type { ActionPolicy } from "../src/computer/policy";
@@ -962,5 +964,107 @@ describe("resolving a ref across replicas", () => {
       snapshotId: 7,
     });
     expect(afterReset.element).toBeUndefined();
+  });
+
+  test("a person holding the wheel is not a stale snapshot", async () => {
+    const { provider, fetchImpl } = fakeComputer({
+      routes: {
+        "/click": () =>
+          Response.json(
+            {
+              error:
+                "A person has control of the computer right now. Wait for them to hand it back before acting.",
+              humanHasControl: true,
+            },
+            { status: 409 },
+          ),
+      },
+    });
+    const { store, rows } = fakeAudit();
+    const gateway = createComputerGateway({
+      provider,
+      fetchImpl,
+      auditStore: store,
+      policy: () => PERMISSIVE,
+    });
+    await gateway.snapshot("bot-1");
+
+    await expect(
+      gateway.click("bot-1", ACTOR, { ref: "e9", snapshotId: 7 }),
+    ).rejects.toBeInstanceOf(HumanHasControlError);
+    expect(rows.some((row) => row.eventType === "computer.action_failed")).toBe(
+      true,
+    );
+  });
+
+  test("a 409 without a person holding the wheel is still a stale snapshot", async () => {
+    const { provider, fetchImpl } = fakeComputer({
+      routes: {
+        "/click": () =>
+          Response.json({ error: "The page changed." }, { status: 409 }),
+      },
+    });
+    const gateway = createComputerGateway({
+      provider,
+      fetchImpl,
+      auditStore: fakeAudit().store,
+      policy: () => PERMISSIVE,
+    });
+    await gateway.snapshot("bot-1");
+
+    await expect(
+      gateway.click("bot-1", ACTOR, { ref: "e9", snapshotId: 7 }),
+    ).rejects.toBeInstanceOf(StaleSnapshotError);
+  });
+
+  test("two commands on the same Bot take turns", async () => {
+    const order: string[] = [];
+    let releaseFirst!: () => void;
+    const held = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const { provider, fetchImpl } = fakeComputer({
+      routes: {
+        "/exec": async (init) => {
+          const body = JSON.parse(String(init?.body ?? "{}")) as {
+            command?: string;
+          };
+          const command = body.command ?? "";
+          order.push(`start:${command}`);
+          if (command === "first") await held;
+          order.push(`end:${command}`);
+          return Response.json({
+            command,
+            exitCode: 0,
+            stdout: "",
+            stderr: "",
+            truncated: false,
+            timedOut: false,
+            elapsedMs: 1,
+          });
+        },
+      },
+    });
+    const gateway = createComputerGateway({
+      provider,
+      fetchImpl,
+      auditStore: fakeAudit().store,
+      policy: () => PERMISSIVE,
+    });
+
+    const first = gateway.runCommand("bot-1", ACTOR, { command: "first" });
+    const second = gateway.runCommand("bot-1", ACTOR, { command: "second" });
+    for (let i = 0; i < 50 && !order.includes("start:first"); i++) {
+      await Promise.resolve();
+    }
+    expect(order).toEqual(["start:first"]);
+    releaseFirst();
+    await Promise.all([first, second]);
+    expect(order).toEqual([
+      "start:first",
+      "end:first",
+      "start:second",
+      "end:second",
+    ]);
   });
 });

@@ -22,18 +22,11 @@ import {
   MESSAGE_CHANNEL_TOOL,
 } from "./channels/messaging";
 import { createChannelStore } from "./channels/routes";
-import { messagingTools } from "./channels/tools";
-import { createAgentWakeRunner, createWakeQueue } from "./channels/wake";
-import {
-  createSubagentGateway,
-  SPAWN_SUBAGENT_TOOL,
-} from "./subagents/gateway";
-import { createSubagentRunner } from "./subagents/runner";
-import { createSubagentStore } from "./subagents/store";
-import { reportSubagentTool, subagentTools } from "./subagents/tools";
 import { websocket as channelSocket } from "./channels/socket";
 import { createStallGuard } from "./channels/stall-guard";
 import { createThreadIdentity } from "./channels/thread-identity";
+import { messagingTools } from "./channels/tools";
+import { createAgentWakeRunner, createWakeQueue } from "./channels/wake";
 import { createSandboxedStore } from "./components/sandboxed";
 import { createComponentStore } from "./components/store";
 import { createComputerGateway } from "./computer/gateway";
@@ -70,6 +63,14 @@ import {
   grantedTools,
   REFUSAL_MARKER,
 } from "./plugins/tools";
+import { childComputerTools } from "./subagents/computer-tools";
+import {
+  createSubagentGateway,
+  SPAWN_SUBAGENT_TOOL,
+} from "./subagents/gateway";
+import { createSubagentRunner } from "./subagents/runner";
+import { createSubagentStore } from "./subagents/store";
+import { reportSubagentTool, subagentTools } from "./subagents/tools";
 import {
   createPackageStatusReader,
   loadTenantPackage,
@@ -450,7 +451,8 @@ subagentRunner.current = createSubagentRunner({
  * ticked a grant. A framework Bot calls the same list back through `/api/agent-tools/call`.
  *
  * A child run (`subagentId`) is not offered messaging or spawn: it reports to the parent and
- * does not talk to the person.
+ * does not talk to the person. It is offered this coworker's computer through the same
+ * gateway the conversation surface uses.
  */
 const loadToolsForActor =
   (actorId: string, options?: { subagentId?: string }) =>
@@ -471,6 +473,17 @@ const loadToolsForActor =
           subagentId: options.subagentId,
         }),
       );
+      if (computerGateway && isBrowserEnabled(policyStore.get())) {
+        extra.push(
+          ...childComputerTools({
+            computer: computerGateway,
+            subagents: subagentGateway,
+            botId,
+            actor,
+            subagentId: options.subagentId,
+          }),
+        );
+      }
     } else {
       extra.push(
         ...messagingTools({

@@ -9,6 +9,7 @@ import {
   type ComputerGateway,
   ComputerUnavailableError,
   ElementNotFoundError,
+  HumanHasControlError,
   NavigationRefusedError,
   StaleSnapshotError,
   WorkspaceRefusedError,
@@ -125,6 +126,12 @@ export function createComputerRoutes(
       // an outage that is not happening.
       if (error instanceof NavigationRefusedError) {
         return context.json({ error: error.message }, 403);
+      }
+      if (error instanceof HumanHasControlError) {
+        return context.json(
+          { error: error.message, humanHasControl: true },
+          409,
+        );
       }
       return context.json({ error: describe(error) }, statusFor(error));
     }
@@ -525,6 +532,9 @@ async function act(
     if (error instanceof WorkspaceRequestError) {
       return context.json({ error: error.message }, 400);
     }
+    if (error instanceof HumanHasControlError) {
+      return context.json({ error: error.message, humanHasControl: true }, 409);
+    }
     return context.json({ error: describe(error) }, statusFor(error));
   }
 }
@@ -566,6 +576,7 @@ function describe(error: unknown): string {
  * and everything else. Navigation established this; the acting routes follow it.
  */
 function statusFor(error: unknown): 409 | 500 | 503 {
+  if (error instanceof HumanHasControlError) return 409;
   if (error instanceof StaleSnapshotError) return 409;
   // The same answer as a stale snapshot, because it is the same instruction: the refs are wrong, take
   // another snapshot. Not 503, which says the computer is unavailable and sends an operator hunting a
