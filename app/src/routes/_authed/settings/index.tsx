@@ -13,6 +13,7 @@ import {
   ItemTitle,
 } from "@/components/ui/item";
 import { Switch } from "@/components/ui/switch";
+import { appConfig } from "@/lib/generated/application-config";
 
 export const Route = createFileRoute("/_authed/settings/")({
   component: RouteComponent,
@@ -28,7 +29,7 @@ function RouteComponent() {
    */
   return (
     <PageShell
-      description="How OpenBot looks and behaves for you. These apply to your account alone, on every deployment you sign in to."
+      description={`How ${appConfig.brand.productName} looks and behaves for you. These apply to your account alone, on every deployment you sign in to.`}
       title="Preferences"
     >
       <PageSection title="General">
@@ -37,7 +38,7 @@ function RouteComponent() {
             <ItemContent>
               <ItemTitle>Dark theme</ItemTitle>
               <ItemDescription>
-                Use the dark appearance across OpenBot.
+                {`Use the dark appearance across ${appConfig.brand.productName}.`}
               </ItemDescription>
             </ItemContent>
             <ItemActions>

@@ -553,7 +553,7 @@ export function mountCopilotRuntime(
     // Carried on the events the runtime already sends, so OpenBot's traffic is separable from any
     // other deployment's. Adds no events of its own.
     ...(config.accessibility
-      ? { telemetryProperties: { accessibility_title: "OpenBot" } }
+      ? { telemetryProperties: { accessibility_title: "LimitlessAI" } }
       : {}),
     // `identifyUser` is the Intelligence projection of the same person `identifyActor` returns:
     // one resolver decides both whose threads these are and whose coworkers exist.

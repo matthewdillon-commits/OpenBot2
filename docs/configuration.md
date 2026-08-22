@@ -255,7 +255,7 @@ examples/fintech/
 ```yaml
 tenant:
   id: openbot
-  product_name: OpenBot
+  product_name: LimitlessAI
 ```
 
 Optional theme:
