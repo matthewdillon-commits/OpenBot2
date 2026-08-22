@@ -1,23 +1,29 @@
-import { useQuery } from "@tanstack/react-query";
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { motion, useReducedMotion } from "motion/react";
 import { useState } from "react";
 import AgentOrb from "@/components/agents/orb/agent-orb";
 import { ProviderLogo } from "@/components/auth/provider-logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import {
   providerName,
   signInWith,
+  signInWithEmail,
   signInWithEmailDomain,
+  signUpWithEmail,
 } from "@/lib/auth/client";
-import { appConfig } from "@/lib/generated/application-config";
 import {
   type AuthProviderId,
+  authKeys,
   authProvidersQueryOptions,
   currentUserQueryOptions,
-} from "../lib/auth/queries";
+} from "@/lib/auth/queries";
+import { appConfig } from "@/lib/generated/application-config";
+import { createOwnOrganizationMutationOptions } from "@/lib/orgs/mutations";
+import { queryClient } from "@/query-client";
 
 const EASE_OUT = [0.23, 1, 0.32, 1] as const;
 
@@ -31,7 +37,7 @@ export const Route = createFileRoute("/sign")({
       currentUserQueryOptions(),
     );
     if (user) {
-      throw redirect({ to: "/" });
+      throw redirect({ to: user.orgId ? "/" : "/o" });
     }
     // Loaded here so the screen paints with its buttons rather than painting empty and then
     // growing them, which reads as "no providers" for exactly as long as the request takes.
@@ -43,11 +49,21 @@ export const Route = createFileRoute("/sign")({
 function SignScreen() {
   // Which provider is being opened, rather than whether one is: with three buttons, a single
   // boolean would put "Opening…" on all of them.
-  const [opening, setOpening] = useState<AuthProviderId | "sso" | null>(null);
+  const [opening, setOpening] = useState<
+    AuthProviderId | "sso" | "email" | null
+  >(null);
+  const [mode, setMode] = useState<"in" | "up">("in");
   const [error, setError] = useState<string | null>(null);
   const { data: options } = useQuery(authProvidersQueryOptions());
   const providers = options?.providers ?? [];
+  const emailPassword = options?.emailPassword === true;
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [organization, setOrganization] = useState("");
+  const navigate = useNavigate();
+  const createOrg = useMutation(
+    createOwnOrganizationMutationOptions(queryClient),
+  );
 
   /**
    * Sign in through whichever identity provider covers this address.
@@ -88,6 +104,45 @@ function SignScreen() {
     }
   }
 
+  async function handleEmailAuth(submission: React.FormEvent) {
+    submission.preventDefault();
+    setError(null);
+    setOpening("email");
+
+    try {
+      if (mode === "up") {
+        const name = email.split("@")[0] || email;
+        await signUpWithEmail({ email, password, name });
+        await queryClient.invalidateQueries({ queryKey: authKeys.all });
+        if (organization.trim()) {
+          await createOrg.mutateAsync({ name: organization.trim() });
+        }
+      } else {
+        await signInWithEmail({ email, password });
+        await queryClient.invalidateQueries({ queryKey: authKeys.all });
+      }
+
+      const user = await queryClient.fetchQuery(currentUserQueryOptions());
+      await navigate({ to: user?.orgId ? "/" : "/o" });
+    } catch (caughtError) {
+      const signedIn = await queryClient
+        .fetchQuery(currentUserQueryOptions())
+        .catch(() => null);
+      if (signedIn) {
+        await navigate({ to: signedIn.orgId ? "/" : "/o" });
+        return;
+      }
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : mode === "up"
+            ? "Could not create an account."
+            : "Could not sign in.",
+      );
+      setOpening(null);
+    }
+  }
+
   const prefersReducedMotion = useReducedMotion();
   const hidden = {
     opacity: 0,
@@ -97,12 +152,14 @@ function SignScreen() {
     opacity: 1,
     ...(prefersReducedMotion ? {} : { transform: "translateY(0px)" }),
   };
+  const hasOtherMethods = providers.length > 0 || options?.sso === true;
+  const busy = opening !== null;
 
   return (
-    <div className="flex flex-col h-dvh w-full items-center justify-center -mt-12">
+    <div className="flex min-h-dvh w-full items-center justify-center overflow-y-auto py-8">
       <motion.div
         animate="shown"
-        className="flex-1 flex w-full max-w-82 flex-col items-center justify-center p-4"
+        className="flex w-full max-w-82 flex-col items-center justify-center p-4"
         initial="hidden"
         variants={{
           hidden: {},
@@ -121,8 +178,19 @@ function SignScreen() {
           transition={{ duration: ENTRANCE_SECONDS, ease: EASE_OUT }}
           variants={{ hidden, shown }}
         >
-          Sign in to {appConfig.brand.productName}
+          {mode === "up"
+            ? `Create an account on ${appConfig.brand.productName}`
+            : `Sign in to ${appConfig.brand.productName}`}
         </motion.h1>
+        {mode === "up" ? (
+          <motion.p
+            className="mt-2 text-center text-sm text-muted-foreground"
+            transition={{ duration: ENTRANCE_SECONDS, ease: EASE_OUT }}
+            variants={{ hidden, shown }}
+          >
+            Your organization is the company workspace you will work in.
+          </motion.p>
+        ) : null}
         <motion.div
           className="mt-8 w-full"
           transition={{ duration: ENTRANCE_SECONDS, ease: EASE_OUT }}
@@ -141,7 +209,7 @@ function SignScreen() {
                  */
                 <Button
                   className="h-10 w-full justify-start gap-3 px-3 tracking-tight"
-                  disabled={opening !== null}
+                  disabled={busy}
                   key={provider}
                   onClick={() => handleSignIn(provider)}
                   size="lg"
@@ -159,11 +227,85 @@ function SignScreen() {
                 </Button>
               ))}
             </div>
-          ) : options?.sso ? null : (
+          ) : options?.sso || emailPassword ? null : (
             <p className="text-center text-sm text-muted-foreground">
               No sign-in provider is configured for this deployment.
             </p>
           )}
+          {emailPassword ? (
+            <form
+              className={hasOtherMethods ? "mt-3" : undefined}
+              onSubmit={handleEmailAuth}
+            >
+              {hasOtherMethods ? (
+                <div className="mb-3 flex items-center gap-3">
+                  <Separator className="flex-1" />
+                  <span className="text-muted-foreground text-xs">or</span>
+                  <Separator className="flex-1" />
+                </div>
+              ) : null}
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="sign-email">Email</Label>
+                  <Input
+                    autoComplete="email"
+                    id="sign-email"
+                    onChange={(event) => setEmail(event.target.value)}
+                    placeholder="you@company.com"
+                    required
+                    type="email"
+                    value={email}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="sign-password">Password</Label>
+                  <Input
+                    autoComplete={
+                      mode === "up" ? "new-password" : "current-password"
+                    }
+                    id="sign-password"
+                    minLength={8}
+                    onChange={(event) => setPassword(event.target.value)}
+                    required
+                    type="password"
+                    value={password}
+                  />
+                </div>
+                {mode === "up" ? (
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="sign-organization">Organization</Label>
+                    <Input
+                      autoComplete="organization"
+                      id="sign-organization"
+                      onChange={(event) => setOrganization(event.target.value)}
+                      placeholder="Your company"
+                      required
+                      value={organization}
+                    />
+                  </div>
+                ) : null}
+              </div>
+              <Button
+                className="mt-3 h-10 w-full tracking-tight"
+                disabled={
+                  busy ||
+                  email.trim().length === 0 ||
+                  password.length < 8 ||
+                  (mode === "up" && organization.trim().length === 0)
+                }
+                size="lg"
+                type="submit"
+              >
+                {opening === "email"
+                  ? mode === "up"
+                    ? "Creating account…"
+                    : "Signing in…"
+                  : mode === "up"
+                    ? "Create account"
+                    : "Sign in"}
+              </Button>
+            </form>
+          ) : null}
           {/*
            * The way in for a company that runs its own identity provider.
            *
@@ -172,7 +314,7 @@ function SignScreen() {
            */}
           {options?.sso ? (
             <form className="mt-3" onSubmit={handleDomainSignIn}>
-              {providers.length > 0 ? (
+              {providers.length > 0 || emailPassword ? (
                 <div className="mb-3 flex items-center gap-3">
                   <Separator className="flex-1" />
                   <span className="text-muted-foreground text-xs">or</span>
@@ -189,7 +331,7 @@ function SignScreen() {
               />
               <Button
                 className="mt-2 h-10 w-full tracking-tight"
-                disabled={opening !== null || email.trim().length === 0}
+                disabled={busy || email.trim().length === 0}
                 size="lg"
                 type="submit"
                 variant="outline"
@@ -199,6 +341,39 @@ function SignScreen() {
                   : "Continue with your company account"}
               </Button>
             </form>
+          ) : null}
+          {emailPassword ? (
+            <p className="mt-4 text-center text-sm text-muted-foreground">
+              {mode === "up" ? (
+                <>
+                  Already have an account?{" "}
+                  <button
+                    className="text-foreground underline-offset-4 hover:underline"
+                    onClick={() => {
+                      setMode("in");
+                      setError(null);
+                    }}
+                    type="button"
+                  >
+                    Sign in
+                  </button>
+                </>
+              ) : (
+                <>
+                  No account yet?{" "}
+                  <button
+                    className="text-foreground underline-offset-4 hover:underline"
+                    onClick={() => {
+                      setMode("up");
+                      setError(null);
+                    }}
+                    type="button"
+                  >
+                    Create one
+                  </button>
+                </>
+              )}
+            </p>
           ) : null}
           {error ? (
             <p className="mt-3 text-sm text-destructive" role="alert">

@@ -2,6 +2,7 @@ import { IconX } from "@tabler/icons-react";
 import { motion, useReducedMotion } from "motion/react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { EASE_OUT } from "@/lib/motion";
 
 /**
@@ -45,6 +46,28 @@ export function DetailPanel({
 }) {
   // Reduced motion keeps the fade, which explains the change, and drops the movement.
   const shouldReduceMotion = useReducedMotion();
+  const isMobile = useIsMobile();
+
+  if (isMobile) {
+    return (
+      <div className="flex h-full min-h-0 min-w-0 flex-col">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</div>
+        {open ? (
+          <div className="fixed inset-0 z-40 flex flex-col bg-sidebar">
+            <div className="flex h-12 shrink-0 flex-row items-center justify-between gap-2 border-b border-border px-2">
+              <div className="flex min-w-0 w-full items-center gap-1.5">
+                {title}
+              </div>
+              <Button onClick={onClose} size="icon" variant="ghost">
+                <IconX className="size-4.5" />
+              </Button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto">{detail}</div>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full min-h-0">

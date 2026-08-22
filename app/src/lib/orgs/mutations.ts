@@ -1,11 +1,15 @@
 import { mutationOptions, type QueryClient } from "@tanstack/react-query";
+import { authKeys } from "@/lib/auth/queries";
 import { client } from "@/lib/client";
 import { orgKeys } from "./queries";
 
 const FALLBACK = "Could not update the organization";
 
 function invalidateOrgs(queryClient: QueryClient) {
-  return queryClient.invalidateQueries({ queryKey: orgKeys.all });
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: orgKeys.all }),
+    queryClient.invalidateQueries({ queryKey: authKeys.all }),
+  ]);
 }
 
 export function activateOrganizationMutationOptions(queryClient: QueryClient) {
@@ -16,6 +20,26 @@ export function activateOrganizationMutationOptions(queryClient: QueryClient) {
         body: input,
         fallback: FALLBACK,
       }).then(() => undefined),
+    onSuccess: () => invalidateOrgs(queryClient),
+  });
+}
+
+export function createOwnOrganizationMutationOptions(queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: (input: {
+      name: string;
+      slug?: string;
+    }): Promise<{
+      id: string;
+      slug: string;
+      name: string;
+      role: "owner" | "admin" | "member";
+    }> =>
+      client("/api/orgs", "organization", {
+        method: "POST",
+        body: input,
+        fallback: FALLBACK,
+      }),
     onSuccess: () => invalidateOrgs(queryClient),
   });
 }

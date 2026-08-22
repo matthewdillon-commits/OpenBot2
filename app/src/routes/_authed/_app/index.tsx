@@ -21,7 +21,7 @@ function RouteComponent() {
   const fallback = explore?.[0] ?? agents?.[0];
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center w-full p-4 mt-8">
+    <div className="flex w-full min-w-0 flex-1 flex-col items-center justify-center p-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:mt-8">
       <div className="flex flex-col items-center">
         <h2 className="text-sm uppercase text-muted-foreground font-medium tracking-tight text-center">
           {appConfig.brand.productName}
@@ -72,7 +72,7 @@ function RouteComponent() {
       </div>
       <div className="mt-10 w-full max-w-2xl">
         <h2 className="font-bold text-lg">Explore agents</h2>
-        <div className="flex flex-row gap-4 mt-4">
+        <div className="-mx-1 flex flex-row gap-4 overflow-x-auto px-1 pb-2">
           {!!explore?.length &&
             explore.map((agent) => (
               <Link

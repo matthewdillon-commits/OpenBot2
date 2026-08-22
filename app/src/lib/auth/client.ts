@@ -52,6 +52,59 @@ export async function signInWith(
   }
 }
 
+/** What an email/password attempt came back with. */
+type EmailResult = { error?: { message?: string } | null };
+
+/**
+ * Sign in with an email and a password.
+ *
+ * Injectable for the same reason as {@link signInWith}: the Better Auth client is a proxy.
+ */
+export async function signInWithEmail(
+  input: { email: string; password: string },
+  start: (credentials: {
+    email: string;
+    password: string;
+    callbackURL: string;
+  }) => Promise<EmailResult> = (credentials) =>
+    authClient.signIn.email(credentials) as Promise<EmailResult>,
+) {
+  const result = await start({
+    ...input,
+    callbackURL: window.location.origin,
+  });
+
+  if (result.error) {
+    throw new Error(result.error.message || "Could not sign in.");
+  }
+}
+
+/**
+ * Create an account with an email and a password.
+ *
+ * The organization is created afterwards, by the caller, so this stays a Better Auth call
+ * and does not invent a second sign-up endpoint.
+ */
+export async function signUpWithEmail(
+  input: { email: string; password: string; name: string },
+  start: (credentials: {
+    email: string;
+    password: string;
+    name: string;
+    callbackURL: string;
+  }) => Promise<EmailResult> = (credentials) =>
+    authClient.signUp.email(credentials) as Promise<EmailResult>,
+) {
+  const result = await start({
+    ...input,
+    callbackURL: window.location.origin,
+  });
+
+  if (result.error) {
+    throw new Error(result.error.message || "Could not create an account.");
+  }
+}
+
 /**
  * Start sign-in through whichever identity provider covers this address.
  *

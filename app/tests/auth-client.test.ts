@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { providerName, signInWith } from "@/lib/auth/client";
+import {
+  providerName,
+  signInWith,
+  signInWithEmail,
+  signUpWithEmail,
+} from "@/lib/auth/client";
 
 /*
  * A browser origin, which the sign-in call needs for its callback URL and this environment has no
@@ -71,6 +76,64 @@ describe("signInWith", () => {
     expect(
       signInWith("google", async () => ({ error: null })),
     ).resolves.toBeUndefined();
+  });
+});
+
+describe("signInWithEmail", () => {
+  test("sends the email and password back to the origin", async () => {
+    let asked: { email: string; password: string; callbackURL: string } | null =
+      null;
+
+    await signInWithEmail(
+      { email: "a@b.test", password: "password1" },
+      async (input) => {
+        asked = input;
+        return {};
+      },
+    );
+
+    expect(asked).toEqual({
+      email: "a@b.test",
+      password: "password1",
+      callbackURL: "http://localhost:3010",
+    });
+  });
+
+  test("throws what the client said when it refuses", async () => {
+    expect(
+      signInWithEmail(
+        { email: "a@b.test", password: "password1" },
+        async () => ({
+          error: { message: "Invalid email or password." },
+        }),
+      ),
+    ).rejects.toThrow("Invalid email or password.");
+  });
+});
+
+describe("signUpWithEmail", () => {
+  test("sends the name with the credentials", async () => {
+    let asked: {
+      email: string;
+      password: string;
+      name: string;
+      callbackURL: string;
+    } | null = null;
+
+    await signUpWithEmail(
+      { email: "a@b.test", password: "password1", name: "Ada" },
+      async (input) => {
+        asked = input;
+        return {};
+      },
+    );
+
+    expect(asked).toEqual({
+      email: "a@b.test",
+      password: "password1",
+      name: "Ada",
+      callbackURL: "http://localhost:3010",
+    });
   });
 });
 

@@ -49,7 +49,13 @@ import { createDatabase } from "./db/client";
 import { askerFor, createKnowledgeSearch } from "./knowledge/search";
 import { knowledgeSearchTool } from "./knowledge/tool";
 import { bootstrapOrganizations } from "./orgs/bootstrap";
-import { computerIdFor, intelligenceUserId, orgIdOf } from "./orgs/constants";
+import {
+  computerIdFor,
+  intelligenceUserId,
+  LOCAL_ORGANIZATION_ID,
+  orgIdOf,
+} from "./orgs/constants";
+import { copyPackageOwnedAgents } from "./orgs/provision";
 import { createOrganizationStore } from "./orgs/store";
 import { createPeopleStore } from "./people/store";
 import { createPluginStore } from "./plugins/store";
@@ -94,7 +100,9 @@ async function resolveRequestActor(request: Request): Promise<{
   }
   const membership =
     (await organizationStore.resolveActive(user.id)) ??
-    (await organizationStore.joinIfSoleOrganization(user.id));
+    (config.auth?.emailPassword
+      ? null
+      : await organizationStore.joinIfSoleOrganization(user.id));
   if (!membership) {
     throw new Error("A CopilotKit run requires an organization membership.");
   }
@@ -528,7 +536,28 @@ const app = createApp(
     const tool = tools.find((one) => one.name === name);
     return tool ? tool.execute(args) : null;
   },
-  organizationStore,
+  {
+    ...organizationStore,
+    async create(input) {
+      const organization = await organizationStore.create(input);
+      try {
+        await copyPackageOwnedAgents(
+          database,
+          LOCAL_ORGANIZATION_ID,
+          organization.id,
+        );
+      } catch (error) {
+        console.error(
+          JSON.stringify({
+            type: "organization-package-copy-failed",
+            orgId: organization.id,
+            error: String(error),
+          }),
+        );
+      }
+      return organization;
+    },
+  },
 );
 
 /**

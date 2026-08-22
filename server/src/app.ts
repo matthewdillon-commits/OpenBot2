@@ -218,6 +218,13 @@ export function createApp(
        */
       authProviders: configuredAuthProviders(config.auth),
       /*
+       * Whether this deployment accepts an email and a password.
+       *
+       * Separate from the provider list: it is not an OAuth button, and the sign-in screen
+       * draws a form rather than a Continue-with control when this is true.
+       */
+      emailPassword: config.auth?.emailPassword === true,
+      /*
        * Whether any enterprise identity provider has been registered.
        *
        * A count, not a list. The sign-in screen only needs to know whether to offer the email box
@@ -297,6 +304,9 @@ export function createApp(
           roleRepository,
           organizationStore,
           config.platformSuperadmins,
+          {
+            autoJoinSoleOrganization: config.auth?.emailPassword !== true,
+          },
         )
       : authenticationUnavailable;
 

@@ -316,7 +316,7 @@ export function Composer({
   }
 
   return (
-    <div className={cn("w-xl", className)}>
+    <div className={cn("w-full", className)}>
       <form
         aria-busy={isBusy}
         className="overflow-hidden rounded-2xl border border-border bg-card"

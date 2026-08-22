@@ -2,15 +2,15 @@ import type { MiddlewareHandler } from "hono";
 import { Hono } from "hono";
 import type { AppVariables } from "../auth/guards";
 import { requireOrgAdmin, requirePlatformSuperadmin } from "../auth/guards";
+import type { OrganizationRole } from "./constants";
+import { ORGANIZATION_ROLES } from "./constants";
 import {
   InviteInvalidError,
   OrganizationAccessError,
   OrganizationNotFoundError,
-  OrganizationSuspendedError,
   type OrganizationStore,
+  OrganizationSuspendedError,
 } from "./store";
-import type { OrganizationRole } from "./constants";
-import { ORGANIZATION_ROLES } from "./constants";
 
 function asRole(value: unknown): OrganizationRole | null {
   return typeof value === "string" &&
@@ -57,6 +57,29 @@ export function createOrganizationRoutes(
         defaultModel: settings.defaultModel,
       },
     });
+  });
+
+  app.post("/api/orgs", async (context) => {
+    const body = (await context.req.json().catch(() => null)) as {
+      name?: unknown;
+      slug?: unknown;
+    } | null;
+    const name = typeof body?.name === "string" ? body.name.trim() : "";
+    if (!name) {
+      return context.json({ error: "An organization needs a name." }, 400);
+    }
+    const slug = typeof body?.slug === "string" ? body.slug.trim() : undefined;
+    const organization = await organizations.create({ name, slug });
+    await organizations.ensureMembership({
+      orgId: organization.id,
+      userId: context.var.actor.id,
+      role: "owner",
+    });
+    const current = await organizations.setActive(
+      context.var.actor.id,
+      organization.id,
+    );
+    return context.json({ organization: current }, 201);
   });
 
   app.post("/api/orgs/current", async (context) => {

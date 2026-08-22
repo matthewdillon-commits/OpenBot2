@@ -30,6 +30,7 @@ describe("runtime capabilities", () => {
       durableHistory: true,
       // Names only. The sign-in screen reads this to know which buttons to draw.
       authProviders: ["google"],
+      emailPassword: false,
       // A boolean, not a list: naming the registered providers would tell anybody who loads the
       // sign-in page which companies use this deployment.
       ssoConfigured: false,
@@ -52,6 +53,7 @@ describe("runtime capabilities", () => {
       "mode",
       "durableHistory",
       "authProviders",
+      "emailPassword",
       "ssoConfigured",
       "browserEnabled",
     ]);

@@ -196,6 +196,9 @@ export function createAuth(
       encryptOAuthTokens: true,
     },
     plugins,
+    emailAndPassword: {
+      enabled: authConfig.emailPassword,
+    },
     socialProviders: {
       ...(authConfig.google ? { google: authConfig.google } : {}),
       ...(authConfig.microsoft

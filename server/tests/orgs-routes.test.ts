@@ -109,6 +109,79 @@ describe("platform organization routes", () => {
     });
   });
 
+  test("a signed-in person can create an organization they own", async () => {
+    const member: MiddlewareHandler<{ Variables: AppVariables }> = async (
+      context,
+      next,
+    ) => {
+      context.set("actor", {
+        id: "u1",
+        email: "member@openbot.test",
+        role: "user",
+      });
+      await next();
+    };
+    let membership: { orgId: string; userId: string; role: string } | null =
+      null;
+    let active: string | null = null;
+    const app = createOrganizationRoutes(
+      store({
+        ensureMembership: async (input) => {
+          membership = input;
+        },
+        setActive: async (_userId, orgId) => {
+          active = orgId;
+          return {
+            id: orgId,
+            slug: "acme",
+            name: "Acme",
+            status: "active",
+            plan: "enterprise",
+            role: "owner",
+          };
+        },
+      }),
+      ["owner@openbot.test"],
+      member,
+    );
+    const response = await app.request("http://openbot.test/api/orgs", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Acme" }),
+    });
+    expect(response.status).toBe(201);
+    expect(membership).toEqual({
+      orgId: "org_new",
+      userId: "u1",
+      role: "owner",
+    });
+    expect(active).toBe("org_new");
+    expect(await response.json()).toEqual({
+      organization: {
+        id: "org_new",
+        slug: "acme",
+        name: "Acme",
+        status: "active",
+        plan: "enterprise",
+        role: "owner",
+      },
+    });
+  });
+
+  test("creating an organization requires a name", async () => {
+    const app = createOrganizationRoutes(
+      store(),
+      ["owner@openbot.test"],
+      requireUser,
+    );
+    const response = await app.request("http://openbot.test/api/orgs", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    expect(response.status).toBe(400);
+  });
+
   test("a member cannot provision organizations", async () => {
     const member: MiddlewareHandler<{ Variables: AppVariables }> = async (
       context,

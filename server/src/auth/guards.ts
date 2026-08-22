@@ -76,6 +76,13 @@ export function createRequireUser(
   roleRepository: RoleRepository,
   organizations?: OrganizationStore,
   platformSuperadmins: readonly string[] = [],
+  /**
+   * Appliance behaviour: a membership-less user joins the sole organization.
+   *
+   * Off when this deployment offers email sign-up, because that person is about to
+   * create their own organization rather than land in the backfilled local one.
+   */
+  options?: { autoJoinSoleOrganization?: boolean },
 ): MiddlewareHandler<{ Variables: AppVariables }> {
   return async (context, next) => {
     const session = await auth.api.getSession({
@@ -98,9 +105,12 @@ export function createRequireUser(
       return context.json({ error: "Authorization required." }, 403);
     }
 
+    const autoJoin = options?.autoJoinSoleOrganization !== false;
     const membership = organizations
       ? ((await organizations.resolveActive(session.user.id)) ??
-        (await organizations.joinIfSoleOrganization(session.user.id)))
+        (autoJoin
+          ? await organizations.joinIfSoleOrganization(session.user.id)
+          : null))
       : null;
 
     const orgRole = membership?.role;

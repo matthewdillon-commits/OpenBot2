@@ -57,6 +57,13 @@ export type AuthConfig = {
   secret: string;
   trustedOrigins: string[];
   initialAdminEmails: string[];
+  /**
+   * Email and password, for a person who has no company identity provider.
+   *
+   * On when `OPENBOT_EMAIL_AUTH=true`. A deployment can run this alone, or next to
+   * Google / Microsoft / Okta.
+   */
+  emailPassword: boolean;
   google?: OAuthClient;
   /**
    * `tenantId` decides who may sign in at all, so it is not a detail. `common` admits any Microsoft
@@ -315,14 +322,15 @@ function commaSeparated(environment: Environment, name: string): string[] {
 }
 
 /**
- * Sign-in, if this deployment has an identity provider to sign people in with.
+ * Sign-in, if this deployment has a way to sign people in.
  *
- * Any one of the three turns authentication on. More than one is allowed and is the normal shape
- * for a company mid-migration, where some people are on Entra and some are still on Okta.
+ * Any one of Google, Microsoft, Okta, or email/password turns authentication on. More than one
+ * is allowed: a company mid-migration has people on Entra and Okta, and a hosted deployment
+ * offers email for somebody who has no company identity provider.
  *
  * Every combination that cannot work refuses at start-up rather than at somebody's first attempt to
  * sign in, which is the worst moment to discover it: a provider with half its credentials, a
- * provider with no session secret to mint against, or a session secret configured with no provider
+ * provider with no session secret to mint against, or a session secret configured with no way
  * to use it.
  */
 function authConfig(
@@ -331,14 +339,15 @@ function authConfig(
 ): AuthConfig | undefined {
   const microsoft = microsoftAuth(environment);
   const okta = oktaAuth(environment);
+  const emailPassword = environment.OPENBOT_EMAIL_AUTH?.trim() === "true";
 
   const secret = optional(environment, "BETTER_AUTH_SECRET");
   const baseUrl = url(environment, "BETTER_AUTH_URL");
 
-  if (!google && !microsoft && !okta) {
+  if (!google && !microsoft && !okta && !emailPassword) {
     if (secret || baseUrl) {
       throw new Error(
-        "BETTER_AUTH_SECRET or BETTER_AUTH_URL is set but no identity provider is. Configure GOOGLE_OAUTH_*, MICROSOFT_OAUTH_* or OKTA_OAUTH_*, or unset both",
+        "BETTER_AUTH_SECRET or BETTER_AUTH_URL is set but no sign-in method is. Configure GOOGLE_OAUTH_*, MICROSOFT_OAUTH_* or OKTA_OAUTH_*, set OPENBOT_EMAIL_AUTH=true, or unset both",
       );
     }
     return undefined;
@@ -378,6 +387,7 @@ function authConfig(
       ? commaSeparated(environment, "TRUSTED_ORIGINS")
       : ["http://localhost:3000"],
     initialAdminEmails,
+    emailPassword,
     ...(google ? { google } : {}),
     ...(microsoft ? { microsoft } : {}),
     ...(okta ? { okta } : {}),
@@ -608,10 +618,7 @@ export function loadConfig(
     auditRetentionDays: auditRetentionDays(environment),
     oauth: { google },
     auth,
-    singleUser: singleUserEnabled(
-      environment,
-      configuredAuthProviders(auth).length > 0,
-    ),
+    singleUser: singleUserEnabled(environment, Boolean(auth)),
     platformSuperadmins: commaSeparated(environment, "PLATFORM_SUPERADMINS"),
     accessibility: accessibilityEnabled(environment),
     ...(optional(environment, "APP_DIST_DIR")

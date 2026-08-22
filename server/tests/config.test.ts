@@ -184,6 +184,7 @@ describe("deployment configuration", () => {
       },
       trustedOrigins: ["http://localhost:3000"],
       initialAdminEmails: ["admin@openbot.test", "owner@openbot.test"],
+      emailPassword: false,
     });
   });
 
@@ -331,8 +332,37 @@ describe("deployment configuration", () => {
 
   test("refuses a session secret with no provider to use it", () => {
     expect(() => loadConfig({ ...withoutSignIn, ...SESSION })).toThrow(
-      "no identity provider",
+      "no sign-in method",
     );
+  });
+
+  test("enables email and password without an OAuth provider", () => {
+    const config = loadConfig({
+      ...withoutSignIn,
+      ...SESSION,
+      OPENBOT_EMAIL_AUTH: "true",
+    });
+
+    expect(config.auth).toEqual({
+      baseUrl: "http://localhost:3001",
+      secret: "a-long-enough-local-development-auth-secret",
+      trustedOrigins: ["http://localhost:3000"],
+      initialAdminEmails: ["admin@openbot.test"],
+      emailPassword: true,
+    });
+    expect(config.singleUser).toBe(false);
+    expect(configuredAuthProviders(config.auth)).toEqual([]);
+  });
+
+  test("refuses email sign-in with nobody named as an administrator", () => {
+    expect(() =>
+      loadConfig({
+        ...withoutSignIn,
+        BETTER_AUTH_SECRET: SESSION.BETTER_AUTH_SECRET,
+        BETTER_AUTH_URL: SESSION.BETTER_AUTH_URL,
+        OPENBOT_EMAIL_AUTH: "true",
+      }),
+    ).toThrow("INITIAL_ADMIN_EMAILS");
   });
 
   test("rejects incomplete Google authentication deployment settings", () => {

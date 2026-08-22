@@ -33,6 +33,8 @@ export type SignInOptions = {
    * use this deployment, before they have signed in.
    */
   sso: boolean;
+  /** Whether this deployment accepts an email and a password. */
+  emailPassword: boolean;
 };
 
 async function signInOptions(): Promise<SignInOptions> {
@@ -41,11 +43,16 @@ async function signInOptions(): Promise<SignInOptions> {
   // while the server was saying it has one.
   const body = (await (
     await client("/api/capabilities", { fallback: "Could not load sign-in" })
-  ).json()) as { authProviders?: AuthProviderId[]; ssoConfigured?: boolean };
+  ).json()) as {
+    authProviders?: AuthProviderId[];
+    ssoConfigured?: boolean;
+    emailPassword?: boolean;
+  };
 
   return {
     providers: body.authProviders ?? [],
     sso: body.ssoConfigured === true,
+    emailPassword: body.emailPassword === true,
   };
 }
 

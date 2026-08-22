@@ -223,7 +223,7 @@ export function ConversationView({
           {...(thinkingName ? { thinkingName } : {})}
         />
       </div>
-      <div className="max-w-2xl mx-auto w-full px-0 pb-4 shrink-0">
+      <div className="mx-auto w-full max-w-2xl shrink-0 px-3 pb-[max(1rem,env(safe-area-inset-bottom))] md:px-0">
         {notice}
         <Composer
           agents={agents}
