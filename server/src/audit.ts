@@ -241,6 +241,20 @@ export const auditEventTypes = [
   "subagent.started",
   "subagent.refused",
   "subagent.reported",
+  /**
+   * A standing job was created or fired, or the boundary stopped it.
+   *
+   * Creating and firing both go through the gateway (`intent == "schedule"`).
+   * Pause, resume and delete are administrator actions on the same target and
+   * land here so a trail can say who changed unattended work.
+   */
+  "schedule.created",
+  "schedule.refused",
+  "schedule.fired",
+  "schedule.fire_refused",
+  "schedule.paused",
+  "schedule.resumed",
+  "schedule.deleted",
 ] as const;
 
 export type AuditEventType = (typeof auditEventTypes)[number];

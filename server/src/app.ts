@@ -43,6 +43,8 @@ import { createPluginRoutes } from "./plugins/routes";
 import type { PluginStore } from "./plugins/store";
 import { REFUSAL_MARKER } from "./plugins/tools";
 import type { PackageStatusReader } from "./tenant-package";
+import type { ScheduleGateway } from "./jobs/gateway";
+import { createScheduleRoutes, createTriggerRoutes } from "./jobs/routes";
 
 /**
  * One row for something an administrator did to somebody's access.
@@ -165,6 +167,14 @@ export function createApp(
   }) => Promise<string | null>,
   /** Bot-posted channel messages. Absent leaves GET /:id/messages unregistered. */
   channelMessages?: ChannelMessageStore,
+  /**
+   * Standing jobs: cron schedules and inbound webhook triggers.
+   *
+   * Absent leaves the admin list answering 503 rather than an empty list, which
+   * is the honest degraded behaviour: "none are configured" and "this process
+   * cannot tell you" are different answers.
+   */
+  scheduleGateway?: ScheduleGateway,
 ) {
   const app = new Hono<{ Variables: AppVariables }>();
 
@@ -848,6 +858,24 @@ export function createApp(
         ),
       ),
     );
+  }
+
+  if (scheduleGateway) {
+    app.route(
+      "/api/admin/schedules",
+      createScheduleRoutes(scheduleGateway, requireUser),
+    );
+    /*
+     * Inbound events, authenticated by the job secret rather than a session.
+     * A later email-trigger PR fires the same primitive when mail arrives.
+     */
+    app.route("/api/triggers", createTriggerRoutes(scheduleGateway));
+  } else {
+    app.get("/api/admin/schedules", requireUser, async (context) => {
+      const denied = requireAdmin(context);
+      if (denied) return denied;
+      return context.json({ error: "Schedules are not available." }, 503);
+    });
   }
 
   /*

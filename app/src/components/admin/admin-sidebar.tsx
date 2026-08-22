@@ -1,6 +1,7 @@
 import {
   IconArrowLeft,
   IconBuildingBank,
+  IconCalendarTime,
   IconCode,
   IconDeviceDesktop,
   IconKey,
@@ -71,6 +72,11 @@ const GROUPS: {
   {
     label: "What Bots can do",
     items: [
+      {
+        title: "Schedules",
+        icon: IconCalendarTime,
+        linkOptions: { to: "/admin/schedules" },
+      },
       {
         title: "Plugins",
         icon: IconPuzzle,

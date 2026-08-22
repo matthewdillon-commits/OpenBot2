@@ -14,12 +14,12 @@ Regenerate it with `bun run diagram` after changing anything it shows.
 | Component                | Port                       | Responsibility                                                                                                                              |
 | ------------------------ | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | `app`                    | 3010                       | React/Vite interface for channels, Bot chat, live screen, settings, and admin pages.                                                        |
-| `server`                 | 3001                       | API, CopilotKit runtime, auth, roles, tenant package, coworkers, channels, policy, audit, credentials, plugins, components, and connectors. |
+| `server`                 | 3001                       | API, CopilotKit runtime, auth, roles, tenant package, coworkers, channels, schedules, policy, audit, credentials, plugins, components, and connectors. |
 | `agent-computer`         | 4100                       | Chromium, `/workspace`, browser profile, screenshots, snapshots, and file tools.                                                            |
 | `agent-bot`              | 4200                       | Proof-of-concept AG-UI Bot.                                                                                                                     |
 | `agent-langgraph`        | 4201                       | LangGraph AG-UI Bot.                                                                                                                        |
 | `supervisor`             | 4500 host / 4300 container | Creates, stops, resets, and lists per-Bot computer containers.                                                                              |
-| PostgreSQL with pgvector | 5432                       | Product data, audit rows, credentials, policy, grants, channels, components, connector state, and knowledge records.                        |
+| PostgreSQL with pgvector | 5432                       | Product data, audit rows, credentials, policy, grants, channels, scheduled jobs, components, connector state, and knowledge records.        |
 | CopilotKit Intelligence  | external                   | Durable threads, memory, and realtime gateway.                                                                                              |
 
 `scripts/start.sh` starts PostgreSQL, `agent-computer`, `agent-bot`, `agent-langgraph`, and the supervisor through Docker Compose, then starts `server` and `app` on the host.
@@ -56,7 +56,7 @@ Policy rules can inspect:
 - `key`
 - `file.path`, `file.name`, `file.extension`
 - `mcp.server`, `mcp.tool`, `mcp.effect`
-- `channel.id`, `recipient.id` (agent messaging and sub-agents)
+- `channel.id`, `recipient.id` (agent messaging, sub-agents, and schedules)
 
 Rules use CEL expressions plus case-insensitive `contains()` and `matches()`.
 Deny rules are evaluated before allow rules. The policy engine fails closed: a
@@ -105,6 +105,8 @@ A coworker is a durable Bot profile:
 A channel is a conversation with one or more coworkers and a CopilotKit Intelligence thread mapping. Starting a new channel creates a new thread. A Bot may message another Bot or post to a room it belongs to; that send is a governed action (`channel.message_sent` / `channel.message_refused`) and wakes the recipient asynchronously. A real wake reply is stored and wakes the other members; empty acknowledgements are not. Posted Bot messages are stored in `channel_messages` and merged into the transcript by time. The wake itself is in-process: a second server replica will not run a job this one accepted; the message is still stored and visible.
 
 A Bot may also start a sub-agent for a finite chunk of work (`spawn_subagent`). That is a run of the same coworker, not a new profile: the call returns an id immediately, the child runs in the background, and it reports to the parent — the parent is woken the same way a `message_agent` recipient is. A follow-up names that id so the work stays on the same worker. Spawn and the report go through the gateway (`subagent.started` / `subagent.refused` / `subagent.reported`). The child has no composer; a person sees that it ran on the audit trail. The task channel that holds the brief is hidden from the roster. The child is offered this deployment's server-side tools (MCP, knowledge, web search) and not messaging or another spawn. Browser tools stay on the conversation surface.
+
+Standing work that outlives a chat turn is a scheduled job (`scheduled_jobs` / `job_runs`). A cron job fires in `DEPLOYMENT_TIMEZONE` (or the job's own timezone), weekday-bounded unless the record says otherwise. An inbound webhook is the trigger primitive; a later email fetcher fires the same path. Creating or firing goes through the gateway (`intent == "schedule"`) and lands on the trail as `schedule.created`, `schedule.refused`, `schedule.fired`, or `schedule.fire_refused`. The HTTP request records the run and returns; the coworker is woken afterwards on the same in-process path as a message wake. The due time lives in Postgres, so a restart still sees jobs whose `next_run_at` is in the past, and re-enqueues queued or running runs that were in flight. A second replica will not run a dispatch this one accepted — the same cross-replica limit as message wakes. There is no extra worker container: a cheap poller on the API server claims due rows.
 
 Who may reach one is decided by membership: every channel route resolves the caller in
 `channel_memberships` and refuses without a row. `channels.allowed_groups` is declared in the

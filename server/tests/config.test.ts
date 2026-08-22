@@ -470,4 +470,26 @@ describe("accessibility", () => {
       ).toBe(true);
     },
   );
+
+  test("defaults cron evaluation to UTC", () => {
+    expect(loadConfig(baseEnvironment).deploymentTimezone).toBe("UTC");
+  });
+
+  test("accepts an IANA deployment timezone", () => {
+    expect(
+      loadConfig({
+        ...baseEnvironment,
+        DEPLOYMENT_TIMEZONE: "America/Toronto",
+      }).deploymentTimezone,
+    ).toBe("America/Toronto");
+  });
+
+  test("refuses a timezone that is not a real zone", () => {
+    expect(() =>
+      loadConfig({
+        ...baseEnvironment,
+        DEPLOYMENT_TIMEZONE: "Not/AZone",
+      }),
+    ).toThrow(/DEPLOYMENT_TIMEZONE/);
+  });
 });

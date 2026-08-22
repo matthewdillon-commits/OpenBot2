@@ -131,7 +131,15 @@ export type PolicyContext = {
      * coworker DMs, and the other way around. `tool.name == "spawn_subagent"` names the start;
      * `intent == "spawn"` covers the start and the report.
      */
-    | "spawn";
+    | "spawn"
+    /**
+     * Creating or firing a standing job (cron, webhook, or a later inbound email).
+     *
+     * Separate from `spawn` so a deployment can forbid unattended schedules without
+     * forbidding a Bot starting a finite worker from a turn. `tool.name` is
+     * `create_schedule` or `fire_schedule`; `intent == "schedule"` covers both.
+     */
+    | "schedule";
   /**
    * The file a `computer_read_file` or `computer_write_file` call is aimed at.
    *
@@ -366,7 +374,8 @@ function describeRefusal(context: PolicyContext, expression: string): string {
     context.intent === "read_tool" ||
     context.intent === "write_tool" ||
     context.intent === "message" ||
-    context.intent === "spawn"
+    context.intent === "spawn" ||
+    context.intent === "schedule"
   ) {
     return (
       `This deployment's policy does not allow that: ${context.tool.name} ` +

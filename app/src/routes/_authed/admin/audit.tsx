@@ -37,7 +37,7 @@ const FILTERS = [
     label: "Blocked",
     // Include every refusal family, not only browser policy refusals.
     search:
-      "?eventType=computer.action_refused,mcp.call_rejected,component.refused,component.function_refused,web.search_refused,channel.message_refused,subagent.refused",
+      "?eventType=computer.action_refused,mcp.call_rejected,component.refused,component.function_refused,web.search_refused,channel.message_refused,subagent.refused,schedule.refused,schedule.fire_refused",
   },
   {
     label: "Did not happen",
@@ -143,7 +143,9 @@ function Row({
     event.eventType === "mcp.call_rejected" ||
     event.eventType === "web.search_refused" ||
     event.eventType === "channel.message_refused" ||
-    event.eventType === "subagent.refused";
+    event.eventType === "subagent.refused" ||
+    event.eventType === "schedule.refused" ||
+    event.eventType === "schedule.fire_refused";
   const urls = Array.isArray(payload.urls)
     ? payload.urls.filter((url): url is string => typeof url === "string")
     : [];
@@ -178,7 +180,11 @@ function Row({
                 ? typeof payload.tool === "string"
                   ? payload.tool
                   : "sub-agent"
-                : event.eventType}
+                : event.eventType.startsWith("schedule.")
+                  ? typeof payload.tool === "string"
+                    ? payload.tool
+                    : "schedule"
+                  : event.eventType}
       </td>
       <td className="px-4 py-2">
         {/* Named targets and file paths are the audit subject before page elements. */}
@@ -306,6 +312,7 @@ const NAMED_TARGETS = new Set([
   "credential",
   "channel",
   "subagent",
+  "schedule",
 ]);
 
 const DECISIONS: Record<string, string> = {
@@ -349,6 +356,14 @@ const DECISIONS: Record<string, string> = {
   "subagent.started": "Started a sub-agent",
   "subagent.refused": "Blocked",
   "subagent.reported": "Sub-agent reported",
+
+  "schedule.created": "Schedule created",
+  "schedule.refused": "Blocked",
+  "schedule.fired": "Schedule fired",
+  "schedule.fire_refused": "Blocked",
+  "schedule.paused": "Schedule paused",
+  "schedule.resumed": "Schedule resumed",
+  "schedule.deleted": "Schedule deleted",
 
   "configuration.changed": "Configuration changed",
   "credential.created": "Credential saved",
