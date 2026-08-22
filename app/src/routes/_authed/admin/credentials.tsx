@@ -307,8 +307,12 @@ function CredentialsPage() {
                     );
                   }}
                 </form.Field>
-                <form.Subscribe selector={(state) => state.values.kind}>
-                  {(kind) =>
+                <form.Subscribe
+                  selector={(state) =>
+                    [state.values.kind, state.values.provider] as const
+                  }
+                >
+                  {([kind, provider]) =>
                     kind !== "email" ? null : (
                       <>
                         <form.Field name="host">
@@ -403,7 +407,7 @@ function CredentialsPage() {
                             );
                           }}
                         </form.Field>
-                        {form.getFieldValue("provider") === "smtp" ? (
+                        {provider === "smtp" ? (
                           <form.Field name="from">
                             {(field) => {
                               const isInvalid =
