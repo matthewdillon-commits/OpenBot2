@@ -9,8 +9,8 @@ import {
   CatalogueEntryUnknownError,
   CustomServerRefusedError,
   PluginRefusedError,
-  type PluginStore,
-} from "./store";
+} from "./errors";
+import type { PluginStore } from "./store";
 
 /**
  * The Plugins surface: what this deployment has added, and which Bots may use it.

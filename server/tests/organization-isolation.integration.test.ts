@@ -1,17 +1,29 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
+import type { MiddlewareHandler } from "hono";
+import { Hono } from "hono";
 import { createAgentProfileStore } from "../src/agents/profile-store";
+import { createAgentRoutes } from "../src/agents/routes";
 import { createAuditStore } from "../src/audit";
-import { createChannelStore } from "../src/channels/routes";
+import type { AppVariables } from "../src/auth/guards";
+import {
+  createChannelRoutes,
+  createChannelStore,
+} from "../src/channels/routes";
 import { createThreadIdentity } from "../src/channels/thread-identity";
-import { createCredentialAdminService, createCredentialStore } from "../src/credentials";
+import {
+  createCredentialAdminService,
+  createCredentialStore,
+} from "../src/credentials";
 import { createDatabase } from "../src/db/client";
 import { users } from "../src/db/schema";
+import { bootstrapOrganizations } from "../src/orgs/bootstrap";
 import {
   computerIdFor,
   intelligenceUserId,
   LOCAL_ORGANIZATION_ID,
   scopedResourceId,
 } from "../src/orgs/constants";
+import { createOrganizationStore } from "../src/orgs/store";
 import { createPluginStore } from "../src/plugins/store";
 import { TEST_POOL } from "./support/database";
 import {
@@ -57,7 +69,10 @@ afterAll(() => undefined);
 
 test("a member of one org cannot read another org's coworker or channel", async () => {
   if (!databaseUrl) return;
-  const profiles = createAgentProfileStore(database, new URL("http://localhost:9/ag-ui"));
+  const profiles = createAgentProfileStore(
+    database,
+    new URL("http://localhost:9/ag-ui"),
+  );
   const channels = createChannelStore(
     database,
     profiles,
@@ -90,9 +105,9 @@ test("a member of one org cannot read another org's coworker or channel", async 
 
   expect(await profiles.get(aliceActor, bobAgent.id)).toBeNull();
   expect(await profiles.get(bobActor, aliceAgent.id)).toBeNull();
-  expect((await profiles.list(aliceActor)).some((row) => row.id === bobAgent.id)).toBe(
-    false,
-  );
+  expect(
+    (await profiles.list(aliceActor)).some((row) => row.id === bobAgent.id),
+  ).toBe(false);
 
   const aliceChannel = await channels.create(aliceActor, [aliceAgent.id]);
   expect(await channels.get(bobActor, aliceChannel.id)).toBeNull();
@@ -147,16 +162,20 @@ test("a skill and a credential in one org are invisible in another", async () =>
     orgId: otherOrg.id,
   });
 
-  const localSlugs = (await pluginStore.listSkills({
-    id: alice.id,
-    isAdmin: true,
-    orgId: LOCAL_ORGANIZATION_ID,
-  })).map((skill) => skill.slug);
-  const otherSlugs = (await pluginStore.listSkills({
-    id: bob.id,
-    isAdmin: true,
-    orgId: otherOrg.id,
-  })).map((skill) => skill.slug);
+  const localSlugs = (
+    await pluginStore.listSkills({
+      id: alice.id,
+      isAdmin: true,
+      orgId: LOCAL_ORGANIZATION_ID,
+    })
+  ).map((skill) => skill.slug);
+  const otherSlugs = (
+    await pluginStore.listSkills({
+      id: bob.id,
+      isAdmin: true,
+      orgId: otherOrg.id,
+    })
+  ).map((skill) => skill.slug);
 
   expect(localSlugs).toContain(`local-skill-${suffix}`);
   expect(localSlugs).not.toContain(`other-skill-${suffix}`);
@@ -188,6 +207,94 @@ test("a skill and a credential in one org are invisible in another", async () =>
   expect(localList.some((row) => row.id === otherCred.id)).toBe(false);
   expect(otherList.some((row) => row.id === otherCred.id)).toBe(true);
   expect(otherList.some((row) => row.id === localCred.id)).toBe(false);
+
+  const vault = createCredentialStore(database);
+  expect(
+    await vault.readSecret(otherCred.id, LOCAL_ORGANIZATION_ID),
+  ).toBeNull();
+  expect(await vault.readSecret(localCred.id, otherOrg.id)).toBeNull();
+  expect(
+    await vault.readSecret(localCred.id, LOCAL_ORGANIZATION_ID),
+  ).not.toBeNull();
+});
+
+test("HTTP routes 404 another organization's channel and agent", async () => {
+  if (!databaseUrl) return;
+  const profiles = createAgentProfileStore(
+    database,
+    new URL("http://localhost:9/ag-ui"),
+  );
+  const channels = createChannelStore(
+    database,
+    profiles,
+    createThreadIdentity("test-deployment"),
+  );
+  const aliceActor = {
+    id: alice.id,
+    email: alice.email,
+    role: "admin" as const,
+    orgId: LOCAL_ORGANIZATION_ID,
+    orgRole: "owner" as const,
+  };
+  const bobActor = {
+    id: bob.id,
+    email: bob.email,
+    role: "admin" as const,
+    orgId: otherOrg.id,
+    orgRole: "owner" as const,
+  };
+  const bobAgent = await profiles.create(bobActor, {
+    name: "Bob HTTP Bot",
+    title: "Bob HTTP Bot",
+    roleDescription: "Other only",
+    visibility: "public",
+  });
+  const bobChannel = await channels.create(bobActor, [bobAgent.id]);
+
+  const asAlice: MiddlewareHandler<{ Variables: AppVariables }> = async (
+    context,
+    next,
+  ) => {
+    context.set("actor", aliceActor);
+    await next();
+  };
+  const app = new Hono()
+    .route("/api/channels", createChannelRoutes(channels, asAlice))
+    .route("/api/agents", createAgentRoutes(profiles, asAlice, false));
+
+  const channelResponse = await app.request(
+    `http://openbot.test/api/channels/${bobChannel.id}`,
+  );
+  expect(channelResponse.status).toBe(404);
+
+  const agentResponse = await app.request(
+    `http://openbot.test/api/agents/${bobAgent.id}`,
+  );
+  expect(agentResponse.status).toBe(404);
+});
+
+test("bootstrap does not add a customer member to the local org", async () => {
+  if (!databaseUrl) return;
+  const store = createOrganizationStore(database);
+  await bootstrapOrganizations(database, store, { singleUser: false });
+  const memberships = await store.listForUser(bob.id);
+  expect(memberships.map((row) => row.id)).toEqual([otherOrg.id]);
+});
+
+test("a person with no membership is not auto-joined once a second org exists", async () => {
+  if (!databaseUrl) return;
+  const store = createOrganizationStore(database);
+  const lonely = {
+    id: `user_lonely_${suffix}`,
+    email: `lonely-${suffix}@openbot.test`,
+  };
+  await database.insert(users).values({
+    id: lonely.id,
+    email: lonely.email,
+    name: "Lonely",
+  });
+  expect(await store.joinIfSoleOrganization(lonely.id)).toBeNull();
+  expect(await store.listForUser(lonely.id)).toEqual([]);
 });
 
 test("thread fingerprints differ across organizations", () => {

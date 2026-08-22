@@ -485,7 +485,7 @@ export function createRequestAgents(
    * also accepted, which is what a test that does not care about the switch wants. Absent means this
    * deployment has no computer, or the caller has already decided not to mention one.
    */
-  computerGuidance?: string | (() => string | undefined),
+  computerGuidance?: string | ((orgId?: string) => string | undefined),
 ) {
   return async ({ request }: { request: Request }) => {
     const actor = await identifyActor(request);
@@ -497,7 +497,7 @@ export function createRequestAgents(
       loadToolsForActor?.(actor.id, actor.orgId),
       signRunForActor?.(actor.id, actor.orgId),
       typeof computerGuidance === "function"
-        ? computerGuidance()
+        ? computerGuidance(actor.orgId)
         : computerGuidance,
     );
   };
@@ -532,7 +532,7 @@ export function mountCopilotRuntime(
    * restart. Absent means this deployment has no computer, or the caller has already decided not to
    * mention one; when a computer is configured and nothing is passed, the shipped guidance is used.
    */
-  computerGuidance?: string | (() => string | undefined),
+  computerGuidance?: string | ((orgId?: string) => string | undefined),
   basePath = "/api/copilotkit",
 ) {
   const { intelligence } = config.runtime;

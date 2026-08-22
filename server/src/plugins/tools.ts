@@ -1,5 +1,7 @@
 import { z } from "zod";
-import { PluginRefusedError, type PluginStore } from "./store";
+import { PluginRefusedError } from "./errors";
+import { REFUSAL_MARKER } from "./refusal";
+import type { PluginStore } from "./store";
 
 /**
  * The tools a Bot may call, as the runtime's own tool definitions, executed on the server.
@@ -23,8 +25,11 @@ import { PluginRefusedError, type PluginStore } from "./store";
  * on. Guessing from the wording would break the first time an administrator rephrased a policy
  * message, so the answer says which it is. The model reads this too, and "Refused." in front of a
  * reason is what it should be told anyway.
+ *
+ * The constant lives in `./refusal` so HTTP tests can import it without pulling the MCP SDK
+ * (and its CJS EventSource) into the module graph.
  */
-export const REFUSAL_MARKER = "Refused.";
+export { REFUSAL_MARKER };
 
 export type GrantedTool = {
   name: string;

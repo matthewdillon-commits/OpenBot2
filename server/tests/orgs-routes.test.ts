@@ -33,6 +33,7 @@ function store(overrides: Partial<OrganizationStore> = {}): OrganizationStore {
       throw new Error("unused");
     },
     ensureMembership: async () => undefined,
+    joinIfSoleOrganization: async () => null,
     create: async (input) => ({
       id: "org_new",
       slug: "acme",
@@ -88,11 +89,14 @@ describe("platform organization routes", () => {
       ["owner@openbot.test"],
       requireUser,
     );
-    const response = await app.request("http://openbot.test/api/platform/organizations", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "Acme" }),
-    });
+    const response = await app.request(
+      "http://openbot.test/api/platform/organizations",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "Acme" }),
+      },
+    );
     expect(response.status).toBe(201);
     expect(await response.json()).toEqual({
       organization: {
@@ -118,12 +122,19 @@ describe("platform organization routes", () => {
       });
       await next();
     };
-    const app = createOrganizationRoutes(store(), ["owner@openbot.test"], member);
-    const response = await app.request("http://openbot.test/api/platform/organizations", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "Acme" }),
-    });
+    const app = createOrganizationRoutes(
+      store(),
+      ["owner@openbot.test"],
+      member,
+    );
+    const response = await app.request(
+      "http://openbot.test/api/platform/organizations",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "Acme" }),
+      },
+    );
     expect(response.status).toBe(403);
   });
 });

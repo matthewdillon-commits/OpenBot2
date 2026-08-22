@@ -72,6 +72,12 @@ export type OrganizationStore = {
     userId: string;
     role: OrganizationRole;
   }) => Promise<void>;
+  /**
+   * Appliance-only: if this deployment still has exactly one org, put a
+   * membership-less user in it. A second org means sales-led SaaS — they wait
+   * for an invite instead of landing in `local`.
+   */
+  joinIfSoleOrganization: (userId: string) => Promise<MembershipRecord | null>;
   create: (input: {
     name: string;
     slug?: string;
@@ -274,6 +280,19 @@ export function createOrganizationStore(database: Database): OrganizationStore {
           ],
           set: { role },
         });
+    },
+
+    async joinIfSoleOrganization(userId) {
+      const already = await this.listForUser(userId);
+      if (already.length > 0) return already[0] ?? null;
+      const orgs = await this.listAll();
+      if (orgs.length !== 1 || orgs[0]?.status !== "active") return null;
+      await this.ensureMembership({
+        orgId: orgs[0].id,
+        userId,
+        role: "member",
+      });
+      return membership(userId, orgs[0].id);
     },
 
     async create(input) {

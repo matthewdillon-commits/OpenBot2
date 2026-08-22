@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { Hono } from "hono";
 import type { MiddlewareHandler } from "hono";
-import type { ThreadReader } from "../src/channels/thread-routes";
+import { Hono } from "hono";
 import type { AppVariables } from "../src/auth/guards";
 import { createThreadIdentity } from "../src/channels/thread-identity";
+import type { ThreadReader } from "../src/channels/thread-routes";
 import { createThreadRoutes } from "../src/channels/thread-routes";
 
 /**
@@ -47,6 +47,26 @@ describe("minting a thread", () => {
     const first = await mint();
     const second = await mint();
     expect(first.threadId).not.toBe(second.threadId);
+  });
+
+  test("namespaces the id with the caller's organization", async () => {
+    const asAcme: MiddlewareHandler<{ Variables: AppVariables }> = async (
+      context,
+      next,
+    ) => {
+      context.set("actor", {
+        id: "u1",
+        email: "someone@openbot.test",
+        orgId: "org_acme",
+      });
+      return next();
+    };
+    const response = await new Hono()
+      .route("/threads", createThreadRoutes(identity, asAcme))
+      .request("http://openbot.local/threads/mint", { method: "POST" });
+    const { threadId } = (await response.json()) as { threadId: string };
+    expect(identity.owns(threadId, "org_acme")).toBe(true);
+    expect(identity.owns(threadId)).toBe(false);
   });
 
   test("does not answer a caller with no session", async () => {
@@ -122,6 +142,6 @@ describe("checking whether a remembered thread is still known upstream", () => {
     await app(reader).request(
       `http://openbot.local/threads/${threadId}?userId=someone-else`,
     );
-    expect(calls).toEqual([{ threadId, userId: "u1" }]);
+    expect(calls).toEqual([{ threadId, userId: "org_local:u1" }]);
   });
 });

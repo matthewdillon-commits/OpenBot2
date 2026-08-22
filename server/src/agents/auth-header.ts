@@ -130,14 +130,19 @@ export async function agentAuthHeaders(input: {
   reader: CredentialSecretReader;
   encryptionKey: string;
   auth: AgentAuth | null;
+  orgId?: string;
 }): Promise<Record<string, string> | undefined> {
   if (!input.auth) return undefined;
-  const stored = await input.reader.readSecret(input.auth.credentialId);
+  const stored = await input.reader.readSecret(
+    input.auth.credentialId,
+    input.orgId,
+  );
   if (!stored || stored.revokedAt) return undefined;
   return {
     [input.auth.header]: await decryptSecret(
       input.encryptionKey,
       stored.encryptedValue,
+      input.orgId,
     ),
   };
 }

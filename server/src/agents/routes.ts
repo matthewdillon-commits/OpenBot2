@@ -164,6 +164,7 @@ export function createAgentRoutes(
         ...(actor?.id && actor.email !== DEV_ACTOR_EMAIL
           ? { actorUserId: actor.id }
           : {}),
+        ...(actor?.orgId ? { orgId: actor.orgId } : {}),
         payload: {
           bot: agentId,
           actor: actor?.email ?? "unknown",
@@ -259,6 +260,7 @@ export function createAgentRoutes(
         ...(actor?.id && actor.email !== DEV_ACTOR_EMAIL
           ? { actorUserId: actor.id }
           : {}),
+        ...(actor?.orgId ? { orgId: actor.orgId } : {}),
         payload: { bot: agentId, actor: actor?.email ?? "unknown", ...payload },
       });
     } catch (error) {

@@ -42,7 +42,10 @@ export type CredentialStore = {
 };
 
 export type CredentialSecretReader = {
-  readSecret: (id: string) => Promise<{
+  readSecret: (
+    id: string,
+    orgId?: string,
+  ) => Promise<{
     encryptedValue: string;
     revokedAt: Date | null;
   } | null>;
@@ -56,6 +59,7 @@ export type ModelCredentialSecretReader = {
   readModelSecret: (input: {
     provider: "openai";
     keyId: string;
+    orgId?: string;
   }) => Promise<{ encryptedValue: string } | null>;
 };
 
@@ -138,7 +142,7 @@ export async function decryptCredentialForUse(
   credentialId: string,
   orgId?: string,
 ) {
-  const credential = await reader.readSecret(credentialId);
+  const credential = await reader.readSecret(credentialId, orgId);
   if (!credential) {
     throw new Error("Credential was not found");
   }
@@ -146,7 +150,11 @@ export async function decryptCredentialForUse(
     throw new Error("Credential is revoked");
   }
 
-  return decryptSecret(encodedKey, credential.encryptedValue, orgId);
+  return decryptSecret(
+    encodedKey,
+    credential.encryptedValue,
+    orgId ?? LOCAL_ORGANIZATION_ID,
+  );
 }
 
 export async function resolveModelApiKey(input: {
@@ -155,13 +163,19 @@ export async function resolveModelApiKey(input: {
   provider: "openai";
   keyId: string;
   environment: Record<string, string | undefined>;
+  orgId?: string;
 }) {
   const stored = await input.reader.readModelSecret({
     provider: input.provider,
     keyId: input.keyId,
+    orgId: input.orgId,
   });
   if (stored) {
-    return decryptSecret(input.encryptionKey, stored.encryptedValue);
+    return decryptSecret(
+      input.encryptionKey,
+      stored.encryptedValue,
+      input.orgId ?? LOCAL_ORGANIZATION_ID,
+    );
   }
 
   const environmentKey = input.environment.OPENAI_API_KEY?.trim();
@@ -207,18 +221,23 @@ export function createCredentialStore(
       }
       return credential.revokedAt;
     },
-    readSecret: async (id) => {
+    readSecret: async (id, orgId) => {
       const [credential] = await database
         .select({
           encryptedValue: credentials.encryptedValue,
           revokedAt: credentials.revokedAt,
         })
         .from(credentials)
-        .where(eq(credentials.id, id)); // callers that know the org re-check it after read
+        .where(
+          and(
+            eq(credentials.id, id),
+            eq(credentials.orgId, orgId ?? LOCAL_ORGANIZATION_ID),
+          ),
+        );
 
       return credential ?? null;
     },
-    readModelSecret: async ({ provider, keyId }) => {
+    readModelSecret: async ({ provider, keyId, orgId }) => {
       const [credential] = await database
         .select({ encryptedValue: credentials.encryptedValue })
         .from(credentials)
@@ -227,6 +246,7 @@ export function createCredentialStore(
             eq(credentials.kind, "model"),
             eq(credentials.provider, provider),
             eq(credentials.keyId, keyId),
+            eq(credentials.orgId, orgId ?? LOCAL_ORGANIZATION_ID),
             isNull(credentials.revokedAt),
           ),
         )
@@ -324,6 +344,7 @@ export async function createCredential(
     targetType: "credential",
     targetId: credential.id,
     actorUserId: input.actorUserId,
+    orgId: input.orgId ?? LOCAL_ORGANIZATION_ID,
     payload: {
       kind: input.kind,
       provider: input.provider,
@@ -349,6 +370,7 @@ export async function rotateCredential(
     targetType: "credential",
     targetId: credential.id,
     actorUserId: input.actorUserId,
+    orgId: input.orgId ?? LOCAL_ORGANIZATION_ID,
     payload: {
       previousCredentialId: input.previousCredentialId,
       kind: input.kind,
@@ -376,6 +398,7 @@ export async function revokeCredential(
     targetType: "credential",
     targetId: credentialId,
     actorUserId,
+    orgId: orgId ?? LOCAL_ORGANIZATION_ID,
     payload: {},
   });
 

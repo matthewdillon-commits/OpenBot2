@@ -585,6 +585,7 @@ describe("agent route composition", () => {
           ...actor,
           name: "OpenBot Member",
           image: "https://example.test/member.png",
+          platformSuperadmin: false,
         },
         false,
       ],

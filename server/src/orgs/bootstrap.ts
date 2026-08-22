@@ -1,21 +1,20 @@
 import { eq } from "drizzle-orm";
 import type { Database } from "../db/client";
-import { organizationMemberships, userRoles, users } from "../db/schema";
-import {
-  LOCAL_ORGANIZATION_ID,
-  type OrganizationRole,
-} from "./constants";
+import { organizationMemberships } from "../db/schema";
+import { LOCAL_ORGANIZATION_ID } from "./constants";
 import type { OrganizationStore } from "./store";
 
 /**
- * Make sure the backfilled org exists, and that everybody already in the database
- * belongs to it.
+ * Make sure the backfilled org exists.
  *
- * A single-user laptop is the owner. Everybody else keeps the role `user_roles`
- * already gave them: admin becomes owner, user becomes member.
+ * A single-user laptop is its owner. Everybody else who already had a row when
+ * organizations landed was backfilled by the migration. New people on a
+ * one-org appliance join that org on first request (`joinIfSoleOrganization`).
+ * A deployment that already has a second org is sales-led: nobody is added to
+ * `local` just because they signed in.
  */
 export async function bootstrapOrganizations(
-  database: Database,
+  _database: Database,
   organizations: OrganizationStore,
   input: {
     singleUser: boolean;
@@ -29,32 +28,11 @@ export async function bootstrapOrganizations(
     slug: input.slug,
   });
 
-  const people = await database
-    .select({
-      id: users.id,
-      role: userRoles.role,
-    })
-    .from(users)
-    .leftJoin(userRoles, eq(userRoles.userId, users.id));
-
-  const roleByUser = new Map<string, OrganizationRole>();
-  for (const person of people) {
-    const next: OrganizationRole =
-      input.singleUser && person.id === input.devUserId
-        ? "owner"
-        : person.role === "admin"
-          ? "owner"
-          : "member";
-    const already = roleByUser.get(person.id);
-    if (already === "owner") continue;
-    roleByUser.set(person.id, next);
-  }
-
-  for (const [userId, role] of roleByUser) {
+  if (input.singleUser && input.devUserId) {
     await organizations.ensureMembership({
       orgId: org.id,
-      userId,
-      role,
+      userId: input.devUserId,
+      role: "owner",
     });
   }
 

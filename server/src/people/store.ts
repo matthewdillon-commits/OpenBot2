@@ -6,7 +6,6 @@ import {
   organizationMemberships,
   revokedAccess,
   sessions,
-  userRoles,
   users,
 } from "../db/schema";
 import { LOCAL_ORGANIZATION_ID } from "../orgs/constants";
@@ -73,11 +72,7 @@ export type PeopleStore = {
    * joined to their roles, accounts and sessions, on every render of the admin screen.
    */
   list: (query?: PeopleQuery) => Promise<PeoplePage>;
-  setRole: (
-    userId: string,
-    role: OpenBotRole,
-    orgId?: string,
-  ) => Promise<void>;
+  setRole: (userId: string, role: OpenBotRole, orgId?: string) => Promise<void>;
   revoke: (userId: string, revokedBy: string, orgId?: string) => Promise<void>;
   restore: (userId: string, orgId?: string) => Promise<void>;
   find: (userId: string, orgId?: string) => Promise<Person | undefined>;
@@ -147,9 +142,7 @@ export function createPeopleStore(
     const search = query.search?.trim();
 
     const orgId = query.orgId ?? LOCAL_ORGANIZATION_ID;
-    const filters = [
-      eq(organizationMemberships.orgId, orgId),
-    ];
+    const filters = [eq(organizationMemberships.orgId, orgId)];
     if (query.id) filters.push(eq(users.id, query.id));
     if (search) {
       // Both fields, because an administrator looking for somebody has one or the other in mind and
@@ -280,9 +273,25 @@ export function createPeopleStore(
 
     async setRole(userId, role, orgId = LOCAL_ORGANIZATION_ID) {
       await setRole(database, userId, role);
+      const [current] = await database
+        .select({ role: organizationMemberships.role })
+        .from(organizationMemberships)
+        .where(
+          and(
+            eq(organizationMemberships.userId, userId),
+            eq(organizationMemberships.orgId, orgId),
+          ),
+        )
+        .limit(1);
+      const membershipRole =
+        role === "admin"
+          ? current?.role === "owner"
+            ? "owner"
+            : "admin"
+          : "member";
       await database
         .update(organizationMemberships)
-        .set({ role: role === "admin" ? "admin" : "member" })
+        .set({ role: membershipRole })
         .where(
           and(
             eq(organizationMemberships.userId, userId),
@@ -334,14 +343,20 @@ export function createPeopleStore(
         .limit(1);
       if (!user) return;
 
-      await database
-        .delete(revokedAccess)
-        .where(
-          and(
-            eq(revokedAccess.email, normalize(user.email)),
-            eq(revokedAccess.orgId, orgId),
-          ),
-        );
+      await database.transaction(async (tx) => {
+        await tx
+          .delete(revokedAccess)
+          .where(
+            and(
+              eq(revokedAccess.email, normalize(user.email)),
+              eq(revokedAccess.orgId, orgId),
+            ),
+          );
+        await tx
+          .insert(organizationMemberships)
+          .values({ orgId, userId, role: "member" })
+          .onConflictDoNothing();
+      });
     },
 
     async isRevoked(email, orgId = LOCAL_ORGANIZATION_ID) {

@@ -45,6 +45,7 @@ export function createRuntimeAgentLoader(
           reader: vault.reader,
           encryptionKey: vault.encryptionKey,
           auth: authFromConfiguration(row.configuration),
+          orgId: orgIdOf(actor),
         });
         if (headers) agent.headers = headers;
       }

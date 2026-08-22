@@ -1,4 +1,4 @@
-import type { Hono as HonoApp, MiddlewareHandler } from "hono";
+import type { Context, Hono as HonoApp, MiddlewareHandler } from "hono";
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
 import { authoriseAgentCall } from "./agents/callback-token";
@@ -17,6 +17,7 @@ import {
   type AuthService,
   createRequireUser,
   type RoleRepository,
+  requireActiveOrganization,
   requireAdmin,
 } from "./auth/guards";
 import type { IdentityProviderStore } from "./auth/identity-provider-store";
@@ -36,14 +37,11 @@ import { createComputerRoutes } from "./computer/routes";
 import { configuredAuthProviders, type DeploymentConfig } from "./config";
 import type { ConnectorAdminService } from "./connectors";
 import type { CredentialAdminService, CredentialInput } from "./credentials";
-import { createIntelligenceClient } from "./intelligence-client";
-import type { PeopleStore } from "./people/store";
-import { orgIdOf } from "./orgs/constants";
+import { LOCAL_ORGANIZATION_ID, orgIdOf } from "./orgs/constants";
 import { createOrganizationRoutes } from "./orgs/routes";
 import type { OrganizationStore } from "./orgs/store";
-import { createPluginRoutes } from "./plugins/routes";
-import type { PluginStore } from "./plugins/store";
-import { REFUSAL_MARKER } from "./plugins/tools";
+import type { PeopleStore } from "./people/store";
+import { REFUSAL_MARKER } from "./plugins/refusal";
 import type { PackageStatusReader } from "./tenant-package";
 
 /**
@@ -68,6 +66,7 @@ async function recordPersonEvent(
     targetType: "person",
     targetId: person.id,
     actorUserId: context.var.actor.id,
+    orgId: orgIdOf(context.var.actor),
     payload: { email: person.email, ...payload },
   });
 }
@@ -120,7 +119,15 @@ export function createApp(
    * behaviour: a deployment that cannot reach its grant table must offer nothing extra rather than
    * fall back to offering everything.
    */
-  pluginStore?: PluginStore,
+  pluginStore?: {
+    callTool: (input: {
+      ref: string;
+      args: Record<string, unknown>;
+      botId: string;
+      actorId: string;
+      orgId?: string;
+    }) => Promise<{ text: string; isError: boolean }>;
+  },
   /**
    * Components authored in the browser rather than compiled into the build.
    *
@@ -169,6 +176,28 @@ export function createApp(
 ) {
   const app = new Hono<{ Variables: AppVariables }>();
 
+  async function capabilitiesOrgId(context: {
+    req: { raw: Request };
+  }): Promise<string> {
+    if (!auth || !organizationStore) return LOCAL_ORGANIZATION_ID;
+    const session = await auth.api.getSession({
+      headers: context.req.raw.headers,
+      query: { disableCookieCache: true },
+    });
+    if (!session?.user) return LOCAL_ORGANIZATION_ID;
+    const membership =
+      (await organizationStore.resolveActive(session.user.id)) ??
+      (await organizationStore.joinIfSoleOrganization(session.user.id));
+    return membership?.id ?? LOCAL_ORGANIZATION_ID;
+  }
+
+  function requireTenantAdmin(context: Context<{ Variables: AppVariables }>) {
+    const denied = requireAdmin(context);
+    if (denied) return denied;
+    if (organizationStore) return requireActiveOrganization(context);
+    return undefined;
+  }
+
   app.get("/health", (context) => context.json({ status: "ok" }));
   // Projected, never the raw runtime. config.runtime carries the Intelligence contract, including
   // INTELLIGENCE_API_KEY and the licence token, and this endpoint is reachable by anyone. Returning
@@ -206,7 +235,9 @@ export function createApp(
       browserEnabled: Boolean(
         computerGateway &&
           computerPolicy &&
-          isBrowserEnabled(computerPolicy.get()),
+          isBrowserEnabled(
+            computerPolicy.get(await capabilitiesOrgId(context)),
+          ),
       ),
     }),
   );
@@ -294,7 +325,7 @@ export function createApp(
     return denied ?? context.json({ status: "ok" });
   });
   app.get("/api/admin/audit-events", requireUser, async (context) => {
-    const denied = requireAdmin(context);
+    const denied = requireTenantAdmin(context);
     if (denied) {
       return denied;
     }
@@ -316,7 +347,7 @@ export function createApp(
    * learn every colleague's address and when they last signed in, which is not theirs to have.
    */
   app.get("/api/admin/people", requireUser, async (context) => {
-    const denied = requireAdmin(context);
+    const denied = requireTenantAdmin(context);
     if (denied) {
       return denied;
     }
@@ -349,7 +380,7 @@ export function createApp(
   });
 
   app.post("/api/admin/people/:userId/role", requireUser, async (context) => {
-    const denied = requireAdmin(context);
+    const denied = requireTenantAdmin(context);
     if (denied) {
       return denied;
     }
@@ -423,7 +454,7 @@ export function createApp(
   });
 
   app.post("/api/admin/people/:userId/access", requireUser, async (context) => {
-    const denied = requireAdmin(context);
+    const denied = requireTenantAdmin(context);
     if (denied) {
       return denied;
     }
@@ -539,6 +570,7 @@ export function createApp(
           targetType: "identity_provider",
           targetId: providerId,
           actorUserId: context.var.actor.id,
+          orgId: orgIdOf(context.var.actor),
           payload: { removedBy: context.var.actor.email },
         });
       }
@@ -548,7 +580,7 @@ export function createApp(
   );
 
   app.get("/api/admin/credentials", requireUser, async (context) => {
-    const denied = requireAdmin(context);
+    const denied = requireTenantAdmin(context);
     if (denied) {
       return denied;
     }
@@ -564,7 +596,7 @@ export function createApp(
     });
   });
   app.post("/api/admin/credentials", requireUser, async (context) => {
-    const denied = requireAdmin(context);
+    const denied = requireTenantAdmin(context);
     if (denied) {
       return denied;
     }
@@ -594,7 +626,7 @@ export function createApp(
     "/api/admin/credentials/:credentialId/rotate",
     requireUser,
     async (context) => {
-      const denied = requireAdmin(context);
+      const denied = requireTenantAdmin(context);
       if (denied) {
         return denied;
       }
@@ -627,7 +659,7 @@ export function createApp(
     "/api/admin/credentials/:credentialId/revoke",
     requireUser,
     async (context) => {
-      const denied = requireAdmin(context);
+      const denied = requireTenantAdmin(context);
       if (denied) {
         return denied;
       }
@@ -648,7 +680,7 @@ export function createApp(
     },
   );
   app.get("/api/admin/package", requireUser, async (context) => {
-    const denied = requireAdmin(context);
+    const denied = requireTenantAdmin(context);
     if (denied) return denied;
     if (!packageStatusReader) {
       return context.json({ error: "Tenant package is not configured." }, 503);
@@ -656,7 +688,7 @@ export function createApp(
     return context.json({ package: await packageStatusReader.active() });
   });
   app.get("/api/admin/connectors", requireUser, async (context) => {
-    const denied = requireAdmin(context);
+    const denied = requireTenantAdmin(context);
     if (denied) return denied;
     if (!connectorService) {
       return context.json(
@@ -673,7 +705,7 @@ export function createApp(
     "/api/admin/connectors/google-drive/setup",
     requireUser,
     async (context) => {
-      const denied = requireAdmin(context);
+      const denied = requireTenantAdmin(context);
       if (denied) return denied;
       if (!connectorService?.configureGoogleDrive) {
         return context.json(
@@ -769,9 +801,13 @@ export function createApp(
   }
 
   if (pluginStore) {
+    // Loaded here, not at module scope: `@modelcontextprotocol/sdk` pulls CJS EventSource
+    // and Bun cannot `require()` that from a test that only wanted `createApp`.
+    const { createPluginRoutes } =
+      require("./plugins/routes") as typeof import("./plugins/routes");
     app.route(
       "/api/plugins",
-      createPluginRoutes(pluginStore, requireUser, canUseBot),
+      createPluginRoutes(pluginStore as never, requireUser, canUseBot),
     );
   }
 
@@ -876,6 +912,8 @@ export function createApp(
   }
 
   if (threadIdentity) {
+    const { createIntelligenceClient } =
+      require("./intelligence-client") as typeof import("./intelligence-client");
     app.route(
       "/api/threads",
       createThreadRoutes(

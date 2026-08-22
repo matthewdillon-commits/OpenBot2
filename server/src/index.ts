@@ -8,9 +8,6 @@ import { createAuditReader, createAuditStore, recordAuditEvent } from "./audit";
 import { startAuditRetention } from "./audit-retention";
 import { createAuth } from "./auth";
 import { DEV_ACTOR, initializeDevActorUser } from "./auth/dev-actor";
-import { computerIdFor, intelligenceUserId, orgIdOf } from "./orgs/constants";
-import { bootstrapOrganizations } from "./orgs/bootstrap";
-import { createOrganizationStore } from "./orgs/store";
 import { createRoleRepository } from "./auth/guards";
 import { createIdentityProviderStore } from "./auth/identity-provider-store";
 import type { OpenBotRole } from "./auth/roles";
@@ -51,6 +48,9 @@ import {
 import { createDatabase } from "./db/client";
 import { askerFor, createKnowledgeSearch } from "./knowledge/search";
 import { knowledgeSearchTool } from "./knowledge/tool";
+import { bootstrapOrganizations } from "./orgs/bootstrap";
+import { computerIdFor, intelligenceUserId, orgIdOf } from "./orgs/constants";
+import { createOrganizationStore } from "./orgs/store";
 import { createPeopleStore } from "./people/store";
 import { createPluginStore } from "./plugins/store";
 import { type GrantedTool, grantedTools } from "./plugins/tools";
@@ -92,18 +92,17 @@ async function resolveRequestActor(request: Request): Promise<{
   if (!roles.includes("admin") && !roles.includes("user")) {
     throw new Error("A CopilotKit run requires an authorized user.");
   }
-  const membership = await organizationStore.resolveActive(user.id);
+  const membership =
+    (await organizationStore.resolveActive(user.id)) ??
+    (await organizationStore.joinIfSoleOrganization(user.id));
+  if (!membership) {
+    throw new Error("A CopilotKit run requires an organization membership.");
+  }
   return {
     id: user.id,
     name: user.name ?? user.email ?? user.id,
-    role: membership
-      ? membership.role === "member"
-        ? "user"
-        : "admin"
-      : roles.includes("admin")
-        ? "admin"
-        : "user",
-    orgId: membership?.id ?? orgIdOf({}),
+    role: membership.role === "member" ? "user" : "admin",
+    orgId: membership.id,
   };
 }
 
@@ -429,6 +428,7 @@ const loadToolsForActor =
           botId,
           actorId,
           actorUserId: actorId,
+          orgId: scoped,
         }),
       );
     }
@@ -492,8 +492,10 @@ const app = createApp(
      * the gateway is what stops them acting on it.
      */
     config.computer
-      ? () =>
-          isBrowserEnabled(policyStore.get()) ? COMPUTER_GUIDANCE : undefined
+      ? (orgId?: string) =>
+          isBrowserEnabled(policyStore.get(orgIdOf({ orgId })))
+            ? COMPUTER_GUIDANCE
+            : undefined
       : undefined,
   ),
   // The only path to an acting call.
@@ -597,7 +599,10 @@ serve<SocketData>({
       // so signing in is not enough: without this, anybody signed in watches anybody's Bot work.
       if (
         !(await agentProfileStore
-          .get({ id: actor.id, role: actor.role, orgId: actor.orgId }, streamBotId)
+          .get(
+            { id: actor.id, role: actor.role, orgId: actor.orgId },
+            streamBotId,
+          )
           .catch(() => null))
       ) {
         return new Response("There is no such Bot.", { status: 404 });

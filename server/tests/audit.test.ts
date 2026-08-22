@@ -160,7 +160,17 @@ describe("admin audit API", () => {
       nextCursor: "next-page",
     });
     expect(queries).toEqual([
-      { eventType: "connector.sync_succeeded", limit: 10 },
+      {
+        cursor: undefined,
+        limit: 10,
+        eventType: "connector.sync_succeeded",
+        actorUserId: undefined,
+        targetType: undefined,
+        targetId: undefined,
+        from: undefined,
+        to: undefined,
+        orgId: "org_local",
+      },
     ]);
   });
 

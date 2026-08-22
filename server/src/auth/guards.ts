@@ -4,8 +4,8 @@ import type { Database } from "../db/client";
 import { userRoles } from "../db/schema";
 import {
   isOrgAdmin,
-  openBotRoleFor,
   type OrganizationRole,
+  openBotRoleFor,
 } from "../orgs/constants";
 import type { OrganizationStore } from "../orgs/store";
 import type { OpenBotRole } from "./roles";
@@ -99,7 +99,8 @@ export function createRequireUser(
     }
 
     const membership = organizations
-      ? await organizations.resolveActive(session.user.id)
+      ? ((await organizations.resolveActive(session.user.id)) ??
+        (await organizations.joinIfSoleOrganization(session.user.id)))
       : null;
 
     const orgRole = membership?.role;
@@ -128,6 +129,21 @@ export function createRequireUser(
   };
 }
 
+/**
+ * Tenant data needs a selected organization, not only a signed-in person.
+ *
+ * `/api/me`, the org picker and invite accept still work without one. Everything that lists
+ * channels, credentials or people must not fall through to the backfilled local org.
+ */
+export function requireActiveOrganization(
+  context: Context<{ Variables: AppVariables }>,
+) {
+  if (!context.var.actor.orgId) {
+    return context.json({ error: "An organization is required." }, 403);
+  }
+  return undefined;
+}
+
 export function requireAdmin(context: Context<{ Variables: AppVariables }>) {
   if (
     context.var.actor.role !== "admin" &&
@@ -153,5 +169,8 @@ export function requirePlatformSuperadmin(
   ) {
     return undefined;
   }
-  return context.json({ error: "Platform administrator access required." }, 403);
+  return context.json(
+    { error: "Platform administrator access required." },
+    403,
+  );
 }

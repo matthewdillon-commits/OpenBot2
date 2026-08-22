@@ -14,8 +14,8 @@ import {
   rotateCredential,
 } from "../src/credentials";
 import { createDatabase } from "../src/db/client";
-import { TEST_POOL } from "./support/database";
 import { credentials } from "../src/db/schema";
+import { TEST_POOL } from "./support/database";
 import { testEnvironment } from "./support/environment";
 
 const key = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
@@ -92,6 +92,7 @@ describe("credential encryption", () => {
         targetType: "credential",
         targetId: "credential-1",
         actorUserId: "admin",
+        orgId: "org_local",
         payload: {
           kind: "model",
           provider: "openai",
@@ -415,6 +416,7 @@ describe("admin credential API", () => {
         metadata: { label: "Production OpenAI" },
         plaintext: "openai-secret-value",
         actorUserId: "admin",
+        orgId: "org_local",
       },
     ]);
   });

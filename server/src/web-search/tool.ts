@@ -5,7 +5,8 @@ import {
   evaluateActionPolicy,
   type PolicyContext,
 } from "../computer/policy";
-import { type GrantedTool, REFUSAL_MARKER } from "../plugins/tools";
+import { REFUSAL_MARKER } from "../plugins/refusal";
+import type { GrantedTool } from "../plugins/tools";
 import type { WebSearch } from "./tavily";
 
 /**
@@ -45,8 +46,10 @@ export function webSearchTool(options: {
   actorId: string;
   /** A real `users` row, when there is one. The audit table has a foreign key to it. */
   actorUserId?: string;
+  orgId?: string;
 }): GrantedTool {
-  const { search, auditStore, policy, botId, actorId, actorUserId } = options;
+  const { search, auditStore, policy, botId, actorId, actorUserId, orgId } =
+    options;
 
   return {
     name: WEB_SEARCH_TOOL_NAME,
@@ -84,6 +87,7 @@ export function webSearchTool(options: {
           botId,
           actorId,
           actorUserId,
+          orgId,
           query,
           urls: [],
           matched: 0,
@@ -111,6 +115,7 @@ export function webSearchTool(options: {
         botId,
         actorId,
         actorUserId,
+        orgId,
         query,
         urls: hits.map((hit) => hit.url),
         matched: hits.length,
@@ -132,6 +137,7 @@ async function writeSearch(
     botId: string;
     actorId: string;
     actorUserId?: string;
+    orgId?: string;
     query: string;
     urls: string[];
     matched: number;
@@ -149,6 +155,7 @@ async function writeSearch(
     targetType: "web",
     targetId: entry.botId,
     ...(entry.actorUserId ? { actorUserId: entry.actorUserId } : {}),
+    ...(entry.orgId ? { orgId: entry.orgId } : {}),
     payload: {
       bot: entry.botId,
       actor: entry.actorId,

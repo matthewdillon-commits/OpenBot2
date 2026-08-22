@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createApp } from "../src/app";
 import { loadConfig } from "../src/config";
+import type { OrganizationStore } from "../src/orgs/store";
 import { testEnvironment } from "./support/environment";
 
 const config = loadConfig({
@@ -85,5 +86,76 @@ describe("server authorization", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ status: "ok" });
+  });
+
+  test("refuses tenant admin data when the caller has no organization", async () => {
+    const organizations: OrganizationStore = {
+      get: async () => null,
+      getBySlug: async () => null,
+      listForUser: async () => [],
+      membership: async () => null,
+      resolveActive: async () => null,
+      setActive: async () => {
+        throw new Error("unused");
+      },
+      ensureLocal: async () => {
+        throw new Error("unused");
+      },
+      ensureMembership: async () => undefined,
+      joinIfSoleOrganization: async () => null,
+      create: async () => {
+        throw new Error("unused");
+      },
+      setStatus: async () => {
+        throw new Error("unused");
+      },
+      listAll: async () => [],
+      invite: async () => {
+        throw new Error("unused");
+      },
+      acceptInvite: async () => {
+        throw new Error("unused");
+      },
+      settings: async () => ({
+        displayName: null,
+        logoUrl: null,
+        defaultModel: null,
+        featureFlags: {},
+      }),
+    };
+
+    const app = createApp(
+      config,
+      authenticatedAs("admin"),
+      { rolesForUser: async () => ["admin"] },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      organizations,
+    );
+
+    const me = await app.request("http://openbot.local/api/me");
+    expect(me.status).toBe(200);
+
+    const people = await app.request("http://openbot.local/api/admin/people");
+    expect(people.status).toBe(403);
+    await expect(people.json()).resolves.toEqual({
+      error: "An organization is required.",
+    });
   });
 });

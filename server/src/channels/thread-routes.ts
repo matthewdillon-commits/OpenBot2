@@ -1,6 +1,7 @@
-import { Hono } from "hono";
 import type { MiddlewareHandler } from "hono";
+import { Hono } from "hono";
 import type { AppVariables } from "../auth/guards";
+import { intelligenceUserId, orgIdOf } from "../orgs/constants";
 import type { ThreadIdentity } from "./thread-identity";
 
 /**
@@ -54,7 +55,9 @@ export function createThreadRoutes(
   const routes = new Hono<{ Variables: AppVariables }>();
 
   routes.post("/mint", requireUser, (context) =>
-    context.json({ threadId: identity.mint() }),
+    context.json({
+      threadId: identity.mint(orgIdOf(context.var.actor)),
+    }),
   );
 
   if (readThread) {
@@ -73,7 +76,11 @@ export function createThreadRoutes(
       }
 
       try {
-        const status = await readThread(threadId, context.var.actor.id);
+        const actor = context.var.actor;
+        const status = await readThread(
+          threadId,
+          intelligenceUserId(orgIdOf(actor), actor.id),
+        );
         return context.json({ known: status === "known" });
       } catch {
         // The reader throws for everything short of a clean known/unknown answer, and what it threw

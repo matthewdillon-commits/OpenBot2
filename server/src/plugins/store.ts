@@ -12,11 +12,17 @@ import {
 import type { Database } from "../db/client";
 import {
   agentProfiles,
+  agents,
   mcpServers,
   mcpTools,
   pluginGrants,
   skills,
 } from "../db/schema";
+import {
+  orgIdOf,
+  scopedResourceId,
+  unscopedResourceId,
+} from "../orgs/constants";
 import {
   type CatalogueEntry,
   catalogueEntry,
@@ -25,11 +31,17 @@ import {
   resolveServerUrl,
 } from "./catalogue";
 import {
-  orgIdOf,
-  scopedResourceId,
-  unscopedResourceId,
-} from "../orgs/constants";
+  CatalogueEntryUnknownError,
+  CustomServerRefusedError,
+  PluginRefusedError,
+} from "./errors";
 import { callTool as callRemoteTool, listTools, McpServerError } from "./mcp";
+
+export {
+  CatalogueEntryUnknownError,
+  CustomServerRefusedError,
+  PluginRefusedError,
+} from "./errors";
 
 /**
  * Plugins: what this deployment has added, which Bots may use it, and the one path a call takes.
@@ -111,31 +123,6 @@ export type GrantedPlugins = {
 export type PluginDecision =
   | { allowed: true }
   | { allowed: false; reason: string };
-
-export class PluginRefusedError extends Error {
-  constructor(
-    message: string,
-    readonly rule: string | null,
-  ) {
-    super(message);
-    this.name = "PluginRefusedError";
-  }
-}
-
-export class CatalogueEntryUnknownError extends Error {
-  constructor(key: string) {
-    super(`${key} is not a server this deployment will connect to.`);
-    this.name = "CatalogueEntryUnknownError";
-  }
-}
-
-/** A URL an administrator offered that this deployment will not point itself at. */
-export class CustomServerRefusedError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "CustomServerRefusedError";
-  }
-}
 
 /**
  * A tool name the model can actually call.
@@ -777,10 +764,7 @@ export function createPluginStore(options: PluginStoreOptions) {
               .select()
               .from(skills)
               .where(
-                and(
-                  inArray(skills.slug, skillSlugs),
-                  eq(skills.orgId, scoped),
-                ),
+                and(inArray(skills.slug, skillSlugs), eq(skills.orgId, scoped)),
               );
 
       return {
@@ -851,6 +835,15 @@ export function createPluginStore(options: PluginStoreOptions) {
       const toolName = rest.join("/");
       if (!serverId || !toolName) {
         throw new PluginRefusedError(`${input.ref} is not a tool.`, null);
+      }
+
+      const [bot] = await database
+        .select({ id: agents.id })
+        .from(agents)
+        .where(and(eq(agents.id, input.botId), eq(agents.orgId, orgId)))
+        .limit(1);
+      if (!bot) {
+        throw new PluginRefusedError("There is no such Bot.", null);
       }
 
       const decision = await this.decide("mcp", input.ref, input.botId, orgId);

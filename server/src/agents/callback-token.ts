@@ -1,5 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { sign, verify } from "../auth/signed-value";
+import { LOCAL_ORGANIZATION_ID } from "../orgs/constants";
 
 /**
  * What an agent presents when it calls a tool back, and on whose behalf.
@@ -212,11 +213,8 @@ export async function authoriseAgentCall(options: {
     };
   }
 
-  if (
-    assertion.orgId &&
-    caller.orgId &&
-    caller.orgId !== assertion.orgId
-  ) {
+  const orgId = assertion.orgId ?? caller.orgId ?? LOCAL_ORGANIZATION_ID;
+  if (caller.orgId && caller.orgId !== orgId) {
     return {
       ok: false,
       status: 403,
@@ -228,6 +226,6 @@ export async function authoriseAgentCall(options: {
     ok: true,
     botId: assertion.botId,
     actorId: assertion.actorId,
-    orgId: assertion.orgId ?? caller.orgId,
+    orgId,
   };
 }
