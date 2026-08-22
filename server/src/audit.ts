@@ -30,6 +30,9 @@ const sensitiveKeys = new Set([
   "tokens",
   "tool_arguments",
   "tool_result",
+  // A mailbox body is the same class of thing as `content`: useful to the Bot, not to the trail.
+  "body",
+  "plaintext",
 ]);
 
 export const auditEventTypes = [
@@ -241,6 +244,17 @@ export const auditEventTypes = [
   "subagent.started",
   "subagent.refused",
   "subagent.reported",
+  /**
+   * A Bot sent or read mail through this deployment's mailbox, or the boundary stopped it.
+   *
+   * Destination and subject, never the body and never the credential. `email.send_refused` /
+   * `email.read_refused` are the attempt the policy stopped before SMTP or IMAP was reached, so a
+   * trail can tell "it was not allowed" from "it was never sent".
+   */
+  "email.sent",
+  "email.send_refused",
+  "email.read",
+  "email.read_refused",
 ] as const;
 
 export type AuditEventType = (typeof auditEventTypes)[number];

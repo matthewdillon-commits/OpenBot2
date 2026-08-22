@@ -131,7 +131,14 @@ export type PolicyContext = {
      * coworker DMs, and the other way around. `tool.name == "spawn_subagent"` names the start;
      * `intent == "spawn"` covers the start and the report.
      */
-    | "spawn";
+    | "spawn"
+    /**
+     * A Bot sending or reading mail through this deployment's mailbox.
+     *
+     * Separate from `message` (coworker DMs) and from `write_tool` (MCP). A rule can name
+     * `tool.name == "send_email"` or cover send and read together with `intent == "email"`.
+     */
+    | "email";
   /**
    * The file a `computer_read_file` or `computer_write_file` call is aimed at.
    *
@@ -186,6 +193,14 @@ export type PolicyContext = {
    */
   channel?: { id: string };
   recipient?: { id: string };
+  /**
+   * The mailbox a `send_email` / `read_email` call is aimed at.
+   *
+   * `to` is the destination list on a send, empty on a read. `subject` is the subject on a send,
+   * or "list recent" / `id <n>` on a read. Empty on every other action so a rule about mail stays
+   * evaluable when the context grew.
+   */
+  email?: { to: string; subject: string };
 };
 
 export type PolicyDecision = {
@@ -366,7 +381,8 @@ function describeRefusal(context: PolicyContext, expression: string): string {
     context.intent === "read_tool" ||
     context.intent === "write_tool" ||
     context.intent === "message" ||
-    context.intent === "spawn"
+    context.intent === "spawn" ||
+    context.intent === "email"
   ) {
     return (
       `This deployment's policy does not allow that: ${context.tool.name} ` +

@@ -75,6 +75,9 @@ import {
   loadTenantPackage,
   synchronizeTenantPackage,
 } from "./tenant-package";
+import { resolveEmailMailboxes } from "./email/resolve";
+import { createEmailTransport } from "./email/transport";
+import { emailTools } from "./email/tools";
 import { tavilySearch } from "./web-search/tavily";
 import { webSearchTool } from "./web-search/tool";
 
@@ -388,6 +391,7 @@ const stallGuard = createStallGuard({
 const webSearch = config.tavilyApiKey
   ? tavilySearch(config.tavilyApiKey)
   : undefined;
+const emailTransport = createEmailTransport();
 
 /**
  * Recipients run after the sender's tool call has already returned.
@@ -444,10 +448,11 @@ subagentRunner.current = createSubagentRunner({
 /**
  * What one Bot may call, for the person asking, rebuilt each request.
  *
- * MCP grants still go through the plugin store. Company knowledge, web search, agent messaging
- * and sub-agents sit beside them rather than inside it: they are this deployment's own tools,
- * offered when there is something to search or a coworker to reach, not when an administrator
- * ticked a grant. A framework Bot calls the same list back through `/api/agent-tools/call`.
+ * MCP grants still go through the plugin store. Company knowledge, web search, agent messaging,
+ * sub-agents and email sit beside them rather than inside it: they are this deployment's own
+ * tools, offered when there is something to search, a coworker to reach, or a mailbox stored,
+ * not when an administrator ticked a grant. A framework Bot calls the same list back through
+ * `/api/agent-tools/call`.
  *
  * A child run (`subagentId`) is not offered messaging or spawn: it reports to the parent and
  * does not talk to the person.
@@ -507,6 +512,21 @@ const loadToolsForActor =
         }),
       );
     }
+    extra.push(
+      ...(await emailTools({
+        resolve: () =>
+          resolveEmailMailboxes({
+            encryptionKey: config.keyEncryptionKey,
+            reader: credentialStore,
+          }),
+        transport: emailTransport,
+        auditStore: bootAuditStore,
+        policy: () => policyStore.get(),
+        botId,
+        actorId,
+        actorUserId: actorId,
+      })),
+    );
     return extra.length === 0 ? granted : [...granted, ...extra];
   };
 

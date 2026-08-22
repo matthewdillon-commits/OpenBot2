@@ -30,11 +30,13 @@ import {
 import { Separator } from "@/components/ui/separator";
 import {
   Field,
+  FieldDescription,
   FieldError,
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -44,8 +46,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  type CredentialFormValues,
   credentialFormSchema,
+  emptyCredentialForm,
+  metadataFromCredentialForm,
 } from "@/lib/credentials/form";
 import {
   createCredentialMutationOptions,
@@ -67,17 +70,17 @@ function CredentialsPage() {
   const revokeCredential = useMutation(
     revokeCredentialMutationOptions(queryClient),
   );
-  const defaultValues: CredentialFormValues = {
-    kind: "model",
-    provider: "",
-    keyId: "",
-    plaintext: "",
-  };
   const form = useForm({
-    defaultValues,
+    defaultValues: emptyCredentialForm,
     validators: { onSubmit: credentialFormSchema },
     onSubmit: async ({ value }) => {
-      await createCredential.mutateAsync({ ...value, metadata: {} });
+      await createCredential.mutateAsync({
+        kind: value.kind,
+        provider: value.provider,
+        keyId: value.keyId,
+        plaintext: value.plaintext,
+        metadata: metadataFromCredentialForm(value),
+      });
       form.reset();
       setAdding(false);
     },
@@ -114,7 +117,7 @@ function CredentialsPage() {
                 Held for this deployment and never shown again once saved.
               </DialogDescription>
             </DialogHeader>
-            <DialogBody className="mt-4">
+            <DialogBody className="mt-4 overflow-y-auto">
               <FieldGroup className="sm:grid sm:grid-cols-2">
                 <form.Field name="kind">
                   {(field) => {
@@ -124,9 +127,22 @@ function CredentialsPage() {
                       <Field data-invalid={isInvalid}>
                         <FieldLabel htmlFor={field.name}>Type</FieldLabel>
                         <Select
-                          onValueChange={(value) =>
-                            field.handleChange(value as "model" | "connector")
-                          }
+                          onValueChange={(value) => {
+                            const kind = value as
+                              | "model"
+                              | "connector"
+                              | "email";
+                            field.handleChange(kind);
+                            if (
+                              kind === "email" &&
+                              form.getFieldValue("provider") !== "smtp" &&
+                              form.getFieldValue("provider") !== "imap"
+                            ) {
+                              form.setFieldValue("provider", "smtp");
+                              form.setFieldValue("port", "587");
+                              form.setFieldValue("secure", false);
+                            }
+                          }}
                           value={field.state.value}
                         >
                           <SelectTrigger
@@ -141,6 +157,7 @@ function CredentialsPage() {
                               <SelectItem value="connector">
                                 Connector
                               </SelectItem>
+                              <SelectItem value="email">Email</SelectItem>
                             </SelectGroup>
                           </SelectContent>
                         </Select>
@@ -151,31 +168,90 @@ function CredentialsPage() {
                     );
                   }}
                 </form.Field>
-                <form.Field name="provider">
-                  {(field) => {
-                    const isInvalid =
-                      field.state.meta.isTouched && !field.state.meta.isValid;
-                    return (
-                      <Field data-invalid={isInvalid}>
-                        <FieldLabel htmlFor={field.name}>Provider</FieldLabel>
-                        <Input
-                          aria-invalid={isInvalid}
-                          id={field.name}
-                          name={field.name}
-                          onBlur={field.handleBlur}
-                          onChange={(event) =>
-                            field.handleChange(event.target.value)
-                          }
-                          placeholder="OpenAI"
-                          value={field.state.value}
-                        />
-                        {isInvalid ? (
-                          <FieldError errors={field.state.meta.errors} />
-                        ) : null}
-                      </Field>
-                    );
-                  }}
-                </form.Field>
+                <form.Subscribe selector={(state) => state.values.kind}>
+                  {(kind) =>
+                    kind === "email" ? (
+                      <form.Field name="provider">
+                        {(field) => {
+                          const isInvalid =
+                            field.state.meta.isTouched &&
+                            !field.state.meta.isValid;
+                          return (
+                            <Field data-invalid={isInvalid}>
+                              <FieldLabel htmlFor={field.name}>
+                                Protocol
+                              </FieldLabel>
+                              <Select
+                                onValueChange={(value) => {
+                                  const provider =
+                                    value === "imap" ? "imap" : "smtp";
+                                  field.handleChange(provider);
+                                  if (provider === "imap") {
+                                    form.setFieldValue("port", "993");
+                                    form.setFieldValue("secure", true);
+                                  } else {
+                                    form.setFieldValue("port", "587");
+                                    form.setFieldValue("secure", false);
+                                  }
+                                }}
+                                value={field.state.value}
+                              >
+                                <SelectTrigger
+                                  aria-invalid={isInvalid}
+                                  id={field.name}
+                                >
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectGroup>
+                                    <SelectItem value="smtp">SMTP</SelectItem>
+                                    <SelectItem value="imap">IMAP</SelectItem>
+                                  </SelectGroup>
+                                </SelectContent>
+                              </Select>
+                              <FieldDescription>
+                                SMTP sends. IMAP reads the inbox. Store both to
+                                offer both tools.
+                              </FieldDescription>
+                              {isInvalid ? (
+                                <FieldError errors={field.state.meta.errors} />
+                              ) : null}
+                            </Field>
+                          );
+                        }}
+                      </form.Field>
+                    ) : (
+                      <form.Field name="provider">
+                        {(field) => {
+                          const isInvalid =
+                            field.state.meta.isTouched &&
+                            !field.state.meta.isValid;
+                          return (
+                            <Field data-invalid={isInvalid}>
+                              <FieldLabel htmlFor={field.name}>
+                                Provider
+                              </FieldLabel>
+                              <Input
+                                aria-invalid={isInvalid}
+                                id={field.name}
+                                name={field.name}
+                                onBlur={field.handleBlur}
+                                onChange={(event) =>
+                                  field.handleChange(event.target.value)
+                                }
+                                placeholder="OpenAI"
+                                value={field.state.value}
+                              />
+                              {isInvalid ? (
+                                <FieldError errors={field.state.meta.errors} />
+                              ) : null}
+                            </Field>
+                          );
+                        }}
+                      </form.Field>
+                    )
+                  }
+                </form.Subscribe>
                 <form.Field name="keyId">
                   {(field) => {
                     const isInvalid =
@@ -207,7 +283,11 @@ function CredentialsPage() {
                       field.state.meta.isTouched && !field.state.meta.isValid;
                     return (
                       <Field data-invalid={isInvalid}>
-                        <FieldLabel htmlFor={field.name}>Secret</FieldLabel>
+                        <FieldLabel htmlFor={field.name}>
+                          {form.getFieldValue("kind") === "email"
+                            ? "Password"
+                            : "Secret"}
+                        </FieldLabel>
                         <Input
                           aria-invalid={isInvalid}
                           autoComplete="off"
@@ -227,6 +307,157 @@ function CredentialsPage() {
                     );
                   }}
                 </form.Field>
+                <form.Subscribe selector={(state) => state.values.kind}>
+                  {(kind) =>
+                    kind !== "email" ? null : (
+                      <>
+                        <form.Field name="host">
+                          {(field) => {
+                            const isInvalid =
+                              field.state.meta.isTouched &&
+                              !field.state.meta.isValid;
+                            return (
+                              <Field data-invalid={isInvalid}>
+                                <FieldLabel htmlFor={field.name}>
+                                  Host
+                                </FieldLabel>
+                                <Input
+                                  aria-invalid={isInvalid}
+                                  id={field.name}
+                                  name={field.name}
+                                  onBlur={field.handleBlur}
+                                  onChange={(event) =>
+                                    field.handleChange(event.target.value)
+                                  }
+                                  placeholder="smtp.example.com"
+                                  value={field.state.value ?? ""}
+                                />
+                                {isInvalid ? (
+                                  <FieldError
+                                    errors={field.state.meta.errors}
+                                  />
+                                ) : null}
+                              </Field>
+                            );
+                          }}
+                        </form.Field>
+                        <form.Field name="port">
+                          {(field) => {
+                            const isInvalid =
+                              field.state.meta.isTouched &&
+                              !field.state.meta.isValid;
+                            return (
+                              <Field data-invalid={isInvalid}>
+                                <FieldLabel htmlFor={field.name}>
+                                  Port
+                                </FieldLabel>
+                                <Input
+                                  aria-invalid={isInvalid}
+                                  id={field.name}
+                                  inputMode="numeric"
+                                  name={field.name}
+                                  onBlur={field.handleBlur}
+                                  onChange={(event) =>
+                                    field.handleChange(event.target.value)
+                                  }
+                                  placeholder="587"
+                                  value={field.state.value ?? ""}
+                                />
+                                {isInvalid ? (
+                                  <FieldError
+                                    errors={field.state.meta.errors}
+                                  />
+                                ) : null}
+                              </Field>
+                            );
+                          }}
+                        </form.Field>
+                        <form.Field name="user">
+                          {(field) => {
+                            const isInvalid =
+                              field.state.meta.isTouched &&
+                              !field.state.meta.isValid;
+                            return (
+                              <Field data-invalid={isInvalid}>
+                                <FieldLabel htmlFor={field.name}>
+                                  Username
+                                </FieldLabel>
+                                <Input
+                                  aria-invalid={isInvalid}
+                                  autoComplete="off"
+                                  id={field.name}
+                                  name={field.name}
+                                  onBlur={field.handleBlur}
+                                  onChange={(event) =>
+                                    field.handleChange(event.target.value)
+                                  }
+                                  placeholder="bot@example.com"
+                                  value={field.state.value ?? ""}
+                                />
+                                {isInvalid ? (
+                                  <FieldError
+                                    errors={field.state.meta.errors}
+                                  />
+                                ) : null}
+                              </Field>
+                            );
+                          }}
+                        </form.Field>
+                        {form.getFieldValue("provider") === "smtp" ? (
+                          <form.Field name="from">
+                            {(field) => {
+                              const isInvalid =
+                                field.state.meta.isTouched &&
+                                !field.state.meta.isValid;
+                              return (
+                                <Field data-invalid={isInvalid}>
+                                  <FieldLabel htmlFor={field.name}>
+                                    From
+                                  </FieldLabel>
+                                  <Input
+                                    aria-invalid={isInvalid}
+                                    id={field.name}
+                                    name={field.name}
+                                    onBlur={field.handleBlur}
+                                    onChange={(event) =>
+                                      field.handleChange(event.target.value)
+                                    }
+                                    placeholder="bot@example.com"
+                                    value={field.state.value ?? ""}
+                                  />
+                                  {isInvalid ? (
+                                    <FieldError
+                                      errors={field.state.meta.errors}
+                                    />
+                                  ) : null}
+                                </Field>
+                              );
+                            }}
+                          </form.Field>
+                        ) : null}
+                        <form.Field name="secure">
+                          {(field) => (
+                            <Field>
+                              <FieldLabel htmlFor={field.name}>
+                                Implicit TLS
+                              </FieldLabel>
+                              <Switch
+                                checked={field.state.value === true}
+                                id={field.name}
+                                onCheckedChange={(checked) =>
+                                  field.handleChange(checked)
+                                }
+                              />
+                              <FieldDescription>
+                                On for ports 465 and 993. Off uses STARTTLS.
+                              </FieldDescription>
+                            </Field>
+                          )}
+                        </form.Field>
+                      </>
+                    )
+                  }
+                </form.Subscribe>
               </FieldGroup>
               {createCredential.error ? (
                 <p className="text-destructive text-sm" role="alert">
@@ -280,8 +511,13 @@ function CredentialsPage() {
                   <ItemContent>
                     <ItemTitle>{credential.provider}</ItemTitle>
                     <ItemDescription>
-                      {credential.kind} · {credential.keyId} ·{" "}
-                      {credential.revokedAt ? "revoked" : "active"}
+                      {credential.kind} · {credential.keyId}
+                      {credential.kind === "email" &&
+                      typeof credential.metadata.host === "string" &&
+                      credential.metadata.host
+                        ? ` · ${credential.metadata.host}`
+                        : ""}{" "}
+                      · {credential.revokedAt ? "revoked" : "active"}
                     </ItemDescription>
                   </ItemContent>
                   <ItemActions>

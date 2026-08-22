@@ -31,6 +31,9 @@ export const credentialKind = pgEnum("credential_kind", [
   // A token for an MCP server. Same vault and same revocation as everything else, so the server row
   // holds a pointer and never the secret.
   "mcp",
+  // SMTP and/or IMAP for the first-party mailbox tools. Its own kind so a model key and a mailbox
+  // password cannot be mistaken for each other in the vault or on the credentials page.
+  "email",
 ]);
 export const connectorType = pgEnum("connector_type", [
   "google_drive",

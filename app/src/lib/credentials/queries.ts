@@ -3,7 +3,7 @@ import { client } from "@/lib/client";
 
 export type CredentialStatus = {
   id: string;
-  kind: "model" | "connector";
+  kind: "model" | "connector" | "email";
   provider: string;
   keyId: string;
   metadata: Record<string, unknown>;

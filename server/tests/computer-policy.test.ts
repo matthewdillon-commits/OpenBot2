@@ -536,6 +536,28 @@ describe("describing a refusal", () => {
     expect(decision.reason).not.toContain(" on  ");
   });
 
+  test("a refused mailbox tool names the tool, not an empty host", () => {
+    const decision = evaluateActionPolicy(
+      { mode: "enforce", deny: ['intent == "email"'], allow: ["true"] },
+      {
+        tool: { name: "send_email" },
+        bot: { id: "general-assistant" },
+        actor: { id: "dev-local-user" },
+        page: { url: "", host: "" },
+        element: { ref: "", role: "", name: "", type: "" },
+        key: "",
+        file: { path: "", name: "", extension: "" },
+        command: "",
+        intent: "email",
+        email: { to: "alice@example.com", subject: "Hello" },
+      },
+    );
+
+    expect(decision.allowed).toBe(false);
+    expect(decision.reason).toContain("send_email");
+    expect(decision.reason).not.toContain(" on  ");
+  });
+
   test("a refused tool call names the tool and the server it was aimed at", () => {
     const decision = evaluateActionPolicy(
       { mode: "enforce", deny: ['mcp.server == "notes"'], allow: ["true"] },

@@ -37,6 +37,7 @@ import { createComputerRoutes } from "./computer/routes";
 import { configuredAuthProviders, type DeploymentConfig } from "./config";
 import type { ConnectorAdminService } from "./connectors";
 import type { CredentialAdminService, CredentialInput } from "./credentials";
+import { isEmailProvider, parseEmailMailboxSettings } from "./email/mailbox";
 import { createIntelligenceClient } from "./intelligence-client";
 import type { PeopleStore } from "./people/store";
 import { createPluginRoutes } from "./plugins/routes";
@@ -925,7 +926,8 @@ function credentialInput(
   if (
     (body.kind !== "model" &&
       body.kind !== "connector" &&
-      body.kind !== "mcp") ||
+      body.kind !== "mcp" &&
+      body.kind !== "email") ||
     typeof body.provider !== "string" ||
     typeof body.keyId !== "string" ||
     typeof body.plaintext !== "string" ||
@@ -937,11 +939,17 @@ function credentialInput(
     return null;
   }
 
+  const metadata = body.metadata as Record<string, unknown>;
+  if (body.kind === "email") {
+    if (!isEmailProvider(body.provider)) return null;
+    if (!parseEmailMailboxSettings(metadata, body.provider)) return null;
+  }
+
   return {
     kind: body.kind,
     provider: body.provider,
     keyId: body.keyId,
-    metadata: body.metadata as Record<string, unknown>,
+    metadata,
     plaintext: body.plaintext,
     actorUserId,
   };

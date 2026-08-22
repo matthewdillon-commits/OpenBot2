@@ -348,6 +348,14 @@ sources:
 
 Supported source types are `google-drive` and `microsoft-onedrive`.
 
+## Email mailbox
+
+Bots send and read mail through a write-only credential stored under Admin → Credentials, kind
+`email`. Provider is `smtp` (outbound) or `imap` (inbox). Host, port, username and From live in
+metadata; the password is the secret and is never shown again. `send_email` is offered only when
+SMTP is stored, `read_email` only when IMAP is stored. There is no environment variable for this —
+absent credential, the tools are not registered.
+
 ## Change workflow
 
 1. Edit the relevant `.env` value or tenant YAML file.

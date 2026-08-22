@@ -57,6 +57,7 @@ Policy rules can inspect:
 - `file.path`, `file.name`, `file.extension`
 - `mcp.server`, `mcp.tool`, `mcp.effect`
 - `channel.id`, `recipient.id` (agent messaging and sub-agents)
+- `email.to`, `email.subject` (mailbox send and read)
 
 Rules use CEL expressions plus case-insensitive `contains()` and `matches()`.
 Deny rules are evaluated before allow rules. The policy engine fails closed: a

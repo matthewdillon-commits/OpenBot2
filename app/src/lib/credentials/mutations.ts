@@ -3,7 +3,7 @@ import { client } from "@/lib/client";
 import { credentialKeys } from "./queries";
 
 export type CredentialInput = {
-  kind: "model" | "connector";
+  kind: "model" | "connector" | "email";
   provider: string;
   keyId: string;
   metadata: Record<string, unknown>;
