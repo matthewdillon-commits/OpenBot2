@@ -37,15 +37,17 @@ import { createComputerRoutes } from "./computer/routes";
 import { configuredAuthProviders, type DeploymentConfig } from "./config";
 import type { ConnectorAdminService } from "./connectors";
 import type { CredentialAdminService, CredentialInput } from "./credentials";
+import { createCrmRoutes } from "./crm/routes";
+import type { CrmStore } from "./crm/store";
 import { isEmailProvider, parseEmailMailboxSettings } from "./email/mailbox";
 import { createIntelligenceClient } from "./intelligence-client";
+import type { ScheduleGateway } from "./jobs/gateway";
+import { createScheduleRoutes, createTriggerRoutes } from "./jobs/routes";
 import type { PeopleStore } from "./people/store";
 import { createPluginRoutes } from "./plugins/routes";
 import type { PluginStore } from "./plugins/store";
 import { REFUSAL_MARKER } from "./plugins/tools";
 import type { PackageStatusReader } from "./tenant-package";
-import type { ScheduleGateway } from "./jobs/gateway";
-import { createScheduleRoutes, createTriggerRoutes } from "./jobs/routes";
 
 /**
  * One row for something an administrator did to somebody's access.
@@ -176,6 +178,11 @@ export function createApp(
    * cannot tell you" are different answers.
    */
   scheduleGateway?: ScheduleGateway,
+  /**
+   * This deployment's CRM. Absent leaves /api/crm answering 404 rather than an empty list:
+   * "nobody is in the book" and "this deployment cannot tell you" are different answers.
+   */
+  crmStore?: CrmStore,
 ) {
   const app = new Hono<{ Variables: AppVariables }>();
 
@@ -841,6 +848,10 @@ export function createApp(
       "/api/sandboxed",
       createSandboxedRoutes(sandboxedStore, requireUser),
     );
+  }
+
+  if (crmStore) {
+    app.route("/api/crm", createCrmRoutes(crmStore, requireUser));
   }
 
   if (threadIdentity) {

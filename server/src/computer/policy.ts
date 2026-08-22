@@ -146,7 +146,14 @@ export type PolicyContext = {
      * forbidding a Bot starting a finite worker from a turn. `tool.name` is
      * `create_schedule` or `fire_schedule`; `intent == "schedule"` covers both.
      */
-    | "schedule";
+    | "schedule"
+    /**
+     * A Bot reading or writing this deployment's CRM.
+     *
+     * Its own intent because a customer record is neither a computer action nor an MCP write.
+     * A rule can name `tool.name == "crm_create"` or `intent == "crm"`.
+     */
+    | "crm";
   /**
    * The file a `computer_read_file` or `computer_write_file` call is aimed at.
    *
@@ -391,7 +398,8 @@ function describeRefusal(context: PolicyContext, expression: string): string {
     context.intent === "message" ||
     context.intent === "spawn" ||
     context.intent === "email" ||
-    context.intent === "schedule"
+    context.intent === "schedule" ||
+    context.intent === "crm"
   ) {
     return (
       `This deployment's policy does not allow that: ${context.tool.name} ` +

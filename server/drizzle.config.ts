@@ -23,6 +23,7 @@ export default defineConfig({
     "./src/db/schema/coworker.ts",
     "./src/db/schema/email.ts",
     "./src/db/schema/jobs.ts",
+    "./src/db/schema/crm.ts",
     "./src/db/schema/components.ts",
     "./src/db/schema/plugins.ts",
   ],

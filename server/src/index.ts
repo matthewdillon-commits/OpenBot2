@@ -53,7 +53,18 @@ import {
   createCredentialStore,
   resolveModelApiKey,
 } from "./credentials";
+import { createCrmGateway } from "./crm/gateway";
+import { createCrmStore } from "./crm/store";
+import { crmTools } from "./crm/tools";
 import { createDatabase } from "./db/client";
+import { createInboxCursorStore } from "./email/cursor";
+import { startInboxPoller } from "./email/poller";
+import { resolveEmailMailboxes } from "./email/resolve";
+import { emailTools } from "./email/tools";
+import { createEmailTransport } from "./email/transport";
+import { createScheduleGateway } from "./jobs/gateway";
+import { startSchedulePoller } from "./jobs/poller";
+import { createScheduledJobStore } from "./jobs/store";
 import { askerFor, createKnowledgeSearch } from "./knowledge/search";
 import { knowledgeSearchTool } from "./knowledge/tool";
 import { createPeopleStore } from "./people/store";
@@ -76,14 +87,6 @@ import {
   loadTenantPackage,
   synchronizeTenantPackage,
 } from "./tenant-package";
-import { createInboxCursorStore } from "./email/cursor";
-import { startInboxPoller } from "./email/poller";
-import { resolveEmailMailboxes } from "./email/resolve";
-import { createEmailTransport } from "./email/transport";
-import { emailTools } from "./email/tools";
-import { createScheduleGateway } from "./jobs/gateway";
-import { startSchedulePoller } from "./jobs/poller";
-import { createScheduledJobStore } from "./jobs/store";
 import { tavilySearch } from "./web-search/tavily";
 import { webSearchTool } from "./web-search/tool";
 
@@ -206,6 +209,7 @@ const peopleStore = createPeopleStore(
   database,
   config.auth?.initialAdminEmails ?? [],
 );
+const crmStore = createCrmStore(database);
 const identityProviderStore = createIdentityProviderStore(database);
 /*
  * Built before `auth` for the same reason the people store is: sign-in writes to the trail, and the
@@ -427,6 +431,12 @@ const messagingGateway = createMessagingGateway({
   policy: () => policyStore.get(),
   wake: wakeQueue,
 });
+const crmGateway = createCrmGateway({
+  store: crmStore,
+  database,
+  auditStore: bootAuditStore,
+  policy: () => policyStore.get(),
+});
 wakeRunner.current = createAgentWakeRunner({
   profiles: agentProfileStore,
   messages: channelMessageStore,
@@ -485,9 +495,10 @@ const inboxPoller = startInboxPoller({
  * What one Bot may call, for the person asking, rebuilt each request.
  *
  * MCP grants still go through the plugin store. Company knowledge, web search, agent messaging,
- * sub-agents and email sit beside them rather than inside it: they are this deployment's own
- * tools, offered when there is something to search, a coworker to reach, or a mailbox stored,
- * not when an administrator ticked a grant. A framework Bot calls the same list back through
+ * sub-agents, email and CRM sit beside them rather than inside it: they are this
+ * deployment's own tools, offered when there is something to search, a coworker
+ * to reach, a mailbox stored, or a CRM book to read, not when an administrator
+ * ticked a grant. A framework Bot calls the same list back through
  * `/api/agent-tools/call`.
  *
  * A child run (`subagentId`) is not offered messaging or spawn: it reports to the parent and
@@ -570,6 +581,11 @@ const loadToolsForActor =
         actorId,
         actorUserId: actorId,
       })),
+      ...crmTools({
+        crm: crmGateway,
+        botId,
+        actor,
+      }),
     );
     return extra.length === 0 ? granted : [...granted, ...extra];
   };
@@ -672,6 +688,7 @@ const app = createApp(
   },
   channelMessageStore,
   scheduleGateway,
+  crmStore,
 );
 
 /**

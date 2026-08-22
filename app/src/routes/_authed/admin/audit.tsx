@@ -37,7 +37,7 @@ const FILTERS = [
     label: "Blocked",
     // Include every refusal family, not only browser policy refusals.
     search:
-      "?eventType=computer.action_refused,mcp.call_rejected,component.refused,component.function_refused,web.search_refused,channel.message_refused,subagent.refused,email.send_refused,email.read_refused,schedule.refused,schedule.fire_refused",
+      "?eventType=computer.action_refused,mcp.call_rejected,component.refused,component.function_refused,web.search_refused,channel.message_refused,subagent.refused,email.send_refused,email.read_refused,schedule.refused,schedule.fire_refused,crm.record_refused",
   },
   {
     label: "Did not happen",
@@ -147,7 +147,8 @@ function Row({
     event.eventType === "email.send_refused" ||
     event.eventType === "email.read_refused" ||
     event.eventType === "schedule.refused" ||
-    event.eventType === "schedule.fire_refused";
+    event.eventType === "schedule.fire_refused" ||
+    event.eventType === "crm.record_refused";
   const urls = Array.isArray(payload.urls)
     ? payload.urls.filter((url): url is string => typeof url === "string")
     : [];
@@ -193,7 +194,11 @@ function Row({
                     ? typeof payload.tool === "string"
                       ? payload.tool
                       : "schedule"
-                    : event.eventType}
+                    : event.eventType.startsWith("crm.")
+                      ? typeof payload.tool === "string"
+                        ? payload.tool
+                        : "crm"
+                      : event.eventType}
       </td>
       <td className="px-4 py-2">
         {/* Named targets and file paths are the audit subject before page elements. */}
@@ -333,6 +338,7 @@ const NAMED_TARGETS = new Set([
   "channel",
   "subagent",
   "schedule",
+  "crm",
 ]);
 
 const DECISIONS: Record<string, string> = {
@@ -389,6 +395,10 @@ const DECISIONS: Record<string, string> = {
   "schedule.paused": "Schedule paused",
   "schedule.resumed": "Schedule resumed",
   "schedule.deleted": "Schedule deleted",
+
+  "crm.record_read": "Read a CRM record",
+  "crm.record_written": "Wrote a CRM record",
+  "crm.record_refused": "Blocked",
 
   "configuration.changed": "Configuration changed",
   "credential.created": "Credential saved",
