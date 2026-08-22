@@ -99,6 +99,13 @@
       "when": 1787367055052,
       "tag": "0013_scheduled_jobs",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1787367127934,
+      "tag": "0014_email_inbox_cursor",
+      "breakpoints": true
     }
   ]
 }

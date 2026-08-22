@@ -357,6 +357,12 @@ metadata; the password is the secret and is never shown again. `send_email` is o
 SMTP is stored, `read_email` only when IMAP is stored. There is no environment variable for this —
 absent credential, the tools are not registered.
 
+An inbound email trigger (Admin → Schedules, kind: inbound email) also needs the IMAP credential.
+When a new inbox message arrives, the in-process poller wakes the named coworker with the job brief
+plus from, subject, id, and enough of the body to act. Optional from / to / subject filters are
+case-insensitive substrings. The HTTP webhook still requires its secret; only the poller may fire
+an email job as trusted.
+
 ## Change workflow
 
 1. Edit the relevant `.env` value or tenant YAML file.

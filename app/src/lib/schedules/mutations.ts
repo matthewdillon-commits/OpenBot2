@@ -16,6 +16,9 @@ export type ScheduleInput = {
   cronExpr?: string;
   weekdayBounded?: boolean;
   timezone?: string;
+  matchFrom?: string;
+  matchTo?: string;
+  matchSubject?: string;
 };
 
 export type CreatedSchedule = ScheduleRecord & {

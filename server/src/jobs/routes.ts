@@ -95,12 +95,10 @@ export function createScheduleRoutes(
 }
 
 /**
- * Generic inbound event. A later email-trigger PR fires the same path when
- * mail arrives; this route is the webhook primitive.
- *
- * Authenticated by the job secret, not a session: the caller is another
- * system. The HTTP request returns as soon as the run is recorded; the
- * coworker is woken afterwards.
+ * Generic inbound event. Authenticated by the job secret, not a session.
+ * The in-process IMAP poller fires email-kind jobs through the same gateway
+ * with `trusted: true`; this HTTP route never does. The request returns as
+ * soon as the run is recorded; the coworker is woken afterwards.
  */
 export function createTriggerRoutes(gateway: ScheduleGateway) {
   const app = new Hono();
@@ -146,6 +144,9 @@ function publicJob(job: Awaited<ReturnType<ScheduleGateway["list"]>>[number]) {
     lastRunAt: job.lastRunAt?.toISOString() ?? null,
     nextRunAt: job.nextRunAt?.toISOString() ?? null,
     hasWebhookSecret: job.hasWebhookSecret,
+    matchFrom: job.matchFrom,
+    matchTo: job.matchTo,
+    matchSubject: job.matchSubject,
     createdAt: job.createdAt.toISOString(),
     updatedAt: job.updatedAt.toISOString(),
   };
@@ -162,6 +163,9 @@ function parseCreate(value: unknown):
         weekdayBounded?: boolean;
         timezone?: string;
         brief: string;
+        matchFrom?: string | null;
+        matchTo?: string | null;
+        matchSubject?: string | null;
       };
     }
   | { ok: false; error: string } {
@@ -198,6 +202,13 @@ function parseCreate(value: unknown):
         ? { weekdayBounded: body.weekdayBounded }
         : {}),
       ...(typeof body.timezone === "string" ? { timezone: body.timezone } : {}),
+      ...(typeof body.matchFrom === "string"
+        ? { matchFrom: body.matchFrom }
+        : {}),
+      ...(typeof body.matchTo === "string" ? { matchTo: body.matchTo } : {}),
+      ...(typeof body.matchSubject === "string"
+        ? { matchSubject: body.matchSubject }
+        : {}),
     },
   };
 }

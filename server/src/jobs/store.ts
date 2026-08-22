@@ -24,6 +24,9 @@ export type ScheduledJob = {
   hasWebhookSecret: boolean;
   channelId: string | null;
   createdByUserId: string | null;
+  matchFrom: string | null;
+  matchTo: string | null;
+  matchSubject: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -51,6 +54,9 @@ export type CreateScheduledJobInput = {
   webhookSecretHash: string | null;
   createdBy: AgentActor;
   nextRunAt: Date | null;
+  matchFrom?: string | null;
+  matchTo?: string | null;
+  matchSubject?: string | null;
 };
 
 export type ScheduledJobStore = {
@@ -113,6 +119,9 @@ export function createScheduledJobStore(database: Database): ScheduledJobStore {
           webhookSecretHash: input.webhookSecretHash,
           createdByUserId: input.createdBy.id,
           nextRunAt: input.nextRunAt,
+          matchFrom: emptyToNull(input.matchFrom),
+          matchTo: emptyToNull(input.matchTo),
+          matchSubject: emptyToNull(input.matchSubject),
           status: "active",
         })
         .returning();
@@ -309,9 +318,17 @@ function asJob(row: typeof scheduledJobs.$inferSelect): ScheduledJob {
     hasWebhookSecret: Boolean(row.webhookSecretHash),
     channelId: row.channelId,
     createdByUserId: row.createdByUserId,
+    matchFrom: row.matchFrom,
+    matchTo: row.matchTo,
+    matchSubject: row.matchSubject,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
+}
+
+function emptyToNull(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
 }
 
 function asRun(row: typeof jobRuns.$inferSelect): JobRun {

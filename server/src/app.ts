@@ -868,7 +868,8 @@ export function createApp(
     );
     /*
      * Inbound events, authenticated by the job secret rather than a session.
-     * A later email-trigger PR fires the same primitive when mail arrives.
+     * The IMAP poller fires email-kind jobs in-process with trusted: true;
+     * this HTTP route never does.
      */
     app.route("/api/triggers", createTriggerRoutes(scheduleGateway));
   } else {

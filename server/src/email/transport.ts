@@ -22,6 +22,18 @@ export type InboxMessage = {
 export type ListInbox = {
   limit: number;
   unreadOnly?: boolean;
+  /**
+   * Exclusive IMAP UID. When set, list messages after this one, oldest first,
+   * up to `limit`. The inbound poller uses this so a tick does not skip a
+   * burst and does not re-read mail the cursor already passed.
+   */
+  afterUid?: number;
+};
+
+export type InboxInspect = {
+  uidValidity: number;
+  /** Highest UID currently in the mailbox, or 0 if empty. */
+  maxUid: number;
 };
 
 /**
@@ -38,17 +50,26 @@ export type EmailTransport = {
   ) => Promise<{ messageId: string }>;
   list: (mailbox: EmailMailbox, options: ListInbox) => Promise<InboxMessage[]>;
   read: (mailbox: EmailMailbox, id: string) => Promise<InboxMessage | null>;
+  /**
+   * UIDVALIDITY and the current high-water UID.
+   *
+   * Optional so existing fakes keep compiling. The inbound poller falls back
+   * to listing the newest message when this is absent.
+   */
+  inspect?: (mailbox: EmailMailbox) => Promise<InboxInspect>;
 };
 
 export function createEmailTransport(options?: {
   send?: EmailTransport["send"];
   list?: EmailTransport["list"];
   read?: EmailTransport["read"];
+  inspect?: EmailTransport["inspect"];
 }): EmailTransport {
   return {
     send: options?.send ?? smtpSend,
     list: options?.list ?? imapList,
     read: options?.read ?? imapRead,
+    inspect: options?.inspect ?? imapInspect,
   };
 }
 
@@ -103,6 +124,25 @@ async function smtpSend(
   }
 }
 
+async function imapInspect(mailbox: EmailMailbox): Promise<InboxInspect> {
+  return withImap(mailbox, async (client) => {
+    const lock = await client.getMailboxLock("INBOX");
+    try {
+      const box = client.mailbox;
+      const uidValidity =
+        box && "uidValidity" in box ? Number(box.uidValidity) : 1;
+      const uidNext = box && "uidNext" in box ? Number(box.uidNext) : 1;
+      return {
+        uidValidity:
+          Number.isInteger(uidValidity) && uidValidity > 0 ? uidValidity : 1,
+        maxUid: Number.isInteger(uidNext) && uidNext > 1 ? uidNext - 1 : 0,
+      };
+    } finally {
+      lock.release();
+    }
+  });
+}
+
 async function imapList(
   mailbox: EmailMailbox,
   options: ListInbox,
@@ -111,6 +151,25 @@ async function imapList(
     const lock = await client.getMailboxLock("INBOX");
     try {
       const listed: InboxMessage[] = [];
+      if (options.afterUid != null) {
+        const after = options.afterUid;
+        if (!Number.isInteger(after) || after < 0) return [];
+        const found = await client.search(
+          { uid: `${after + 1}:*` },
+          { uid: true },
+        );
+        const uids = (found || []).slice(0, options.limit);
+        if (uids.length === 0) return [];
+        for await (const msg of client.fetch(
+          uids,
+          { envelope: true, uid: true, source: { maxLength: 8_000 } },
+          { uid: true },
+        )) {
+          listed.push(fromFetched(msg, false));
+        }
+        listed.sort((a, b) => Number(a.id) - Number(b.id));
+        return listed;
+      }
       if (options.unreadOnly) {
         const found = await client.search({ seen: false }, { uid: true });
         const uids = (found || []).slice(-options.limit);

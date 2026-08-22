@@ -111,10 +111,11 @@ supervisor is still not in this image, so every replica shares the one browser i
 
 ## Schedules
 
-Standing jobs (cron and inbound webhook triggers) are durable rows in Postgres. An in-process
+Standing jobs (cron, inbound webhook, and inbound email) are durable rows in Postgres. An in-process
 poller on this API server claims due cron jobs about every fifteen seconds and wakes the named
 coworker the same way a message wake does: asynchronously, without holding an HTTP request open.
-There is no second always-on worker container.
+A second poller lists the IMAP inbox about every thirty seconds when an email-kind job exists and
+an IMAP credential is stored. There is no second always-on worker container.
 
 **One replica is the supported shape**, as with the rest of this image. In-process dispatch has the
 same cross-replica limit as message wakes: a second server will not run a job this one already
@@ -130,8 +131,11 @@ job is not claimed.
 Default UTC. Weekday-bounded (Monday–Friday) unless the job record says otherwise.
 
 An inbound event is `POST /api/triggers/:id` with the job secret (`Authorization: Bearer` or
-`X-OpenBot-Trigger-Secret`). The route returns 202 once the run is recorded. A later email-trigger
-change fires this same primitive when mail arrives; this image does not fetch mail.
+`X-OpenBot-Trigger-Secret`). The route returns 202 once the run is recorded. That HTTP route always
+requires the secret. Inbound email is the same gateway (`fireInbound({ trigger: "email", trusted:
+true })`) called from the in-process poller, not from the HTTP route. The last-seen IMAP UID lives
+in Postgres so a restart does not re-fire old mail. Two replicas would both list; one replica is
+the supported shape.
 
 ## Platform notes
 

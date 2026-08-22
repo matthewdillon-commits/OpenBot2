@@ -23,6 +23,9 @@ export type ScheduleRecord = {
   lastRunAt: string | null;
   nextRunAt: string | null;
   hasWebhookSecret: boolean;
+  matchFrom: string | null;
+  matchTo: string | null;
+  matchSubject: string | null;
   createdAt: string;
   updatedAt: string;
 };

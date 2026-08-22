@@ -2,8 +2,8 @@
  * Standing work that outlives a chat turn: cron schedules and inbound triggers.
  *
  * Its own file so this track can add tables without touching coworker.ts, which messaging
- * and sub-agents already own. A later email-trigger PR fires the same rows; it does not
- * add mailboxes here.
+ * and sub-agents already own. Inbound email fires these rows through fireInbound; the
+ * mailbox and the seen-cursor live in the email module.
  */
 import {
   boolean,
@@ -92,6 +92,15 @@ export const scheduledJobs = pgTable(
     createdByUserId: text("created_by_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
+    /**
+     * Optional inbound-email match. Empty means every new message.
+     *
+     * Case-insensitive substring on from / to / subject. The poller applies
+     * these; they are not a second job system.
+     */
+    matchFrom: text("match_from"),
+    matchTo: text("match_to"),
+    matchSubject: text("match_subject"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

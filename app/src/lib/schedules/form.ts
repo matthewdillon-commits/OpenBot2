@@ -9,6 +9,9 @@ export const scheduleFormSchema = z
     brief: z.string().trim().min(1, "A brief is required."),
     cronExpr: z.string(),
     weekdayBounded: z.boolean(),
+    matchFrom: z.string(),
+    matchTo: z.string(),
+    matchSubject: z.string(),
   })
   .superRefine((value, ctx) => {
     if (value.kind === "cron" && !value.cronExpr.trim()) {
@@ -30,5 +33,12 @@ export function scheduleInputFrom(values: ScheduleFormValues): ScheduleInput {
     brief: values.brief,
     weekdayBounded: values.weekdayBounded,
     ...(values.kind === "cron" ? { cronExpr: values.cronExpr.trim() } : {}),
+    ...(values.kind === "email"
+      ? {
+          matchFrom: values.matchFrom.trim(),
+          matchTo: values.matchTo.trim(),
+          matchSubject: values.matchSubject.trim(),
+        }
+      : {}),
   };
 }

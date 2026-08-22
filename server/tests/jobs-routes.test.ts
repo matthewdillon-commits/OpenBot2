@@ -70,6 +70,26 @@ describe("schedule routes", () => {
     expect(response.status).toBe(202);
   });
 
+  test("the HTTP trigger route never marks the caller trusted", async () => {
+    let received: { trusted?: boolean } | undefined;
+    const request = appWith({
+      fireInbound: async (input) => {
+        received = input;
+        return {
+          ok: false,
+          error: "A valid trigger secret is required.",
+          status: 403,
+        };
+      },
+    });
+    await request("/api/triggers/job_1", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ trigger: "email" }),
+    });
+    expect(received?.trusted).toBeUndefined();
+  });
+
   test("a refused trigger does not invent a run", async () => {
     const request = appWith({
       fireInbound: async () => ({

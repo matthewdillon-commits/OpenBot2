@@ -80,6 +80,9 @@ function memoryJobs(): ScheduledJobStore & {
         hasWebhookSecret: Boolean(input.webhookSecretHash),
         channelId: null,
         createdByUserId: input.createdBy.id,
+        matchFrom: input.matchFrom ?? null,
+        matchTo: input.matchTo ?? null,
+        matchSubject: input.matchSubject ?? null,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
@@ -336,6 +339,92 @@ describe("schedule gateway", () => {
     expect(count).toBe(0);
     await Bun.sleep(10);
     expect(wakes).toHaveLength(0);
+  });
+
+  test("a trusted email trigger wakes with the inbound brief", async () => {
+    const jobs = memoryJobs();
+    const job = await jobs.create({
+      name: "On mail",
+      agentId: "risk",
+      kind: "email",
+      cronExpr: null,
+      weekdayBounded: true,
+      timezone: "UTC",
+      brief: "Triage inbound mail.",
+      webhookSecretHash: null,
+      createdBy: ACTOR,
+      nextRunAt: null,
+    });
+    const { api, wakes, written } = gateway({ jobs });
+    const result = await api.fireInbound({
+      jobId: job.id,
+      trigger: "email",
+      trusted: true,
+      wakeBrief:
+        "Triage inbound mail.\n\nA new inbox message arrived.\nid: 18\nfrom: Alice\nsubject: Hi\n\nPlease act.",
+      inbound: { from: "Alice", subject: "Hi", id: "18" },
+    });
+    expect(result.ok).toBe(true);
+    await Bun.sleep(20);
+    expect(wakes).toHaveLength(1);
+    expect(wakes[0]?.inbound.body).toContain("id: 18");
+    expect(wakes[0]?.inbound.body).toContain("from: Alice");
+    const fired = written.find((event) => event.eventType === "schedule.fired");
+    expect(fired?.payload).toMatchObject({
+      text: "Triage inbound mail.",
+      email: { from: "Alice", subject: "Hi", id: "18" },
+    });
+    expect(JSON.stringify(written)).not.toContain("Please act.");
+  });
+
+  test("an email trigger without a secret or trust is refused", async () => {
+    const jobs = memoryJobs();
+    const job = await jobs.create({
+      name: "On mail",
+      agentId: "risk",
+      kind: "email",
+      cronExpr: null,
+      weekdayBounded: true,
+      timezone: "UTC",
+      brief: "Triage inbound mail.",
+      webhookSecretHash: null,
+      createdBy: ACTOR,
+      nextRunAt: null,
+    });
+    const { api, wakes } = gateway({ jobs });
+    const result = await api.fireInbound({
+      jobId: job.id,
+      trigger: "email",
+    });
+    expect(result.ok).toBe(false);
+    await Bun.sleep(10);
+    expect(wakes).toHaveLength(0);
+  });
+
+  test("an untrusted caller cannot inject a wake brief", async () => {
+    const secret = mintJobSecret();
+    const jobs = memoryJobs();
+    const job = await jobs.create({
+      name: "On hook",
+      agentId: "risk",
+      kind: "webhook",
+      cronExpr: null,
+      weekdayBounded: true,
+      timezone: "UTC",
+      brief: "A trigger arrived.",
+      webhookSecretHash: hashJobSecret(secret),
+      createdBy: ACTOR,
+      nextRunAt: null,
+    });
+    const { api, wakes } = gateway({ jobs });
+    await api.fireInbound({
+      jobId: job.id,
+      trigger: "webhook",
+      secret,
+      wakeBrief: "INJECTED BODY",
+    });
+    await Bun.sleep(20);
+    expect(wakes[0]?.inbound.body).toBe("A trigger arrived.");
   });
 
   test("a webhook trigger enqueues a run", async () => {

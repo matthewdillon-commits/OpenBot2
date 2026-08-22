@@ -19,6 +19,7 @@ import {
   credentials,
   documentAcls,
   documents,
+  emailInboxCursors,
   intelligenceChannelMappings,
   sessions,
   jobRuns,
@@ -403,6 +404,7 @@ describe("OpenBot database schema", () => {
       "failed",
     ]);
     expect(jobRunTrigger.enumValues).toEqual(["cron", "webhook", "email"]);
+    expect(getTableName(emailInboxCursors)).toBe("email_inbox_cursors");
 
     const jobConfig = getTableConfig(scheduledJobs);
     expect(jobConfig.columns.map((column) => column.name)).toEqual([
@@ -420,6 +422,9 @@ describe("OpenBot database schema", () => {
       "webhook_secret_hash",
       "channel_id",
       "created_by_user_id",
+      "match_from",
+      "match_to",
+      "match_subject",
       "created_at",
       "updated_at",
     ]);

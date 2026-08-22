@@ -87,6 +87,9 @@ function SchedulesPage() {
     brief: "",
     cronExpr: "0 9 * * *",
     weekdayBounded: true,
+    matchFrom: "",
+    matchTo: "",
+    matchSubject: "",
   };
   const form = useForm({
     defaultValues,
@@ -111,7 +114,7 @@ function SchedulesPage() {
           Add schedule
         </Button>
       }
-      description="Standing work that outlives a chat turn. A cron job fires in this deployment's timezone, weekdays only unless you say otherwise. A webhook is the inbound primitive a later email trigger will use."
+      description="Standing work that outlives a chat turn. A cron job fires in this deployment's timezone, weekdays only unless you say otherwise. A webhook needs a one-time secret. Inbound email needs an IMAP credential under Admin → Credentials and wakes the coworker when a matching message arrives."
       title="Schedules"
     >
       <Dialog
@@ -285,6 +288,78 @@ function SchedulesPage() {
                     </form.Subscribe>
                   )}
                 </form.Field>
+                <form.Field name="matchFrom">
+                  {(field) => (
+                    <form.Subscribe selector={(state) => state.values.kind}>
+                      {(kind) =>
+                        kind === "email" ? (
+                          <Field>
+                            <FieldLabel htmlFor={field.name}>
+                              From contains
+                            </FieldLabel>
+                            <Input
+                              id={field.name}
+                              onBlur={field.handleBlur}
+                              onChange={(event) =>
+                                field.handleChange(event.target.value)
+                              }
+                              placeholder="Optional"
+                              value={field.state.value}
+                            />
+                          </Field>
+                        ) : null
+                      }
+                    </form.Subscribe>
+                  )}
+                </form.Field>
+                <form.Field name="matchTo">
+                  {(field) => (
+                    <form.Subscribe selector={(state) => state.values.kind}>
+                      {(kind) =>
+                        kind === "email" ? (
+                          <Field>
+                            <FieldLabel htmlFor={field.name}>
+                              To contains
+                            </FieldLabel>
+                            <Input
+                              id={field.name}
+                              onBlur={field.handleBlur}
+                              onChange={(event) =>
+                                field.handleChange(event.target.value)
+                              }
+                              placeholder="Optional"
+                              value={field.state.value}
+                            />
+                          </Field>
+                        ) : null
+                      }
+                    </form.Subscribe>
+                  )}
+                </form.Field>
+                <form.Field name="matchSubject">
+                  {(field) => (
+                    <form.Subscribe selector={(state) => state.values.kind}>
+                      {(kind) =>
+                        kind === "email" ? (
+                          <Field>
+                            <FieldLabel htmlFor={field.name}>
+                              Subject contains
+                            </FieldLabel>
+                            <Input
+                              id={field.name}
+                              onBlur={field.handleBlur}
+                              onChange={(event) =>
+                                field.handleChange(event.target.value)
+                              }
+                              placeholder="Optional"
+                              value={field.state.value}
+                            />
+                          </Field>
+                        ) : null
+                      }
+                    </form.Subscribe>
+                  )}
+                </form.Field>
                 <form.Field name="brief">
                   {(field) => {
                     const isInvalid =
@@ -334,7 +409,8 @@ function SchedulesPage() {
             <DialogTitle>Webhook secret</DialogTitle>
             <DialogDescription>
               Shown once. POST /api/triggers/&lt;id&gt; with this as a Bearer
-              token. A later email fetcher fires the same path.
+              token. Inbound email jobs do not use this secret — they fire from
+              the IMAP poller.
             </DialogDescription>
           </DialogHeader>
           <DialogBody className="mt-4">
@@ -426,7 +502,7 @@ function scheduleSummary(schedule: ScheduleRecord, coworker: string): string {
         }`
       : schedule.kind === "webhook"
         ? "webhook trigger"
-        : "inbound email trigger";
+        : emailTriggerSummary(schedule);
   const next = schedule.nextRunAt
     ? ` Next ${new Date(schedule.nextRunAt).toLocaleString()}.`
     : "";
@@ -434,4 +510,15 @@ function scheduleSummary(schedule: ScheduleRecord, coworker: string): string {
     ? ` Last ${new Date(schedule.lastRunAt).toLocaleString()}.`
     : "";
   return `${coworker} · ${when}.${next}${last} ${schedule.brief}`;
+}
+
+function emailTriggerSummary(schedule: ScheduleRecord): string {
+  const filters = [
+    schedule.matchFrom ? `from ${schedule.matchFrom}` : null,
+    schedule.matchTo ? `to ${schedule.matchTo}` : null,
+    schedule.matchSubject ? `subject ${schedule.matchSubject}` : null,
+  ].filter(Boolean);
+  return filters.length > 0
+    ? `inbound email (${filters.join(", ")})`
+    : "inbound email trigger";
 }

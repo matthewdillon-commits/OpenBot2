@@ -78,6 +78,8 @@ import {
   loadTenantPackage,
   synchronizeTenantPackage,
 } from "./tenant-package";
+import { createInboxCursorStore } from "./email/cursor";
+import { startInboxPoller } from "./email/poller";
 import { resolveEmailMailboxes } from "./email/resolve";
 import { createEmailTransport } from "./email/transport";
 import { emailTools } from "./email/tools";
@@ -466,6 +468,17 @@ const scheduleGateway = createScheduleGateway({
   },
 });
 const schedulePoller = startSchedulePoller(scheduleGateway);
+const resolveMailbox = () =>
+  resolveEmailMailboxes({
+    encryptionKey: config.keyEncryptionKey,
+    reader: credentialStore,
+  });
+const inboxPoller = startInboxPoller({
+  resolve: resolveMailbox,
+  transport: emailTransport,
+  cursors: createInboxCursorStore(database),
+  gateway: scheduleGateway,
+});
 
 /**
  * What one Bot may call, for the person asking, rebuilt each request.
@@ -536,11 +549,7 @@ const loadToolsForActor =
     }
     extra.push(
       ...(await emailTools({
-        resolve: () =>
-          resolveEmailMailboxes({
-            encryptionKey: config.keyEncryptionKey,
-            reader: credentialStore,
-          }),
+        resolve: resolveMailbox,
         transport: emailTransport,
         auditStore: bootAuditStore,
         policy: () => policyStore.get(),
@@ -816,6 +825,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
       policyListener.stop(),
       Promise.resolve(auditRetention.stop()),
       Promise.resolve(schedulePoller.stop()),
+      Promise.resolve(inboxPoller.stop()),
     ]).finally(() => process.exit(0));
   });
 }

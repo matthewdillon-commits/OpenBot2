@@ -36,6 +36,9 @@ export type CreateScheduleInput = {
   weekdayBounded?: boolean;
   timezone?: string;
   brief: string;
+  matchFrom?: string | null;
+  matchTo?: string | null;
+  matchSubject?: string | null;
 };
 
 export type CreateScheduleResult =
@@ -78,6 +81,13 @@ export type ScheduleGateway = {
     secret?: string;
     trusted?: boolean;
     actor?: AgentActor;
+    /**
+     * In-process only. Replaces the standing brief when waking.
+     * Never written to the audit trail — use `inbound` for the envelope.
+     */
+    wakeBrief?: string;
+    /** From / subject / id for the trail. Never a body. */
+    inbound?: { from: string; subject: string; id: string };
   }): Promise<FireScheduleResult>;
   /**
    * Claim due cron jobs and dispatch each one. Called by the in-process poller.
@@ -129,6 +139,7 @@ export function createScheduleGateway(options: {
     botId: string;
     jobId: string;
     text: string;
+    inbound?: { from: string; subject: string; id: string };
   }): Promise<{ verdict: PolicyDecision }> => {
     const verdict = evaluateActionPolicy(
       policy(),
@@ -145,6 +156,7 @@ export function createScheduleGateway(options: {
       jobId: input.jobId,
       tool: input.tool,
       text: input.text,
+      inbound: input.inbound,
       verdict,
     });
     return { verdict };
@@ -154,6 +166,10 @@ export function createScheduleGateway(options: {
     job: ScheduledJob,
     run: JobRun,
     actor: AgentActor,
+    extras?: {
+      wakeBrief?: string;
+      inbound?: { from: string; subject: string; id: string };
+    },
   ): Promise<FireScheduleResult> => {
     const decided = await decide({
       tool: FIRE_SCHEDULE_TOOL,
@@ -161,12 +177,16 @@ export function createScheduleGateway(options: {
       botId: job.agentId,
       jobId: job.id,
       text: job.brief,
+      inbound: extras?.inbound,
     });
     if (!decided.verdict.forward) {
       await jobs.finish(run.id, "failed", null, decided.verdict.reason);
       return { ok: false, error: decided.verdict.reason, status: 403 };
     }
-    dispatch.enqueue(run.id, job);
+    const wakeJob = extras?.wakeBrief
+      ? { ...job, brief: extras.wakeBrief }
+      : job;
+    dispatch.enqueue(run.id, wakeJob);
     return { ok: true, run, job };
   };
 
@@ -266,6 +286,9 @@ export function createScheduleGateway(options: {
         webhookSecretHash: webhookSecret ? hashJobSecret(webhookSecret) : null,
         createdBy: actor,
         nextRunAt,
+        matchFrom: input.kind === "email" ? input.matchFrom : null,
+        matchTo: input.kind === "email" ? input.matchTo : null,
+        matchSubject: input.kind === "email" ? input.matchSubject : null,
       });
 
       return webhookSecret
@@ -369,7 +392,13 @@ export function createScheduleGateway(options: {
         jobId: job.id,
         trigger: input.trigger,
       });
-      return openAndDispatch(job, run, actor);
+      const extras = input.trusted
+        ? {
+            ...(input.wakeBrief ? { wakeBrief: input.wakeBrief } : {}),
+            ...(input.inbound ? { inbound: input.inbound } : {}),
+          }
+        : undefined;
+      return openAndDispatch(job, run, actor, extras);
     },
 
     async dispatchDue(now = new Date()) {
@@ -530,6 +559,7 @@ async function writeAudit(
     jobId: string;
     tool: string;
     text: string;
+    inbound?: { from: string; subject: string; id: string };
     verdict: PolicyDecision;
   },
 ) {
@@ -550,6 +580,15 @@ async function writeAudit(
       actor: entry.actor.id,
       tool: entry.tool,
       text: entry.text,
+      ...(entry.inbound
+        ? {
+            email: {
+              from: entry.inbound.from,
+              subject: entry.inbound.subject,
+              id: entry.inbound.id,
+            },
+          }
+        : {}),
       decision: {
         allowed: entry.verdict.allowed,
         mode: entry.verdict.mode,
