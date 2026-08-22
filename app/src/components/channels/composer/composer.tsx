@@ -83,6 +83,11 @@ export type ComposerProps = {
    * Defaults to `pending`, which is the right answer for a caller with no gap between the two.
    */
   stoppable?: boolean;
+  /**
+   * The live draft, so a parent can follow who `@` names without treating every keystroke as a
+   * speaker change. Send is what binds the runtime agent.
+   */
+  onDraftChange?: (draft: ComposerDraft) => void;
 };
 
 export function Composer({
@@ -96,6 +101,7 @@ export function Composer({
   disabled = false,
   pending = false,
   stoppable,
+  onDraftChange,
 }: ComposerProps) {
   const [value, setValue] = useState<Segment[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -110,6 +116,10 @@ export function Composer({
     [agents, commands],
   );
   const draft = useMemo(() => toDraft(value), [value]);
+
+  useEffect(() => {
+    onDraftChange?.(draft);
+  }, [draft, onDraftChange]);
 
   const handleChange = useCallback(
     (next: Segment[]) => {

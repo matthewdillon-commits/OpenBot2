@@ -9,9 +9,10 @@ import { ChannelAvatar } from "@/components/channels/avatar";
 import { ChannelChat } from "@/components/channels/channel-chat";
 import { ActivityLog } from "@/components/computer/activity-log";
 import { ComputerView } from "@/components/computer/computer-view";
-import { useNeedsYou } from "@/components/computer/needs-you";
+import { useNeedsYouAmong } from "@/components/computer/needs-you";
 import { DetailPanel } from "@/components/layout/detail-panel";
 import { Button } from "@/components/ui/button";
+import { agentQueryOptions } from "@/lib/agents/queries";
 import { type AgentChannel, channelQueryOptions } from "@/lib/channels/queries";
 import {
   activityFor,
@@ -143,14 +144,30 @@ function RouteComponent() {
   const isSettingsOpen = settings === true;
   const prefersReducedMotion = useReducedMotion();
   const isWatching = watch === true;
-  /** Channel routing currently supports one coworker. */
-  const agentId = channel.data?.agentIds[0];
+  const [speakerId, setSpeakerId] = useState<string | undefined>();
+  const [focusAgentId, setFocusAgentId] = useState<string | undefined>();
+  const memberIds = channel.data?.agentIds ?? [];
+  const memberKey = memberIds.join("\0");
+  const watchAgentId =
+    speakerId && memberIds.includes(speakerId) ? speakerId : memberIds[0];
+
+  useEffect(() => {
+    if (!channelId) return;
+    setSpeakerId(undefined);
+    setFocusAgentId(undefined);
+  }, [channelId]);
+  const { data: speakerProfile } = useQuery({
+    ...agentQueryOptions(watchAgentId ?? ""),
+    enabled: Boolean(watchAgentId),
+  });
   /** Needs-you state is rendered by the screen when the screen is already open. */
-  const needsYou = useNeedsYou(agentId, !isWatching);
+  const needing = useNeedsYouAmong(memberIds, !isWatching);
+  const needsYou = needing !== null;
 
   // Needs-you prompts auto-open the screen because the actionable prompt is rendered there.
   useEffect(() => {
-    if (!needsYou) return;
+    if (!needing) return;
+    setFocusAgentId(needing);
     show("watch");
   });
 
@@ -158,11 +175,13 @@ function RouteComponent() {
   const dismissedEpoch = useRef<number | null>(null);
   const runEpoch = useRef<number | null>(null);
   useEffect(() => {
-    if (!agentId) return;
+    const members = memberKey.length === 0 ? [] : memberKey.split("\0");
+    if (members.length === 0) return;
     return onComputerActivity((activity) => {
-      if (activity.botId !== agentId) return;
+      if (!members.includes(activity.botId)) return;
       runEpoch.current = activity.epoch;
       if (dismissedEpoch.current === activity.epoch) return;
+      setFocusAgentId(activity.botId);
       navigate({
         search: (previous) =>
           previous.watch === true || previous.settings === true
@@ -170,7 +189,7 @@ function RouteComponent() {
             : { ...previous, settings: undefined, watch: true },
       });
     });
-  }, [agentId, navigate]);
+  }, [memberKey, navigate]);
 
   // Settings and watch share one pane; opening either clears the other URL flag.
   const show = (next: "settings" | "watch" | null) => {
@@ -189,14 +208,17 @@ function RouteComponent() {
   return (
     <DetailPanel
       onClose={() => show(null)}
-      open={(isSettingsOpen || isWatching) && agentId !== undefined}
+      open={(isSettingsOpen || isWatching) && watchAgentId !== undefined}
       detailWidth={isWatching ? SCREEN_PANEL_WIDTH : undefined}
       detail={
-        agentId === undefined ? null : isWatching ? (
+        watchAgentId === undefined ? null : isWatching ? (
           // Manual watch remains active even when there is no current browser action.
-          <ComputerViewPanel agentId={agentId} name={channel?.data?.name} />
+          <ComputerViewPanel
+            agentId={watchAgentId}
+            name={speakerProfile?.name}
+          />
         ) : (
-          <AgentProfile agentId={agentId} />
+          <AgentProfile agentId={watchAgentId} />
         )
       }
     >
@@ -249,7 +271,7 @@ function RouteComponent() {
               }
               aria-pressed={isWatching}
               className={`relative ${isWatching ? "bg-foreground/5" : ""}`}
-              disabled={agentId === undefined}
+              disabled={watchAgentId === undefined}
               onClick={() => show(isWatching ? null : "watch")}
               variant="ghost"
               size="icon"
@@ -264,7 +286,7 @@ function RouteComponent() {
               aria-label="Channel coworker"
               aria-pressed={isSettingsOpen}
               className={isSettingsOpen ? "bg-foreground/5" : undefined}
-              disabled={agentId === undefined}
+              disabled={watchAgentId === undefined}
               onClick={() => show(isSettingsOpen ? null : "settings")}
               variant="ghost"
               size="icon"
@@ -276,25 +298,30 @@ function RouteComponent() {
       </div>
       <ChannelBody
         channel={channel.data}
+        focusAgentId={focusAgentId}
         isPending={channel.isPending}
         hasError={Boolean(channel.error)}
+        onSpeakerChange={setSpeakerId}
       />
     </DetailPanel>
   );
 }
 
 /**
- * A channel holds exactly one coworker. More than one is not supported yet, and rendering a shared
- * transcript for several agents before the runtime can route between them would look like it works.
+ * The conversation for this channel. Several coworkers share one thread; the chat owns who speaks.
  */
 function ChannelBody({
   channel,
   isPending,
   hasError,
+  focusAgentId,
+  onSpeakerChange,
 }: {
   channel: AgentChannel | undefined;
   isPending: boolean;
   hasError: boolean;
+  focusAgentId?: string;
+  onSpeakerChange?: (agentId: string) => void;
 }) {
   // Nothing while the channel loads: a placeholder inside a local round-trip is a flicker.
   if (isPending) return null;
@@ -306,12 +333,10 @@ function ChannelBody({
     );
   }
 
-  const runtimeAgentId =
-    channel.agentIds.length === 1 ? channel.agentIds[0] : undefined;
-  if (!runtimeAgentId) {
+  if (channel.agentIds.length === 0) {
     return (
       <p className="p-8 text-sm text-muted-foreground">
-        This channel has more than one coworker, which is not supported yet.
+        This channel has no coworkers.
       </p>
     );
   }
@@ -320,8 +345,9 @@ function ChannelBody({
   return (
     <ChannelChat
       channel={channel}
+      {...(focusAgentId ? { focusAgentId } : {})}
       key={channel.id}
-      runtimeAgentId={runtimeAgentId}
+      {...(onSpeakerChange ? { onSpeakerChange } : {})}
     />
   );
 }

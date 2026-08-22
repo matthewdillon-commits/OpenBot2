@@ -107,6 +107,8 @@ export type ChannelStore = {
 const PRIVATE_AGENT_CHANNEL_DESCRIPTION = "Private agent channel.";
 const MAX_CHANNEL_NAME_CODE_POINTS = 120;
 const MAX_ACTIVITY_CODE_POINTS = 200;
+/** Same ceiling the compose screen uses. Enforced here so the UI cap is not ornamental. */
+export const MAX_CHANNEL_AGENTS = 8;
 
 /**
  * Reduce a message to one line of plain text.
@@ -179,9 +181,13 @@ export function createChannelStore(
             channelId: id,
             userId: actor.id,
           });
-          await transaction
-            .insert(channelAgents)
-            .values(agentIds.map((agentId) => ({ channelId: id, agentId })));
+          await transaction.insert(channelAgents).values(
+            agentIds.map((agentId, position) => ({
+              channelId: id,
+              agentId,
+              position,
+            })),
+          );
           await transaction.insert(intelligenceChannelMappings).values({
             userId: actor.id,
             channelId: id,
@@ -224,7 +230,7 @@ export function createChannelStore(
           eq(agentProfiles.agentId, channelAgents.agentId),
         )
         .where(eq(channels.id, channelId))
-        .orderBy(asc(channelAgents.agentId));
+        .orderBy(asc(channelAgents.position), asc(channelAgents.agentId));
 
       const first = rows[0];
       if (!first) return null;
@@ -335,11 +341,12 @@ export function createChannelStore(
         .orderBy(
           sql`coalesce(${channels.lastMessageAt}, ${channels.createdAt}) desc`,
           desc(channels.id),
+          asc(channelAgents.position),
           asc(channelAgents.agentId),
         );
 
       // One row per channel-agent pair; the ordering above keeps each channel's rows together and
-      // its agents in the same lexicographic order `get` returns.
+      // its agents in the same To: order `get` returns.
       const summaries = new Map<string, ChannelSummary>();
       for (const row of rows) {
         const summary = summaries.get(row.id);
@@ -475,7 +482,15 @@ export function parseChannelInput(input: unknown): ChannelInputParseResult {
     return { ok: false, error: "Agent IDs must be unique." };
   }
 
-  return { ok: true, value: { agentIds: agentIds.sort() } };
+  if (agentIds.length > MAX_CHANNEL_AGENTS) {
+    return {
+      ok: false,
+      error: "A channel can have at most 8 coworkers.",
+    };
+  }
+
+  // Request order is To: order. Sorting would make the lead alphabetical.
+  return { ok: true, value: { agentIds } };
 }
 
 function isChannelInputObject(input: unknown): input is ChannelInputObject {

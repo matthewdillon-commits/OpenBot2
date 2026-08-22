@@ -10,13 +10,13 @@ export type Recipient = {
 };
 
 /**
- * One coworker per channel.
+ * How many coworkers one channel may hold.
  *
- * Matches the chat screen's current one-coworker render contract.
+ * Matches the server cap in `parseChannelInput`. A ninth pick replaces the oldest.
  */
-export const MAX_RECIPIENTS = 1;
+export const MAX_RECIPIENTS = 8;
 
-/** Add a coworker, replacing the oldest once the channel recipient cap is reached. */
+/** Add a coworker, dropping the oldest once the channel recipient cap is reached. */
 export function addRecipient(
   current: readonly Recipient[],
   next: Recipient,
@@ -39,5 +39,9 @@ export function canSend(
   recipients: readonly Recipient[],
   text: string,
 ): boolean {
-  return recipients.length === MAX_RECIPIENTS && text.trim().length > 0;
+  return (
+    recipients.length >= 1 &&
+    recipients.length <= MAX_RECIPIENTS &&
+    text.trim().length > 0
+  );
 }

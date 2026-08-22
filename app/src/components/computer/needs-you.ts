@@ -7,22 +7,31 @@ import { readControl } from "@/lib/computers/control";
 
 const INTERVAL_MS = 3_000;
 
-export function useNeedsYou(botId: string | undefined, when: boolean): boolean {
-  const [needed, setNeeded] = useState(false);
+export function useNeedsYouAmong(
+  botIds: readonly string[],
+  when: boolean,
+): string | null {
+  const [needed, setNeeded] = useState<string | null>(null);
+  const key = botIds.join("\0");
 
   useEffect(() => {
-    if (!botId || !when) {
-      setNeeded(false);
+    const ids = key.length === 0 ? [] : key.split("\0");
+    if (!when || ids.length === 0) {
+      setNeeded(null);
       return;
     }
 
     let live = true;
     const check = async () => {
-      const state = await readControl(botId).catch(() => null);
-      if (!live) return;
-      setNeeded(
-        Boolean(state && (state.requested || state.secretWanted !== undefined)),
-      );
+      for (const id of ids) {
+        const state = await readControl(id).catch(() => null);
+        if (!live) return;
+        if (state && (state.requested || state.secretWanted !== undefined)) {
+          setNeeded(id);
+          return;
+        }
+      }
+      if (live) setNeeded(null);
     };
 
     void check();
@@ -31,7 +40,11 @@ export function useNeedsYou(botId: string | undefined, when: boolean): boolean {
       live = false;
       clearInterval(timer);
     };
-  }, [botId, when]);
+  }, [key, when]);
 
   return needed;
+}
+
+export function useNeedsYou(botId: string | undefined, when: boolean): boolean {
+  return useNeedsYouAmong(botId ? [botId] : [], when) !== null;
 }

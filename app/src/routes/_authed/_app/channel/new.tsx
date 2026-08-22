@@ -1,31 +1,24 @@
 import type { Message } from "@ag-ui/core";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
-import { ChannelAvatar } from "@/components/channels/avatar";
+import { useEffect, useRef, useState } from "react";
 import { canSend, type Recipient } from "@/components/channels/compose-state";
+import {
+  type ComposerDraft,
+  toAgentOptions,
+} from "@/components/channels/composer";
 import { ConversationView } from "@/components/channels/conversation-view";
+import { RecipientField } from "@/components/channels/recipient-field";
+import { resolveSpeaker } from "@/components/channels/speaker";
 import { seedMessage } from "@/components/channels/transcript-messages";
-import {
-  Combobox,
-  ComboboxContent,
-  ComboboxEmpty,
-  ComboboxInput,
-  ComboboxItem,
-  ComboboxList,
-} from "@/components/ui/combobox";
-import {
-  type AgentProfile,
-  agentListQueryOptions,
-  agentQueryOptions,
-} from "@/lib/agents/queries";
+import { agentListQueryOptions, agentQueryOptions } from "@/lib/agents/queries";
 import { useStartChannel } from "@/lib/channels/start";
 import { useSkillCommands } from "@/lib/plugins/skill-commands";
 import { newId } from "../../../../lib/new-id";
 
 /**
- * Creates the channel on first send. The selected coworker stays in the URL so profile links and
- * reloads preserve the pending recipient without creating an empty channel.
+ * Creates the channel on first send. `?agent=` seeds one coworker from a profile link; extra
+ * picks live in this screen's state so a room can start without an invite API.
  */
 export const Route = createFileRoute("/_authed/_app/channel/new")({
   validateSearch: (search: Record<string, unknown>): { agent?: string } => ({
@@ -36,13 +29,15 @@ export const Route = createFileRoute("/_authed/_app/channel/new")({
 
 function RouteComponent() {
   const { agent } = Route.useSearch();
-  const navigate = Route.useNavigate();
   const { start, pending } = useStartChannel();
   const { data: profiles } = useQuery(agentListQueryOptions());
 
   const [error, setError] = useState<string | null>(null);
   // Optimistic seed shown before the first channel record exists.
   const [sent, setSent] = useState<Message | null>(null);
+  const [recipients, setRecipients] = useState<Recipient[]>([]);
+  const [draft, setDraft] = useState<ComposerDraft | null>(null);
+  const seededFromUrl = useRef<string | null>(null);
 
   // Stale or private `?agent=` values are ignored because the roster is permission-filtered.
   const listed = profiles?.find((profile) => profile.id === agent);
@@ -56,58 +51,30 @@ function RouteComponent() {
     retry: false,
   });
   const chosen = listed ?? (fetched?.id === agent ? fetched : undefined);
-  const recipients: Recipient[] = chosen
-    ? [{ id: chosen.id, name: chosen.name }]
-    : [];
-  const skillCommands = useSkillCommands(chosen?.id ?? "");
+
+  useEffect(() => {
+    if (!chosen || seededFromUrl.current === chosen.id) return;
+    seededFromUrl.current = chosen.id;
+    setRecipients((current) => {
+      if (current.some((recipient) => recipient.id === chosen.id)) {
+        return current;
+      }
+      return [{ id: chosen.id, name: chosen.name }, ...current];
+    });
+  }, [chosen]);
+
+  const memberIds = recipients.map((recipient) => recipient.id);
+  const speakingId =
+    resolveSpeaker(memberIds, draft?.agentId) ?? memberIds[0] ?? "";
+  const skillCommands = useSkillCommands(speakingId);
 
   return (
     <div className="flex h-full flex-col">
-      <div className="h-12 border-b border-border sticky top-0 flex flex-row px-2 items-center">
-        <span className="text-sm text-muted-foreground">To:</span>
-        <Combobox
-          // Do not auto-open when the recipient came from the URL; the field is already answered.
-          defaultOpen={!agent}
-          autoHighlight
-          items={profiles ?? []}
-          isItemEqualToValue={(item: AgentProfile, value: AgentProfile) =>
-            item.id === value.id
-          }
-          itemToStringLabel={(item: AgentProfile) => item.name}
-          itemToStringValue={(item: AgentProfile) => item.id}
-          onValueChange={(next) => {
-            // Recipient changes are not separate navigation history entries.
-            void navigate({
-              replace: true,
-              search: next ? { agent: next.id } : {},
-            });
-          }}
-          value={chosen ?? null}
-        >
-          <ComboboxInput
-            placeholder="Choose a coworker…"
-            // InputGroup owns focus rings via `has-[…:focus-visible]`; disable that wrapper ring here.
-            className="border-none w-full bg-transparent! text-sm has-[[data-slot=input-group-control]:focus-visible]:ring-0"
-          />
-          {/* Allow max-w to constrain the popup even though its anchor is full-width. */}
-          <ComboboxContent className="min-w-0 max-w-lg" sideOffset={12}>
-            <ComboboxEmpty>No agents found.</ComboboxEmpty>
-            <ComboboxList>
-              {(item: AgentProfile) => (
-                <ComboboxItem key={item.id} value={item} className="h-10">
-                  <ChannelAvatar participantIds={[item.id]} size={24} />
-                  {item.name}
-                  <span className="truncate text-muted-foreground ml-1">
-                    {item.title}
-                  </span>
-                </ComboboxItem>
-              )}
-            </ComboboxList>
-          </ComboboxContent>
-        </Combobox>
-      </div>
+      <RecipientField onChange={setRecipients} recipients={recipients} />
       <ConversationView
+        agents={toAgentOptions(profiles)}
         // Commands must be loaded before the first channel message is sent.
+        // Skills of who will speak — the lead, or a mentioned recipient — not a union of everyone.
         commands={skillCommands}
         disabled={recipients.length === 0}
         messages={sent ? [sent] : []}
@@ -118,15 +85,20 @@ function RouteComponent() {
             </p>
           ) : null
         }
-        onSubmit={async (draft) => {
-          const recipient = recipients[0];
-          if (!recipient || !canSend(recipients, draft.text)) return;
+        onDraftChange={setDraft}
+        onSubmit={async (submitted) => {
+          if (!canSend(recipients, submitted.text)) return;
+
+          const speakerId =
+            resolveSpeaker(memberIds, submitted.agentId) ??
+            memberIds[0] ??
+            null;
 
           setError(null);
-          setSent(seedMessage(draft.text, newId()));
+          setSent(seedMessage(submitted.text, newId()));
 
           try {
-            await start(recipient.id, draft.text);
+            await start(memberIds, submitted.text, speakerId);
           } catch (caught) {
             // Preserve the unsent draft when channel creation fails.
             setSent(null);

@@ -18,8 +18,7 @@ import { agentListQueryOptions } from "@/lib/agents/queries";
 /**
  * Who a conversation that does not exist yet is with.
  *
- * Uses the same recipient list model as compose state, even while channels are capped at one
- * coworker.
+ * Uses the same recipient list model as compose state. A room holds up to eight coworkers.
  */
 export function RecipientField({
   recipients,
