@@ -30,8 +30,8 @@ export function isOrgAdmin(orgRole: OrganizationRole | undefined): boolean {
  * Tests and older callers that never heard of orgs land in the backfilled one. An empty string is
  * treated as missing so an anonymous actor does not invent a fourth state.
  */
-export function orgIdOf(actor: { orgId?: string | null }): string {
-  const orgId = actor.orgId?.trim();
+export function orgIdOf(actor?: { orgId?: string | null } | null): string {
+  const orgId = actor?.orgId?.trim();
   return orgId ? orgId : LOCAL_ORGANIZATION_ID;
 }
 

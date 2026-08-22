@@ -59,6 +59,7 @@ describe("admin connectors API", () => {
         serviceAccountJson,
         impersonationSubject: "admin@example.com",
         actorUserId: "admin",
+        orgId: "org_local",
       },
     ]);
   });
