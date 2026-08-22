@@ -37,7 +37,7 @@ const FILTERS = [
     label: "Blocked",
     // Include every refusal family, not only browser policy refusals.
     search:
-      "?eventType=computer.action_refused,mcp.call_rejected,component.refused,component.function_refused",
+      "?eventType=computer.action_refused,mcp.call_rejected,component.refused,component.function_refused,web.search_refused",
   },
   {
     label: "Did not happen",
@@ -140,7 +140,12 @@ function Row({
     event.eventType === "computer.action_refused" ||
     event.eventType === "component.refused" ||
     event.eventType === "component.function_refused" ||
-    event.eventType === "mcp.call_rejected";
+    event.eventType === "mcp.call_rejected" ||
+    event.eventType === "web.search_refused";
+  const urls = Array.isArray(payload.urls)
+    ? payload.urls.filter((url): url is string => typeof url === "string")
+    : [];
+  const firstUrl = urls[0];
   const stalled = event.eventType === "agent.stream_stalled";
   // Allowed by policy but not carried out. A stalled turn belongs in the same family: the Bot was
   // asked and the answer never arrived. Colour is how this table is read, and a row left in the
@@ -157,7 +162,10 @@ function Row({
         {/* Strip the internal computer tool namespace for display. */}
         {typeof payload.action === "string"
           ? payload.action.replace("computer_", "")
-          : event.eventType}
+          : event.eventType === "web.searched" ||
+              event.eventType === "web.search_refused"
+            ? "search_web"
+            : event.eventType}
       </td>
       <td className="px-4 py-2">
         {/* Named targets and file paths are the audit subject before page elements. */}
@@ -176,6 +184,9 @@ function Row({
         ) : typeof payload.command === "string" ? (
           // The command is the subject of its own row, the way a path is for a file action.
           <span className="font-mono text-xs">{payload.command}</span>
+        ) : typeof payload.query === "string" && payload.query ? (
+          // A search is about the query, the way a shell row is about the command.
+          <span className="font-mono text-xs">{payload.query}</span>
         ) : typeof element === "object" && element?.name ? (
           <span>
             {element.name}
@@ -191,10 +202,15 @@ function Row({
         {/* Page host is meaningful only for browser actions, not workspace file actions. */}
         {typeof payload.file !== "string" &&
         typeof payload.command !== "string" &&
+        typeof payload.query !== "string" &&
         typeof payload.page === "string" &&
         payload.page ? (
           <div className="text-xs text-muted-foreground">
             {hostOf(payload.page)}
+          </div>
+        ) : firstUrl ? (
+          <div className="text-xs text-muted-foreground">
+            {hostOf(firstUrl)}
           </div>
         ) : null}
       </td>
@@ -308,6 +324,9 @@ const DECISIONS: Record<string, string> = {
   "mcp.call_succeeded": "Called on this Bot's behalf",
   "mcp.call_rejected": "Blocked",
   "mcp.call_failed": "The server did not answer",
+
+  "web.searched": "Searched the public web",
+  "web.search_refused": "Blocked",
 
   "configuration.changed": "Configuration changed",
   "credential.created": "Credential saved",

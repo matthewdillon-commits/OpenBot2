@@ -414,6 +414,27 @@ describe("describing a refusal", () => {
     mcp: { server: "notes", tool: "search_notes", effect: "read" },
   };
 
+  test("a refused first-party tool names the tool, not an empty host", () => {
+    const decision = evaluateActionPolicy(
+      { mode: "enforce", deny: ['tool.name == "search_web"'], allow: ["true"] },
+      {
+        tool: { name: "search_web" },
+        bot: { id: "general-assistant" },
+        actor: { id: "dev-local-user" },
+        page: { url: "", host: "" },
+        element: { ref: "", role: "", name: "", type: "" },
+        key: "",
+        file: { path: "", name: "", extension: "" },
+        command: "",
+        intent: "read_tool",
+      },
+    );
+
+    expect(decision.allowed).toBe(false);
+    expect(decision.reason).toContain("search_web");
+    expect(decision.reason).not.toContain(" on  ");
+  });
+
   test("a refused tool call names the tool and the server it was aimed at", () => {
     const decision = evaluateActionPolicy(
       { mode: "enforce", deny: ['mcp.server == "notes"'], allow: ["true"] },

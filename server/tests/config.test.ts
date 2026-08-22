@@ -418,6 +418,14 @@ describe("deployment configuration", () => {
     expect(loadConfig(baseEnvironment).computer).toBeUndefined();
   });
 
+  test("offers web search only when a Tavily key is set", () => {
+    expect(loadConfig(baseEnvironment).tavilyApiKey).toBeUndefined();
+    expect(
+      loadConfig({ ...baseEnvironment, TAVILY_API_KEY: " tvly-test " })
+        .tavilyApiKey,
+    ).toBe("tvly-test");
+  });
+
   test.each([
     ["Docker", "COMPUTER_SUPERVISOR_URL"],
     ["shared", "AGENT_COMPUTER_URL"],

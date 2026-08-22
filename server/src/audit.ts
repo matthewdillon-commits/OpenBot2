@@ -40,6 +40,16 @@ export const auditEventTypes = [
   "connector.sync_succeeded",
   "connector.sync_failed",
   "knowledge.searched",
+  /**
+   * A Bot looked something up on the public web.
+   *
+   * The query and the addresses, never the passages. A snippet is the page's text under another
+   * name, and putting it here would copy somebody else's site into a table with this deployment's
+   * retention. `web.search_refused` is the same attempt when the boundary stopped it before Tavily
+   * was reached, so a trail can tell "nothing matched" from "it was not allowed to ask".
+   */
+  "web.searched",
+  "web.search_refused",
   "agent.invoked",
   /**
    * A Bot's stream stopped producing anything and the turn was ended for it.
