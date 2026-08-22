@@ -10,6 +10,13 @@ export type WakeJob = {
   botId: string;
   actor: AgentActor;
   inbound: ChannelPostedMessage;
+  /**
+   * When set, this job is a child run of that sub-agent, not a member wake.
+   *
+   * Keyed separately so a parent can keep talking while its workers run, and so two
+   * independent sub-agents of the same parent do not serialise on the parent's id.
+   */
+  subagentId?: string;
 };
 
 export type WakeQueue = {
@@ -31,7 +38,10 @@ export type WakeRunner = (job: WakeJob) => Promise<string | null>;
 export function createWakeQueue(run: WakeRunner): WakeQueue {
   const inflight = new Set<string>();
 
-  const keyFor = (job: WakeJob) => `${job.channelId}:${job.botId}`;
+  const keyFor = (job: WakeJob) =>
+    job.subagentId
+      ? `subagent:${job.subagentId}`
+      : `${job.channelId}:${job.botId}`;
 
   return {
     enqueue(job) {
@@ -43,9 +53,12 @@ export function createWakeQueue(run: WakeRunner): WakeQueue {
         .catch((error) => {
           console.error(
             JSON.stringify({
-              type: "channel-wake-failed",
+              type: job.subagentId
+                ? "subagent-run-failed"
+                : "channel-wake-failed",
               channelId: job.channelId,
               botId: job.botId,
+              ...(job.subagentId ? { subagentId: job.subagentId } : {}),
               error: error instanceof Error ? error.message : String(error),
             }),
           );
@@ -56,6 +69,9 @@ export function createWakeQueue(run: WakeRunner): WakeQueue {
     },
     isRunning(botId) {
       for (const key of inflight) {
+        // A child run uses the parent's Bot profile but must not look like the parent is
+        // answering a message: that would block the parent from messaging while a worker runs.
+        if (key.startsWith("subagent:")) continue;
         if (key.endsWith(`:${botId}`)) return true;
       }
       return false;

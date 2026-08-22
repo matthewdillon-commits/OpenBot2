@@ -16,10 +16,21 @@ import {
   startChannelActivityListener,
 } from "./channels/events";
 import { createChannelMessageStore } from "./channels/messages";
-import { createMessagingGateway } from "./channels/messaging";
+import {
+  createMessagingGateway,
+  MESSAGE_AGENT_TOOL,
+  MESSAGE_CHANNEL_TOOL,
+} from "./channels/messaging";
 import { createChannelStore } from "./channels/routes";
 import { messagingTools } from "./channels/tools";
 import { createAgentWakeRunner, createWakeQueue } from "./channels/wake";
+import {
+  createSubagentGateway,
+  SPAWN_SUBAGENT_TOOL,
+} from "./subagents/gateway";
+import { createSubagentRunner } from "./subagents/runner";
+import { createSubagentStore } from "./subagents/store";
+import { reportSubagentTool, subagentTools } from "./subagents/tools";
 import { websocket as channelSocket } from "./channels/socket";
 import { createStallGuard } from "./channels/stall-guard";
 import { createThreadIdentity } from "./channels/thread-identity";
@@ -54,7 +65,11 @@ import { askerFor, createKnowledgeSearch } from "./knowledge/search";
 import { knowledgeSearchTool } from "./knowledge/tool";
 import { createPeopleStore } from "./people/store";
 import { createPluginStore } from "./plugins/store";
-import { type GrantedTool, grantedTools } from "./plugins/tools";
+import {
+  type GrantedTool,
+  grantedTools,
+  REFUSAL_MARKER,
+} from "./plugins/tools";
 import {
   createPackageStatusReader,
   loadTenantPackage,
@@ -384,7 +399,14 @@ const webSearch = config.tavilyApiKey
 const wakeRunner: {
   current: ReturnType<typeof createAgentWakeRunner> | null;
 } = { current: null };
+const subagentRunner: {
+  current: ReturnType<typeof createSubagentRunner> | null;
+} = { current: null };
 const wakeQueue = createWakeQueue(async (job) => {
+  if (job.subagentId) {
+    if (!subagentRunner.current) return null;
+    return subagentRunner.current(job);
+  }
   if (!wakeRunner.current) return null;
   return wakeRunner.current(job);
 });
@@ -400,52 +422,93 @@ wakeRunner.current = createAgentWakeRunner({
   messages: channelMessageStore,
   messaging: () => messagingGateway,
 });
+const subagentStore = createSubagentStore(database);
+const subagentGateway = createSubagentGateway({
+  runs: subagentStore,
+  channels: channelStore,
+  messages: channelMessageStore,
+  auditStore: bootAuditStore,
+  policy: () => policyStore.get(),
+  wake: wakeQueue,
+});
+subagentRunner.current = createSubagentRunner({
+  profiles: agentProfileStore,
+  runs: subagentStore,
+  subagents: () => subagentGateway,
+  loadTools: (job) =>
+    loadToolsForActor(job.actor.id, { subagentId: job.subagentId })(job.botId),
+  signRun: (input) => mintRunAssertion(input, config.keyEncryptionKey),
+  enqueue: (job) => wakeQueue.enqueue(job),
+});
 
 /**
  * What one Bot may call, for the person asking, rebuilt each request.
  *
- * MCP grants still go through the plugin store. Company knowledge, web search and agent messaging
- * sit beside them rather than inside it: they are this deployment's own tools, offered when there
- * is something to search or a coworker to reach, not when an administrator ticked a grant. A
- * framework Bot calls the same list back through `/api/agent-tools/call`.
+ * MCP grants still go through the plugin store. Company knowledge, web search, agent messaging
+ * and sub-agents sit beside them rather than inside it: they are this deployment's own tools,
+ * offered when there is something to search or a coworker to reach, not when an administrator
+ * ticked a grant. A framework Bot calls the same list back through `/api/agent-tools/call`.
+ *
+ * A child run (`subagentId`) is not offered messaging or spawn: it reports to the parent and
+ * does not talk to the person.
  */
-const loadToolsForActor = (actorId: string) => async (botId: string) => {
-  const granted = await grantedTools({
-    store: pluginStore,
-    botId,
-    actorId,
-  });
-  const extra: GrantedTool[] = [
-    ...messagingTools({
-      messaging: messagingGateway,
+const loadToolsForActor =
+  (actorId: string, options?: { subagentId?: string }) =>
+  async (botId: string) => {
+    const granted = await grantedTools({
+      store: pluginStore,
       botId,
-      actor: { id: actorId, role: "user" },
-    }),
-  ];
-  if (await knowledgeSearch.anyDocuments()) {
-    extra.push(
-      knowledgeSearchTool({
-        search: knowledgeSearch,
-        auditStore: bootAuditStore,
-        asker: await askerFor(database, actorId),
-        botId,
-      }),
-    );
-  }
-  if (webSearch) {
-    extra.push(
-      webSearchTool({
-        search: webSearch,
-        auditStore: bootAuditStore,
-        policy: () => policyStore.get(),
-        botId,
-        actorId,
-        actorUserId: actorId,
-      }),
-    );
-  }
-  return extra.length === 0 ? granted : [...granted, ...extra];
-};
+      actorId,
+    });
+    const actor = { id: actorId, role: "user" as const };
+    const extra: GrantedTool[] = [];
+    if (options?.subagentId) {
+      extra.push(
+        reportSubagentTool({
+          subagents: subagentGateway,
+          botId,
+          actor,
+          subagentId: options.subagentId,
+        }),
+      );
+    } else {
+      extra.push(
+        ...messagingTools({
+          messaging: messagingGateway,
+          botId,
+          actor,
+        }),
+        ...subagentTools({
+          subagents: subagentGateway,
+          botId,
+          actor,
+        }),
+      );
+    }
+    if (await knowledgeSearch.anyDocuments()) {
+      extra.push(
+        knowledgeSearchTool({
+          search: knowledgeSearch,
+          auditStore: bootAuditStore,
+          asker: await askerFor(database, actorId),
+          botId,
+        }),
+      );
+    }
+    if (webSearch) {
+      extra.push(
+        webSearchTool({
+          search: webSearch,
+          auditStore: bootAuditStore,
+          policy: () => policyStore.get(),
+          botId,
+          actorId,
+          actorUserId: actorId,
+        }),
+      );
+    }
+    return extra.length === 0 ? granted : [...granted, ...extra];
+  };
 
 const app = createApp(
   config,
@@ -530,8 +593,16 @@ const app = createApp(
   identityProviderStore,
   // First-party tools a framework Bot calls back, by the name it was offered. MCP still has its
   // own path below this when the name is not on that list.
-  async ({ name, args, botId, actorId }) => {
-    const tools = await loadToolsForActor(actorId)(botId);
+  async ({ name, args, botId, actorId, subagentId }) => {
+    if (
+      subagentId &&
+      (name === SPAWN_SUBAGENT_TOOL ||
+        name === MESSAGE_AGENT_TOOL ||
+        name === MESSAGE_CHANNEL_TOOL)
+    ) {
+      return `${REFUSAL_MARKER} A sub-agent cannot message a coworker or start another sub-agent.`;
+    }
+    const tools = await loadToolsForActor(actorId, { subagentId })(botId);
     const tool = tools.find((one) => one.name === name);
     return tool ? tool.execute(args) : null;
   },

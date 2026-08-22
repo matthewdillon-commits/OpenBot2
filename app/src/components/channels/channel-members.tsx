@@ -83,7 +83,9 @@ export function ChannelMembers({ channel }: { channel: AgentChannel }) {
                 <ChannelAvatar participantIds={[member.id]} size={18} />
                 <span className="truncate">{member.name}</span>
               </span>
-              {channel.kind !== "direct" && channel.agentIds.length > 1 ? (
+              {channel.kind !== "direct" &&
+              channel.kind !== "task" &&
+              channel.agentIds.length > 1 ? (
                 <Button
                   disabled={update.isPending}
                   onClick={() => {
@@ -111,7 +113,9 @@ export function ChannelMembers({ channel }: { channel: AgentChannel }) {
           ))}
         </ul>
 
-        {channel.kind === "direct" || channel.agentIds.length >= 8 ? null : (
+        {channel.kind === "direct" ||
+        channel.kind === "task" ||
+        channel.agentIds.length >= 8 ? null : (
           <div className="flex flex-col gap-1">
             <Input
               aria-label="Add a coworker"

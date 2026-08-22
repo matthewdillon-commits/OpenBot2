@@ -21,6 +21,8 @@ import {
   documents,
   intelligenceChannelMappings,
   sessions,
+  subagentRuns,
+  subagentStatus,
   syncRuns,
   userRoles,
   users,
@@ -348,5 +350,36 @@ describe("OpenBot database schema", () => {
     expect(normalizedMigration).toContain(
       `CREATE INDEX "agent_profiles_visibility_deleted_idx" ON "agent_profiles" USING btree ("visibility","deleted_at")`,
     );
+  });
+
+  test("defines a sub-agent run as a finite task, not a coworker", () => {
+    expect(getTableName(subagentRuns)).toBe("subagent_runs");
+    expect(subagentStatus.enumName).toBe("subagent_status");
+    expect(subagentStatus.enumValues).toEqual([
+      "queued",
+      "running",
+      "completed",
+      "blocked",
+      "failed",
+    ]);
+
+    const config = getTableConfig(subagentRuns);
+    expect(config.columns.map((column) => column.name)).toEqual([
+      "id",
+      "parent_agent_id",
+      "actor_user_id",
+      "channel_id",
+      "goal",
+      "success_criteria",
+      "report_back",
+      "follow_up",
+      "follow_up_at",
+      "status",
+      "result",
+      "hop",
+      "created_at",
+      "updated_at",
+      "completed_at",
+    ]);
   });
 });

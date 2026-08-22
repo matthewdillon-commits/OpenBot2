@@ -45,6 +45,12 @@ describe("the run assertion", () => {
     expect(readRunAssertion(signed, KEY)).toEqual(RUN);
   });
 
+  test("carries a sub-agent id when the run is a child", () => {
+    const child = { ...RUN, subagentId: "subagent_1" };
+    const signed = mintRunAssertion(child, KEY);
+    expect(readRunAssertion(signed, KEY)).toEqual(child);
+  });
+
   test("is refused when signed with another key", () => {
     const signed = mintRunAssertion(RUN, "another-key");
     expect(readRunAssertion(signed, KEY)).toBeNull();

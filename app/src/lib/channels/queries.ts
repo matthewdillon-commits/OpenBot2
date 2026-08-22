@@ -8,7 +8,7 @@ import { client } from "@/lib/client";
  * `active` is false once a linked coworker has been deleted: the transcript stays readable, but
  * nothing more can be said in it.
  */
-export type ChannelKind = "channel" | "direct";
+export type ChannelKind = "channel" | "direct" | "task";
 
 export type AgentChannel = {
   id: string;

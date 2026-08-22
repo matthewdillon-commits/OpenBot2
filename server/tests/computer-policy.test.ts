@@ -492,6 +492,29 @@ describe("describing a refusal", () => {
     expect(decision.reason).not.toContain(" on  ");
   });
 
+  test("a refused spawn names the tool, not an empty host", () => {
+    const decision = evaluateActionPolicy(
+      { mode: "enforce", deny: ['intent == "spawn"'], allow: ["true"] },
+      {
+        tool: { name: "spawn_subagent" },
+        bot: { id: "risk" },
+        actor: { id: "dev-local-user" },
+        page: { url: "", host: "" },
+        element: { ref: "", role: "", name: "", type: "" },
+        key: "",
+        file: { path: "", name: "", extension: "" },
+        command: "",
+        intent: "spawn",
+        channel: { id: "" },
+        recipient: { id: "" },
+      },
+    );
+
+    expect(decision.allowed).toBe(false);
+    expect(decision.reason).toContain("spawn_subagent");
+    expect(decision.reason).not.toContain(" on  ");
+  });
+
   test("a refused first-party tool names the tool, not an empty host", () => {
     const decision = evaluateActionPolicy(
       { mode: "enforce", deny: ['tool.name == "search_web"'], allow: ["true"] },

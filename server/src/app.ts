@@ -161,6 +161,7 @@ export function createApp(
     args: unknown;
     botId: string;
     actorId: string;
+    subagentId?: string;
   }) => Promise<string | null>,
   /** Bot-posted channel messages. Absent leaves GET /:id/messages unregistered. */
   channelMessages?: ChannelMessageStore,
@@ -787,6 +788,7 @@ export function createApp(
             args: body.args ?? {},
             botId: verdict.botId,
             actorId: verdict.actorId,
+            ...(verdict.subagentId ? { subagentId: verdict.subagentId } : {}),
           });
           if (text !== null) {
             return context.json({

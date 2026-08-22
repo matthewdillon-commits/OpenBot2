@@ -1,4 +1,15 @@
-import { and, asc, desc, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  isNull,
+  lt,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { Context, MiddlewareHandler } from "hono";
 import { Hono } from "hono";
 import {
@@ -27,7 +38,7 @@ import type { ThreadIdentity } from "./thread-identity";
 
 export { ChannelNotFoundError } from "./errors";
 
-export type ChannelKind = "channel" | "direct";
+export type ChannelKind = "channel" | "direct" | "task";
 
 export type AgentChannel = {
   id: string;
@@ -150,6 +161,7 @@ export type ChannelStore = {
 
 const PRIVATE_AGENT_CHANNEL_DESCRIPTION = "Private agent channel.";
 const DIRECT_AGENT_CHANNEL_DESCRIPTION = "Direct agent channel.";
+const TASK_AGENT_CHANNEL_DESCRIPTION = "Sub-agent task channel.";
 const MAX_CHANNEL_NAME_CODE_POINTS = 120;
 const MAX_ACTIVITY_CODE_POINTS = 200;
 /** Same ceiling the compose screen uses. Enforced here so the UI cap is not ornamental. */
@@ -179,7 +191,9 @@ function channelName(names: string[]) {
 }
 
 function asChannelKind(value: string): ChannelKind {
-  return value === "direct" ? "direct" : "channel";
+  if (value === "direct") return "direct";
+  if (value === "task") return "task";
+  return "channel";
 }
 
 async function readChannel(
@@ -334,7 +348,9 @@ export function createChannelStore(
             description:
               kind === "direct"
                 ? DIRECT_AGENT_CHANNEL_DESCRIPTION
-                : PRIVATE_AGENT_CHANNEL_DESCRIPTION,
+                : kind === "task"
+                  ? TASK_AGENT_CHANNEL_DESCRIPTION
+                  : PRIVATE_AGENT_CHANNEL_DESCRIPTION,
           });
           await transaction.insert(channelMemberships).values({
             channelId: id,
@@ -391,9 +407,14 @@ export function createChannelStore(
           ),
         )
         .where(
-          cursor
-            ? sql`(coalesce(${channels.lastMessageAt}, ${channels.createdAt}), ${channels.id}) < (${cursor.recency}::timestamptz, ${cursor.id})`
-            : undefined,
+          and(
+            // A task channel is the parent↔child brief, not a conversation somebody can open.
+            // Leaving it on the roster would give a sub-agent a composer of its own.
+            ne(channels.kind, "task"),
+            cursor
+              ? sql`(coalesce(${channels.lastMessageAt}, ${channels.createdAt}), ${channels.id}) < (${cursor.recency}::timestamptz, ${cursor.id})`
+              : undefined,
+          ),
         )
         .orderBy(
           sql`coalesce(${channels.lastMessageAt}, ${channels.createdAt}) desc`,
@@ -507,6 +528,14 @@ export function createChannelStore(
           // is not something an outsider can probe for.
           if (!membership) throw new ChannelNotFoundError(channelId);
 
+          const [channel] = await transaction
+            .select({ kind: channels.kind })
+            .from(channels)
+            .where(eq(channels.id, channelId));
+          // A task channel has no roster row and must not grow one: announcing it would make
+          // the sidebar refetch an unknown id and look like a conversation appeared.
+          if (channel?.kind === "task") return;
+
           if (activity.agentId !== null) {
             const [linked] = await transaction
               .select({ agentId: channelAgents.agentId })
@@ -582,6 +611,12 @@ export function createChannelStore(
             throw new ChannelMembershipError(
               "A direct channel is always those two coworkers.",
             );
+          }
+          if (
+            current.kind === "task" &&
+            (addAgentIds.length > 0 || removeAgentIds.size > 0)
+          ) {
+            throw new ChannelMembershipError("A sub-agent task is not a room.");
           }
           const nextAgentIds = [
             ...current.agentIds.filter((id) => !removeAgentIds.has(id)),

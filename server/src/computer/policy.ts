@@ -123,7 +123,15 @@ export type PolicyContext = {
      * Its own intent because it is neither a computer action nor an MCP write: there is no page,
      * no file and no vendor. A rule can name `tool.name == "message_agent"` or `intent == "message"`.
      */
-    | "message";
+    | "message"
+    /**
+     * A Bot starting a sub-agent, or that sub-agent reporting back.
+     *
+     * Separate from `message` so a deployment can forbid background workers without silencing
+     * coworker DMs, and the other way around. `tool.name == "spawn_subagent"` names the start;
+     * `intent == "spawn"` covers the start and the report.
+     */
+    | "spawn";
   /**
    * The file a `computer_read_file` or `computer_write_file` call is aimed at.
    *
@@ -357,7 +365,8 @@ function describeRefusal(context: PolicyContext, expression: string): string {
   if (
     context.intent === "read_tool" ||
     context.intent === "write_tool" ||
-    context.intent === "message"
+    context.intent === "message" ||
+    context.intent === "spawn"
   ) {
     return (
       `This deployment's policy does not allow that: ${context.tool.name} ` +

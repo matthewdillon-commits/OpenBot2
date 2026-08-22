@@ -111,3 +111,54 @@ export const channelMessages = pgTable(
     ),
   ],
 );
+
+export const subagentStatus = pgEnum("subagent_status", [
+  "queued",
+  "running",
+  "completed",
+  "blocked",
+  "failed",
+]);
+
+/**
+ * A finite background run a Bot started, not a coworker.
+ *
+ * The parent stays a coworker. This row is the chunk of work: the brief, the status, and the
+ * result that wakes the parent when the child is done. There is no second agent directory and
+ * no composer. The task channel named here holds the brief and the report so the existing
+ * wake path can deliver the result; it is hidden from the roster.
+ */
+export const subagentRuns = pgTable(
+  "subagent_runs",
+  {
+    id: text("id").primaryKey(),
+    parentAgentId: text("parent_agent_id")
+      .notNull()
+      .references(() => agents.id, { onDelete: "cascade" }),
+    actorUserId: text("actor_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    channelId: text("channel_id")
+      .notNull()
+      .references(() => channels.id, { onDelete: "cascade" }),
+    goal: text("goal").notNull(),
+    successCriteria: text("success_criteria").notNull(),
+    reportBack: text("report_back").notNull(),
+    /** Latest correction from the parent. Same worker; not a new run. */
+    followUp: text("follow_up"),
+    followUpAt: timestamp("follow_up_at", { withTimezone: true }),
+    status: subagentStatus("status").notNull().default("queued"),
+    result: text("result"),
+    hop: integer("hop").notNull().default(1),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("subagent_runs_parent_created_idx").on(
+      table.parentAgentId,
+      table.createdAt,
+    ),
+    index("subagent_runs_channel_idx").on(table.channelId),
+  ],
+);

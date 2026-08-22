@@ -230,6 +230,17 @@ export const auditEventTypes = [
    */
   "channel.message_sent",
   "channel.message_refused",
+  /**
+   * A Bot started a finite background worker, or the boundary stopped it.
+   *
+   * The trail already records every send that wakes another coworker. Starting a sub-agent is
+   * the same kind of governed action: resolve, decide, write the row, then act. The report
+   * that later wakes the parent is `subagent.reported`. Empty briefs are refused before a
+   * row is written, because they are not an action that happened.
+   */
+  "subagent.started",
+  "subagent.refused",
+  "subagent.reported",
 ] as const;
 
 export type AuditEventType = (typeof auditEventTypes)[number];

@@ -440,15 +440,20 @@ export function ChannelChat({
         busy={agent.isRunning}
         // The `/` menu follows who will speak — a mentioned member, else the current speaker.
         commands={skillCommands}
-        // Readiness is handled by `say`; deletion is the only disabled-chat state.
-        disabled={!channel.active}
+        // Readiness is handled by `say`. A task channel is a sub-agent brief, not a conversation.
+        disabled={!channel.active || channel.kind === "task"}
         messages={transcriptMessages(
           agent.messages,
           seed.message,
           postedMessages ?? [],
         )}
         notice={
-          channel.active ? null : (
+          channel.kind === "task" ? (
+            <p className="pb-2 text-sm text-muted-foreground" role="status">
+              This is a sub-agent task. It has no composer. The parent is woken
+              when the worker reports back. The record is the audit trail.
+            </p>
+          ) : channel.active ? null : (
             <p className="pb-2 text-sm text-muted-foreground" role="status">
               A coworker in this channel has been deleted. The conversation
               stays readable, but it can no longer reply.

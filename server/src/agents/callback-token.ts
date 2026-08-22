@@ -78,6 +78,13 @@ export type RunAssertion = {
   actorId: string;
   /** The run itself, so a trail can tie a tool call to the answer it informed. */
   runId: string;
+  /**
+   * When set, this run is a sub-agent, not the parent's conversation.
+   *
+   * The child uses the parent's Bot token, so the assertion is what tells a tool call it must
+   * not spawn or message. Absent on every ordinary run.
+   */
+  subagentId?: string;
 };
 
 type SignedRun = RunAssertion & { exp: number };
@@ -132,6 +139,9 @@ export function readRunAssertion(
       botId: payload.botId,
       actorId: payload.actorId,
       runId: payload.runId,
+      ...(typeof payload.subagentId === "string" && payload.subagentId
+        ? { subagentId: payload.subagentId }
+        : {}),
     };
   } catch {
     return null;
@@ -139,7 +149,7 @@ export function readRunAssertion(
 }
 
 export type CallVerdict =
-  | { ok: true; botId: string; actorId: string }
+  | { ok: true; botId: string; actorId: string; subagentId?: string }
   | { ok: false; status: 401 | 403; reason: string };
 
 /**
@@ -206,5 +216,10 @@ export async function authoriseAgentCall(options: {
     };
   }
 
-  return { ok: true, botId: assertion.botId, actorId: assertion.actorId };
+  return {
+    ok: true,
+    botId: assertion.botId,
+    actorId: assertion.actorId,
+    ...(assertion.subagentId ? { subagentId: assertion.subagentId } : {}),
+  };
 }
