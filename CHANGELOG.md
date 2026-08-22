@@ -47,6 +47,7 @@ Sessions survive and nobody signs in again.
 ### Added
 
 - **An administrator can switch browser use off**, under Admin → Boundaries, so Bots are not offered the computer tools and do not try to open pages. The switch is not a CEL rule and is not dry-runnable: the chat surface skips the tools, built-in Bots are not told they have a computer, and the gateway refuses every computer action. MCP tools are not this — a deployment that has turned the browser off can still let a Bot talk to Jira. A deployment that has never said otherwise stays on.
+- **Bots can search the public web.** A deployment with `TAVILY_API_KEY` offers every Bot a `search_web` tool: titles, links and short passages, so a fact can be cited without opening a browser. The call is judged by the same policy MCP is (`tool.name == "search_web"` or `intent == "read_tool"`) and written on the trail as `web.searched` / `web.search_refused` — the query and the addresses, never the passages. Absent key, the tool is not offered. A framework Bot that calls it back through `/api/agent-tools/call` now reaches first-party tools as well as MCP, which also lets `search_company_knowledge` run on a remote Bot.
 - **A Bot can answer from a connected source, as the person asking.** The connectors have been
   writing `documents`, `chunks` and `document_acls` and nothing ever read them back, so a deployment
   that connected a source got rows in PostgreSQL and still no citation. A Bot now has a

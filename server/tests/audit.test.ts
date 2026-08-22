@@ -42,6 +42,8 @@ describe("audit payload redaction", () => {
         "connector.sync_succeeded",
         "connector.sync_failed",
         "knowledge.searched",
+        "web.searched",
+        "web.search_refused",
         "agent.invoked",
         "mcp.call_succeeded",
         "mcp.call_rejected",

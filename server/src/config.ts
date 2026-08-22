@@ -166,6 +166,11 @@ export type DeploymentConfig = {
    * than an open door.
    */
   agentToolToken?: string;
+  /**
+   * Tavily key. Absent means `search_web` is not offered, rather than offered and failing: a
+   * capability that is not configured should be missing, not broken.
+   */
+  tavilyApiKey?: string;
 };
 
 type Environment = Record<string, string | undefined>;
@@ -607,6 +612,9 @@ export function loadConfig(
     computer: computerConfig(environment),
     ...(optional(environment, "AGENT_TOOL_TOKEN")
       ? { agentToolToken: optional(environment, "AGENT_TOOL_TOKEN") as string }
+      : {}),
+    ...(optional(environment, "TAVILY_API_KEY")
+      ? { tavilyApiKey: optional(environment, "TAVILY_API_KEY") as string }
       : {}),
   };
 }

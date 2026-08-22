@@ -50,12 +50,14 @@ import { askerFor, createKnowledgeSearch } from "./knowledge/search";
 import { knowledgeSearchTool } from "./knowledge/tool";
 import { createPeopleStore } from "./people/store";
 import { createPluginStore } from "./plugins/store";
-import { grantedTools } from "./plugins/tools";
+import { type GrantedTool, grantedTools } from "./plugins/tools";
 import {
   createPackageStatusReader,
   loadTenantPackage,
   synchronizeTenantPackage,
 } from "./tenant-package";
+import { tavilySearch } from "./web-search/tavily";
+import { webSearchTool } from "./web-search/tool";
 
 /**
  * Who is asking, for a CopilotKit request.
@@ -363,6 +365,50 @@ const stallGuard = createStallGuard({
   auditStore: bootAuditStore,
 });
 
+const webSearch = config.tavilyApiKey
+  ? tavilySearch(config.tavilyApiKey)
+  : undefined;
+
+/**
+ * What one Bot may call, for the person asking, rebuilt each request.
+ *
+ * MCP grants still go through the plugin store. Company knowledge and web search sit beside them
+ * rather than inside it: they are this deployment's own tools, offered when there is something to
+ * search or a key to spend, not when an administrator ticked a grant. A framework Bot calls the
+ * same list back through `/api/agent-tools/call`.
+ */
+const loadToolsForActor = (actorId: string) => async (botId: string) => {
+  const granted = await grantedTools({
+    store: pluginStore,
+    botId,
+    actorId,
+  });
+  const extra: GrantedTool[] = [];
+  if (await knowledgeSearch.anyDocuments()) {
+    extra.push(
+      knowledgeSearchTool({
+        search: knowledgeSearch,
+        auditStore: bootAuditStore,
+        asker: await askerFor(database, actorId),
+        botId,
+      }),
+    );
+  }
+  if (webSearch) {
+    extra.push(
+      webSearchTool({
+        search: webSearch,
+        auditStore: bootAuditStore,
+        policy: () => policyStore.get(),
+        botId,
+        actorId,
+        actorUserId: actorId,
+      }),
+    );
+  }
+  return extra.length === 0 ? granted : [...granted, ...extra];
+};
+
 const app = createApp(
   config,
   auth,
@@ -400,33 +446,7 @@ const app = createApp(
     identifyUser,
     identifyActor,
     stallGuard,
-    // Tools run here, not in the browser. Each one still executes through the plugin store, so the
-    // grant, the policy and the audit row are exactly where they were.
-    //
-    // The knowledge search is beside them rather than inside the plugin store, because it has no
-    // vendor to reach: it is a query against this deployment's own tables, and it writes its own
-    // `knowledge.searched` row. It is offered without a per-Bot grant because the ACL filter in the
-    // query is the access control — the search runs on the asker's principals, so no Bot can return a
-    // document the person asking could not open themselves. Offered only when there is something to
-    // search, so a deployment that has connected nothing does not describe a tool that can only
-    // answer "nothing found".
-    (actorId) => async (botId) => {
-      const granted = await grantedTools({
-        store: pluginStore,
-        botId,
-        actorId,
-      });
-      if (!(await knowledgeSearch.anyDocuments())) return granted;
-      return [
-        ...granted,
-        knowledgeSearchTool({
-          search: knowledgeSearch,
-          auditStore: bootAuditStore,
-          asker: await askerFor(database, actorId),
-          botId,
-        }),
-      ];
-    },
+    loadToolsForActor,
     /*
      * What the deployment tells a remote Bot about the run it is starting.
      *
@@ -470,6 +490,13 @@ const app = createApp(
   // The enterprise identity providers registered here. Read as facts about the deployment rather
   // than through Better Auth's own listing, which answers per person. See identity-provider-store.ts.
   identityProviderStore,
+  // First-party tools a framework Bot calls back, by the name it was offered. MCP still has its
+  // own path below this when the name is not on that list.
+  async ({ name, args, botId, actorId }) => {
+    const tools = await loadToolsForActor(actorId)(botId);
+    const tool = tools.find((one) => one.name === name);
+    return tool ? tool.execute(args) : null;
+  },
 );
 
 /**

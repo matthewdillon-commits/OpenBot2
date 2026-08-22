@@ -148,6 +148,19 @@ export function createApp(
    * metadata in. See identity-provider-store.ts.
    */
   identityProviders?: IdentityProviderStore,
+  /**
+   * A first-party tool a framework Bot called back, by the name it was offered.
+   *
+   * The MCP path below only understands `server/tool`. Company knowledge and web search are not
+   * that, and a Bot that called them through this route was told they were not a tool. Return the
+   * result when the name is yours; return null and the MCP path runs.
+   */
+  executeGrantedTool?: (input: {
+    name: string;
+    args: unknown;
+    botId: string;
+    actorId: string;
+  }) => Promise<string | null>,
 ) {
   const app = new Hono<{ Variables: AppVariables }>();
 
@@ -757,6 +770,28 @@ export function createApp(
 
       if (!body?.name) {
         return context.json({ error: "A tool is required." }, 400);
+      }
+
+      if (executeGrantedTool) {
+        try {
+          const text = await executeGrantedTool({
+            name: body.name,
+            args: body.args ?? {},
+            botId: verdict.botId,
+            actorId: verdict.actorId,
+          });
+          if (text !== null) {
+            return context.json({
+              text,
+              isError: text.startsWith(REFUSAL_MARKER),
+            });
+          }
+        } catch (error) {
+          return context.json({
+            text: `${REFUSAL_MARKER} ${error instanceof Error ? error.message : "That tool could not be called."}`,
+            isError: true,
+          });
+        }
       }
 
       try {

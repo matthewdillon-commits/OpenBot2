@@ -336,6 +336,14 @@ function describeRefusal(context: PolicyContext, expression: string): string {
       `${context.mcp.server} is blocked by the rule \`${expression}\`.`
     );
   }
+  // A first-party tool call has no page, no file and no MCP server. Falling through would produce
+  // "a search_web action on " with an empty host.
+  if (context.intent === "read_tool" || context.intent === "write_tool") {
+    return (
+      `This deployment's policy does not allow that: ${context.tool.name} ` +
+      `is blocked by the rule \`${expression}\`.`
+    );
+  }
   // A file refusal must not be phrased as happening "on <host>": the workspace has nothing to do with
   // whatever page the browser happens to be showing, and saying so sends somebody to the wrong place.
   if (context.file?.path) {
