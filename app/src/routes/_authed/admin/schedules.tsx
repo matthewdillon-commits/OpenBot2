@@ -169,7 +169,9 @@ function SchedulesPage() {
                       <Field data-invalid={isInvalid}>
                         <FieldLabel htmlFor={field.name}>Coworker</FieldLabel>
                         <Select
-                          onValueChange={field.handleChange}
+                          onValueChange={(value) => {
+                            if (value) field.handleChange(value);
+                          }}
                           value={field.state.value}
                         >
                           <SelectTrigger
@@ -203,11 +205,15 @@ function SchedulesPage() {
                     <Field>
                       <FieldLabel htmlFor={field.name}>When</FieldLabel>
                       <Select
-                        onValueChange={(value) =>
-                          field.handleChange(
-                            value as ScheduleFormValues["kind"],
-                          )
-                        }
+                        onValueChange={(value) => {
+                          if (
+                            value === "cron" ||
+                            value === "webhook" ||
+                            value === "email"
+                          ) {
+                            field.handleChange(value);
+                          }
+                        }}
                         value={field.state.value}
                       >
                         <SelectTrigger id={field.name}>
