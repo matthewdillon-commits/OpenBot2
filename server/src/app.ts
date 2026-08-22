@@ -38,6 +38,9 @@ import type { ConnectorAdminService } from "./connectors";
 import type { CredentialAdminService, CredentialInput } from "./credentials";
 import { createIntelligenceClient } from "./intelligence-client";
 import type { PeopleStore } from "./people/store";
+import { orgIdOf } from "./orgs/constants";
+import { createOrganizationRoutes } from "./orgs/routes";
+import type { OrganizationStore } from "./orgs/store";
 import { createPluginRoutes } from "./plugins/routes";
 import type { PluginStore } from "./plugins/store";
 import { REFUSAL_MARKER } from "./plugins/tools";
@@ -160,7 +163,9 @@ export function createApp(
     args: unknown;
     botId: string;
     actorId: string;
+    orgId?: string;
   }) => Promise<string | null>,
+  organizationStore?: OrganizationStore,
 ) {
   const app = new Hono<{ Variables: AppVariables }>();
 
@@ -256,12 +261,34 @@ export function createApp(
   const requireUser = config.singleUser
     ? createDevRequireUser()
     : auth && roleRepository
-      ? createRequireUser(auth, roleRepository)
+      ? createRequireUser(
+          auth,
+          roleRepository,
+          organizationStore,
+          config.platformSuperadmins,
+        )
       : authenticationUnavailable;
 
-  app.get("/api/me", requireUser, (context) =>
-    context.json({ user: context.var.actor }),
-  );
+  if (organizationStore) {
+    app.route(
+      "/",
+      createOrganizationRoutes(
+        organizationStore,
+        config.platformSuperadmins,
+        requireUser,
+      ),
+    );
+  }
+
+  app.get("/api/me", requireUser, async (context) => {
+    const organizations = organizationStore
+      ? await organizationStore.listForUser(context.var.actor.id)
+      : [];
+    return context.json({
+      user: context.var.actor,
+      organizations,
+    });
+  });
   app.get("/api/admin/status", requireUser, (context) => {
     const denied = requireAdmin(context);
     return denied ?? context.json({ status: "ok" });
@@ -276,7 +303,10 @@ export function createApp(
     }
 
     return context.json(
-      await auditReader.list(auditQueryFromUrl(new URL(context.req.url))),
+      await auditReader.list({
+        ...auditQueryFromUrl(new URL(context.req.url)),
+        orgId: orgIdOf(context.var.actor),
+      }),
     );
   });
   /*
@@ -306,6 +336,7 @@ export function createApp(
 
     return context.json(
       await peopleStore.list({
+        orgId: orgIdOf(context.var.actor),
         ...(url.searchParams.get("search")
           ? { search: url.searchParams.get("search") as string }
           : {}),
@@ -336,7 +367,8 @@ export function createApp(
     }
 
     const userId = context.req.param("userId");
-    const person = await peopleStore.find(userId);
+    const orgId = orgIdOf(context.var.actor);
+    const person = await peopleStore.find(userId, orgId);
     if (!person) {
       return context.json({ error: "That person is not here." }, 404);
     }
@@ -374,7 +406,7 @@ export function createApp(
     }
 
     if (person.role !== role) {
-      await peopleStore.setRole(userId, role);
+      await peopleStore.setRole(userId, role, orgId);
       await recordPersonEvent(
         auditStore,
         context,
@@ -387,7 +419,7 @@ export function createApp(
       );
     }
 
-    return context.json({ person: await peopleStore.find(userId) });
+    return context.json({ person: await peopleStore.find(userId, orgId) });
   });
 
   app.post("/api/admin/people/:userId/access", requireUser, async (context) => {
@@ -406,7 +438,8 @@ export function createApp(
     }
 
     const userId = context.req.param("userId");
-    const person = await peopleStore.find(userId);
+    const orgId = orgIdOf(context.var.actor);
+    const person = await peopleStore.find(userId, orgId);
     if (!person) {
       return context.json({ error: "That person is not here." }, 404);
     }
@@ -431,9 +464,9 @@ export function createApp(
 
     if (person.revoked !== revoked) {
       if (revoked) {
-        await peopleStore.revoke(userId, context.var.actor.id);
+        await peopleStore.revoke(userId, context.var.actor.id, orgId);
       } else {
-        await peopleStore.restore(userId);
+        await peopleStore.restore(userId, orgId);
       }
       await recordPersonEvent(
         auditStore,
@@ -444,7 +477,7 @@ export function createApp(
       );
     }
 
-    return context.json({ person: await peopleStore.find(userId) });
+    return context.json({ person: await peopleStore.find(userId, orgId) });
   });
 
   /*
@@ -526,7 +559,9 @@ export function createApp(
       );
     }
 
-    return context.json({ credentials: await credentialService.list() });
+    return context.json({
+      credentials: await credentialService.list(orgIdOf(context.var.actor)),
+    });
   });
   app.post("/api/admin/credentials", requireUser, async (context) => {
     const denied = requireAdmin(context);
@@ -541,7 +576,11 @@ export function createApp(
     }
 
     const body = await context.req.json().catch(() => null);
-    const input = credentialInput(body, context.var.actor.id);
+    const input = credentialInput(
+      body,
+      context.var.actor.id,
+      orgIdOf(context.var.actor),
+    );
     if (!input) {
       return context.json({ error: "Credential input is invalid." }, 400);
     }
@@ -567,7 +606,11 @@ export function createApp(
       }
 
       const body = await context.req.json().catch(() => null);
-      const input = credentialInput(body, context.var.actor.id);
+      const input = credentialInput(
+        body,
+        context.var.actor.id,
+        orgIdOf(context.var.actor),
+      );
       if (!input) {
         return context.json({ error: "Credential input is invalid." }, 400);
       }
@@ -599,6 +642,7 @@ export function createApp(
         credential: await credentialService.revoke(
           context.req.param("credentialId"),
           context.var.actor.id,
+          orgIdOf(context.var.actor),
         ),
       });
     },
@@ -621,7 +665,9 @@ export function createApp(
       );
     }
 
-    return context.json({ connectors: await connectorService.list() });
+    return context.json({
+      connectors: await connectorService.list(orgIdOf(context.var.actor)),
+    });
   });
   app.post(
     "/api/admin/connectors/google-drive/setup",
@@ -640,7 +686,12 @@ export function createApp(
       if (!input)
         return context.json({ error: "Google Drive setup is invalid." }, 400);
       return context.json(
-        { connector: await connectorService.configureGoogleDrive(input) },
+        {
+          connector: await connectorService.configureGoogleDrive({
+            ...input,
+            orgId: orgIdOf(context.var.actor),
+          }),
+        },
         201,
       );
     },
@@ -779,6 +830,7 @@ export function createApp(
             args: body.args ?? {},
             botId: verdict.botId,
             actorId: verdict.actorId,
+            orgId: verdict.orgId,
           });
           if (text !== null) {
             return context.json({
@@ -802,6 +854,7 @@ export function createApp(
           botId: verdict.botId,
           // From the assertion, never the body: this is the name the audit row will carry.
           actorId: verdict.actorId,
+          orgId: verdict.orgId,
         });
         return context.json({ text: result.text, isError: result.isError });
       } catch (error) {
@@ -907,6 +960,7 @@ function googleDriveSetupInput(value: unknown, actorUserId: string) {
 function credentialInput(
   value: unknown,
   actorUserId: string,
+  orgId?: string,
 ): CredentialInput | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
@@ -934,5 +988,6 @@ function credentialInput(
     metadata: body.metadata as Record<string, unknown>,
     plaintext: body.plaintext,
     actorUserId,
+    orgId,
   };
 }

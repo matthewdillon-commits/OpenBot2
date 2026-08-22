@@ -78,6 +78,8 @@ export type RunAssertion = {
   actorId: string;
   /** The run itself, so a trail can tie a tool call to the answer it informed. */
   runId: string;
+  /** The organization this run belongs to. Required on new assertions. */
+  orgId?: string;
 };
 
 type SignedRun = RunAssertion & { exp: number };
@@ -128,10 +130,14 @@ export function readRunAssertion(
       return null;
     }
     if (payload.exp <= now) return null;
+    if (payload.orgId !== undefined && typeof payload.orgId !== "string") {
+      return null;
+    }
     return {
       botId: payload.botId,
       actorId: payload.actorId,
       runId: payload.runId,
+      ...(payload.orgId ? { orgId: payload.orgId } : {}),
     };
   } catch {
     return null;
@@ -139,7 +145,7 @@ export function readRunAssertion(
 }
 
 export type CallVerdict =
-  | { ok: true; botId: string; actorId: string }
+  | { ok: true; botId: string; actorId: string; orgId?: string }
   | { ok: false; status: 401 | 403; reason: string };
 
 /**
@@ -168,7 +174,7 @@ export async function authoriseAgentCall(options: {
    */
   legacyToken?: string;
   /** Which agent holds a token hash, if any. */
-  lookup: (hash: string) => Promise<{ id: string } | null>;
+  lookup: (hash: string) => Promise<{ id: string; orgId?: string } | null>;
   now?: number;
 }): Promise<CallVerdict> {
   const { presented, run, encryptionKey, legacyToken, lookup, now } = options;
@@ -187,7 +193,7 @@ export async function authoriseAgentCall(options: {
   const caller = looksLikeCallbackToken(presented)
     ? await lookup(hashCallbackToken(presented))
     : legacyToken && sameToken(presented, legacyToken)
-      ? { id: assertion.botId }
+      ? { id: assertion.botId, orgId: assertion.orgId }
       : null;
 
   if (!caller) return { ok: false, status: 401, reason: "Not authorised." };
@@ -206,5 +212,22 @@ export async function authoriseAgentCall(options: {
     };
   }
 
-  return { ok: true, botId: assertion.botId, actorId: assertion.actorId };
+  if (
+    assertion.orgId &&
+    caller.orgId &&
+    caller.orgId !== assertion.orgId
+  ) {
+    return {
+      ok: false,
+      status: 403,
+      reason: "That token is not for this organization.",
+    };
+  }
+
+  return {
+    ok: true,
+    botId: assertion.botId,
+    actorId: assertion.actorId,
+    orgId: assertion.orgId ?? caller.orgId,
+  };
 }

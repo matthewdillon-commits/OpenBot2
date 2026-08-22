@@ -41,8 +41,9 @@ export function knowledgeSearchTool(options: {
   auditStore: AuditStore;
   asker: KnowledgeAsker;
   botId: string;
+  orgId?: string;
 }): GrantedTool {
-  const { search, auditStore, asker, botId } = options;
+  const { search, auditStore, asker, botId, orgId } = options;
 
   return {
     name: KNOWLEDGE_TOOL_NAME,
@@ -64,6 +65,7 @@ export function knowledgeSearchTool(options: {
       const citations = await search.search({
         asker,
         query: parsed.data.query,
+        orgId,
       });
 
       /*
@@ -80,6 +82,7 @@ export function knowledgeSearchTool(options: {
         eventType: "knowledge.searched",
         targetType: "knowledge",
         targetId: botId,
+        orgId,
         actorUserId: asker.userId,
         payload: {
           bot: botId,

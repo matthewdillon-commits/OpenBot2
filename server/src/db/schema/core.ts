@@ -15,6 +15,7 @@ import {
 // NOT drizzle's `jsonb`: that one serialises, and so does the driver, so every object landed as a
 // JSON string and nothing in this database could be queried by a JSON field. See ./json.ts.
 import { jsonb } from "./json";
+import { LOCAL_ORGANIZATION_ID } from "../../orgs/constants";
 
 const createdAt = () =>
   timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
@@ -22,6 +23,15 @@ const updatedAt = () =>
   timestamp("updated_at", { withTimezone: true }).notNull().defaultNow();
 
 export const role = pgEnum("role", ["admin", "user"]);
+export const organizationRole = pgEnum("organization_role", [
+  "owner",
+  "admin",
+  "member",
+]);
+export const organizationStatus = pgEnum("organization_status", [
+  "active",
+  "suspended",
+]);
 export const agentType = pgEnum("agent_type", ["built_in", "remote_ag_ui"]);
 export const credentialKind = pgEnum("credential_kind", [
   "model",
@@ -62,6 +72,96 @@ export const users = pgTable("users", {
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
+
+/**
+ * A customer on this hosted service.
+ *
+ * One row per company. People sign in once and join through memberships; the org is the
+ * isolation boundary for every tenant-owned table.
+ */
+export const organizations = pgTable("organizations", {
+  id: text("id").primaryKey(),
+  slug: text("slug").notNull().unique(),
+  name: text("name").notNull(),
+  status: organizationStatus("status").notNull().default("active"),
+  /** String until billing exists. Sales-led pilots start as `enterprise`. */
+  plan: text("plan").notNull().default("enterprise"),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const organizationMemberships = pgTable(
+  "organization_memberships",
+  {
+    orgId: text("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    role: organizationRole("role").notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [primaryKey({ columns: [table.orgId, table.userId] })],
+);
+
+export const organizationInvites = pgTable(
+  "organization_invites",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    role: organizationRole("role").notNull(),
+    tokenHash: text("token_hash").notNull().unique(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    invitedBy: text("invited_by").notNull(),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index("organization_invites_org_email_idx").on(table.orgId, table.email),
+  ],
+);
+
+export const organizationSettings = pgTable("organization_settings", {
+  orgId: text("org_id")
+    .primaryKey()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  displayName: text("display_name"),
+  logoUrl: text("logo_url"),
+  defaultModel: text("default_model"),
+  featureFlags: jsonb("feature_flags").notNull().default({}),
+  updatedAt: updatedAt(),
+});
+
+/**
+ * Which org the last request chose, so an API call that is not under `/o/:slug` still
+ * knows where it is. Better Auth owns `sessions`; this is ours.
+ */
+export const userPreferences = pgTable("user_preferences", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  activeOrgId: text("active_org_id").references(() => organizations.id, {
+    onDelete: "set null",
+  }),
+  updatedAt: updatedAt(),
+});
+
+/**
+ * The org a tenant-owned row belongs to.
+ *
+ * Default is the backfilled local org so a test insert that has not heard of tenancy still
+ * lands somewhere real. Production writes always set this from the session.
+ */
+export function organizationIdColumn() {
+  return text("org_id")
+    .notNull()
+    .default(LOCAL_ORGANIZATION_ID)
+    .references(() => organizations.id, { onDelete: "restrict" });
+}
 
 export const sessions = pgTable("sessions", {
   id: text("id").primaryKey(),
@@ -192,6 +292,7 @@ export const ssoProviders = pgTable("sso_providers", {
  */
 export const revokedAccess = pgTable("revoked_access", {
   email: text("email").primaryKey(),
+  orgId: organizationIdColumn(),
   revokedAt: timestamp("revoked_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -211,6 +312,7 @@ export const deploymentPackages = pgTable("deployment_packages", {
 
 export const agents = pgTable("agents", {
   id: text("id").primaryKey(),
+  orgId: organizationIdColumn(),
   name: text("name").notNull(),
   type: agentType("type").notNull(),
   configuration: jsonb("configuration").notNull(),
@@ -226,6 +328,7 @@ export const channels = pgTable(
   "channels",
   {
     id: text("id").primaryKey(),
+    orgId: organizationIdColumn(),
     name: text("name").notNull(),
     description: text("description").notNull(),
     suggestedPrompts: text("suggested_prompts").array().notNull().default([]),
@@ -287,6 +390,7 @@ export const channels = pgTable(
 export const channelMemberships = pgTable(
   "channel_memberships",
   {
+    orgId: organizationIdColumn(),
     channelId: text("channel_id")
       .notNull()
       .references(() => channels.id, { onDelete: "cascade" }),
@@ -301,6 +405,7 @@ export const channelMemberships = pgTable(
 export const channelAgents = pgTable(
   "channel_agents",
   {
+    orgId: organizationIdColumn(),
     channelId: text("channel_id")
       .notNull()
       .references(() => channels.id, { onDelete: "cascade" }),
@@ -319,6 +424,7 @@ export const channelAgents = pgTable(
 
 export const credentials = pgTable("credentials", {
   id: uuid("id").primaryKey().defaultRandom(),
+  orgId: organizationIdColumn(),
   kind: credentialKind("kind").notNull(),
   provider: text("provider").notNull(),
   encryptedValue: text("encrypted_value").notNull(),
@@ -331,6 +437,7 @@ export const credentials = pgTable("credentials", {
 
 export const connectorInstances = pgTable("connector_instances", {
   id: uuid("id").primaryKey().defaultRandom(),
+  orgId: organizationIdColumn(),
   type: connectorType("type").notNull(),
   credentialId: uuid("credential_id").references(() => credentials.id, {
     onDelete: "set null",
@@ -342,6 +449,7 @@ export const connectorInstances = pgTable("connector_instances", {
 });
 
 export const connectorCursors = pgTable("connector_cursors", {
+  orgId: organizationIdColumn(),
   connectorInstanceId: uuid("connector_instance_id")
     .primaryKey()
     .references(() => connectorInstances.id, { onDelete: "cascade" }),
@@ -351,6 +459,7 @@ export const connectorCursors = pgTable("connector_cursors", {
 
 export const webhookSubscriptions = pgTable("webhook_subscriptions", {
   id: uuid("id").primaryKey().defaultRandom(),
+  orgId: organizationIdColumn(),
   connectorInstanceId: uuid("connector_instance_id")
     .notNull()
     .references(() => connectorInstances.id, { onDelete: "cascade" }),
@@ -363,6 +472,7 @@ export const syncRuns = pgTable(
   "sync_runs",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    orgId: organizationIdColumn(),
     connectorInstanceId: uuid("connector_instance_id")
       .notNull()
       .references(() => connectorInstances.id, { onDelete: "cascade" }),
@@ -386,6 +496,7 @@ export const documents = pgTable(
   "documents",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    orgId: organizationIdColumn(),
     connectorInstanceId: uuid("connector_instance_id")
       .notNull()
       .references(() => connectorInstances.id, { onDelete: "cascade" }),
@@ -414,6 +525,7 @@ export const chunks = pgTable(
   "chunks",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    orgId: organizationIdColumn(),
     documentId: uuid("document_id")
       .notNull()
       .references(() => documents.id, { onDelete: "cascade" }),
@@ -435,6 +547,7 @@ export const documentAcls = pgTable(
   "document_acls",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    orgId: organizationIdColumn(),
     documentId: uuid("document_id")
       .notNull()
       .references(() => documents.id, { onDelete: "cascade" }),
@@ -461,6 +574,7 @@ export const auditEvents = pgTable(
      * cascade the database wanted to run against it would be an update the trigger refuses, and a
      * user who had done anything could never be deleted.
      */
+    orgId: organizationIdColumn(),
     actorUserId: text("actor_user_id"),
     eventType: text("event_type").notNull(),
     targetType: text("target_type").notNull(),
@@ -505,6 +619,7 @@ export const auditEvents = pgTable(
 export const intelligenceChannelMappings = pgTable(
   "intelligence_channel_mappings",
   {
+    orgId: organizationIdColumn(),
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),

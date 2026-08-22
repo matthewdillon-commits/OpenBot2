@@ -3,6 +3,7 @@ export type AgentVisibility = "public" | "private";
 export type AgentActor = {
   id: string;
   role: "admin" | "user";
+  orgId?: string;
 };
 
 export type AgentProfile = {

@@ -24,11 +24,9 @@
 import { eq, sql } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { actionPolicy } from "../db/schema";
+import { LOCAL_ORGANIZATION_ID } from "../orgs/constants";
 import type { ActionPolicy } from "./policy";
 import { isBrowserEnabled } from "./policy";
-
-/** There is one boundary per deployment, so there is one row. */
-const CURRENT = "current";
 
 /**
  * What a server announces on when the boundary changes, and what every server listens to.
@@ -59,11 +57,11 @@ export const DEFAULT_ACTION_POLICY: ActionPolicy = {
 
 export type PolicyStore = {
   /** Synchronous on purpose: this is asked on every action. */
-  get: () => ActionPolicy;
+  get: (orgId?: string) => ActionPolicy;
   /** Persisted before the in-memory copy changes, so a reported success is a saved rule. */
-  set: (policy: ActionPolicy, by?: string) => Promise<void>;
+  set: (policy: ActionPolicy, by?: string, orgId?: string) => Promise<void>;
   /** Back to what configuration says, forgetting the saved one. */
-  reset: () => Promise<void>;
+  reset: (orgId?: string) => Promise<void>;
   /** Read the saved policy at boot. Returns where the live policy came from. */
   load: () => Promise<"the database" | "configuration">;
   /**
@@ -81,13 +79,18 @@ export function createPolicyStore(
   database?: Database,
 ): PolicyStore {
   const configured = clone(initial);
-  let current = clone(initial);
+  const policies = new Map<string, ActionPolicy>();
+
+  function resolve(orgId?: string) {
+    return orgId?.trim() || LOCAL_ORGANIZATION_ID;
+  }
 
   return {
-    get: () => current,
+    get: (orgId) => policies.get(resolve(orgId)) ?? clone(configured),
 
-    set: async (policy, by) => {
+    set: async (policy, by, orgId) => {
       const next = clone(policy);
+      const id = resolve(orgId);
       if (database) {
         // Written before it is enforced. If the write fails this throws and the caller reports a
         // failure, which is the honest outcome: an administrator who is told a rule was saved must
@@ -100,7 +103,8 @@ export function createPolicyStore(
           await transaction
             .insert(actionPolicy)
             .values({
-              id: CURRENT,
+              id,
+              orgId: id,
               mode: next.mode,
               deny: next.deny,
               allow: next.allow,
@@ -125,49 +129,42 @@ export function createPolicyStore(
           await announce(transaction);
         });
       }
-      current = next;
+      policies.set(id, next);
     },
 
-    reset: async () => {
+    reset: async (orgId) => {
       // The saved policy is removed rather than overwritten with the configured one, so "reset" means
-      // this deployment has no boundary of its own again, and changing what configuration says then
+      // this organization has no boundary of its own again, and changing what configuration says then
       // changes what it enforces, which is what an operator expects of a reset.
+      const id = resolve(orgId);
       if (database) {
         await database.transaction(async (transaction) => {
           await transaction
             .delete(actionPolicy)
-            .where(eq(actionPolicy.id, CURRENT));
+            .where(eq(actionPolicy.id, id));
           await announce(transaction);
         });
       }
-      current = clone(configured);
+      policies.delete(id);
     },
 
     load: async () => {
       if (!database) return "configuration";
-      const [row] = await database
-        .select()
-        .from(actionPolicy)
-        .where(eq(actionPolicy.id, CURRENT))
-        .limit(1);
-      if (!row) return "configuration";
-
-      current = policyFromRow(row);
-      return "the database";
+      const rows = await database.select().from(actionPolicy);
+      policies.clear();
+      for (const row of rows) {
+        policies.set(row.orgId, policyFromRow(row));
+      }
+      return rows.length > 0 ? "the database" : "configuration";
     },
 
     refresh: async () => {
       if (!database) return;
-      const [row] = await database
-        .select()
-        .from(actionPolicy)
-        .where(eq(actionPolicy.id, CURRENT))
-        .limit(1);
-
-      // No row means somebody reset it, and reset means this deployment goes back to what
-      // configuration says. Leaving the last saved rules in memory here would make a reset apply on
-      // the server that served it and nowhere else, which is the bug this function exists to fix.
-      current = row ? policyFromRow(row) : clone(configured);
+      const rows = await database.select().from(actionPolicy);
+      policies.clear();
+      for (const row of rows) {
+        policies.set(row.orgId, policyFromRow(row));
+      }
     },
   };
 }

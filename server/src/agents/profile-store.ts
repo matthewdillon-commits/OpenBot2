@@ -7,6 +7,7 @@ import {
   agents,
   deploymentPackages,
 } from "../db/schema";
+import { orgIdOf } from "../orgs/constants";
 import {
   authFromConfiguration,
   retireReplacedKey,
@@ -72,7 +73,9 @@ export type AgentProfileStore = {
    * By hash, because that is all this side keeps. Not scoped to an actor: the caller is a machine
    * presenting a credential, and the credential is the whole of its claim.
    */
-  agentForCallbackToken(hash: string): Promise<{ id: string } | null>;
+  agentForCallbackToken(
+    hash: string,
+  ): Promise<{ id: string; orgId: string } | null>;
 };
 
 export class AgentNotFoundError extends Error {
@@ -191,6 +194,7 @@ async function findAccessibleProfile(
   const [row] = await joinedProfiles(executor, actor).where(
     and(
       eq(agents.id, id),
+      eq(agents.orgId, orgIdOf(actor)),
       isNull(agentProfiles.deletedAt),
       accessFilter(actor),
     ),
@@ -245,10 +249,11 @@ function newAgentId() {
 async function findByTokenHash(
   database: Database,
   hash: string,
-): Promise<{ id: string } | null> {
+): Promise<{ id: string; orgId: string } | null> {
   const rows = await database
     .select({
       agentId: agentProfiles.agentId,
+      orgId: agentProfiles.orgId,
       hash: agentProfiles.callbackTokenHash,
     })
     .from(agentProfiles)
@@ -262,7 +267,9 @@ async function findByTokenHash(
 
   const row = rows[0];
   if (!row?.hash) return null;
-  return sameToken(row.hash, hash) ? { id: row.agentId } : null;
+  return sameToken(row.hash, hash)
+    ? { id: row.agentId, orgId: row.orgId }
+    : null;
 }
 
 export function createAgentProfileStore(
@@ -282,6 +289,7 @@ export function createAgentProfileStore(
     async list(actor, hidden = false) {
       const rows = await joinedProfiles(database, actor).where(
         and(
+          eq(agents.orgId, orgIdOf(actor)),
           isNull(agentProfiles.deletedAt),
           accessFilter(actor),
           hidden
@@ -312,6 +320,7 @@ export function createAgentProfileStore(
         }
         await transaction.insert(agents).values({
           id,
+          orgId: orgIdOf(actor),
           name: input.name,
           type: "remote_ag_ui",
           // Their endpoint if they gave one, ours if they did not. Validated before it reaches here;
@@ -336,6 +345,7 @@ export function createAgentProfileStore(
         });
         await transaction.insert(agentProfiles).values({
           agentId: id,
+          orgId: orgIdOf(actor),
           ownerUserId: actor.id,
           title: input.title,
           roleDescription: input.roleDescription,
@@ -439,12 +449,14 @@ export function createAgentProfileStore(
         const duplicateId = newAgentId();
         await transaction.insert(agents).values({
           id: duplicateId,
+          orgId: orgIdOf(actor),
           name: source.name,
           type: "remote_ag_ui",
           configuration: managedConfiguration,
         });
         await transaction.insert(agentProfiles).values({
           agentId: duplicateId,
+          orgId: orgIdOf(actor),
           ownerUserId: actor.id,
           title: source.title,
           roleDescription: source.roleDescription,
@@ -470,6 +482,7 @@ export function createAgentProfileStore(
         await transaction
           .insert(agentPreferences)
           .values({
+            orgId: orgIdOf(actor),
             userId: actor.id,
             agentId: id,
             hiddenAt: hidden ? new Date() : null,

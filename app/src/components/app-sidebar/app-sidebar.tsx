@@ -1,6 +1,7 @@
 import {
   IconBolt,
   IconBox,
+  IconBuilding,
   IconLogout,
   IconPlus,
   IconSearch,
@@ -327,6 +328,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 sideOffset={8}
               >
                 {/* Admin routes are server-guarded; hide the entry for users who cannot open them. */}
+                <DropdownMenuItem
+                  className={userMenuItemClassName}
+                  render={<Link to="/o" />}
+                >
+                  <IconBuilding />
+                  {currentUser?.orgName ?? "Organizations"}
+                </DropdownMenuItem>
                 {currentUser?.role === "admin" ? (
                   <DropdownMenuItem
                     className={userMenuItemClassName}
@@ -334,6 +342,15 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   >
                     <IconShieldLock />
                     Admin
+                  </DropdownMenuItem>
+                ) : null}
+                {currentUser?.platformSuperadmin ? (
+                  <DropdownMenuItem
+                    className={userMenuItemClassName}
+                    render={<Link to="/platform" />}
+                  >
+                    <IconBuilding />
+                    Platform
                   </DropdownMenuItem>
                 ) : null}
                 <DropdownMenuItem

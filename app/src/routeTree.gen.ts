@@ -16,6 +16,8 @@ import { Route as AuthedAdminRouteRouteImport } from './routes/_authed/admin/rou
 import { Route as AuthedSettingsRouteRouteImport } from './routes/_authed/settings/route'
 import { Route as AuthedAppIndexRouteImport } from './routes/_authed/_app/index'
 import { Route as AuthedAppBotRouteImport } from './routes/_authed/_app/bot'
+import { Route as AuthedAppORouteImport } from './routes/_authed/_app/o'
+import { Route as AuthedAppPlatformRouteImport } from './routes/_authed/_app/platform'
 import { Route as AuthedAppSkillsRouteImport } from './routes/_authed/_app/skills'
 import { Route as AuthedAdminIndexRouteImport } from './routes/_authed/admin/index'
 import { Route as AuthedAdminAuditRouteImport } from './routes/_authed/admin/audit'
@@ -31,6 +33,8 @@ import { Route as AuthedSettingsIndexRouteImport } from './routes/_authed/settin
 import { Route as AuthedAppAgentsIndexRouteImport } from './routes/_authed/_app/agents/index'
 import { Route as AuthedAppChannelChannelIdRouteImport } from './routes/_authed/_app/channel/$channelId'
 import { Route as AuthedAppChannelNewRouteImport } from './routes/_authed/_app/channel/new'
+import { Route as AuthedAppInviteTokenRouteImport } from './routes/_authed/_app/invite.$token'
+import { Route as AuthedAppOOrgSlugRouteImport } from './routes/_authed/_app/o.$orgSlug'
 import { Route as AuthedAdminComponentsIndexRouteImport } from './routes/_authed/admin/components/index'
 import { Route as AuthedAdminComponentsNameRouteImport } from './routes/_authed/admin/components/$name'
 import { Route as AuthedAdminConnectorsGoogleDriveRouteImport } from './routes/_authed/admin/connectors/google-drive'
@@ -68,6 +72,16 @@ const AuthedAppIndexRoute = AuthedAppIndexRouteImport.update({
 const AuthedAppBotRoute = AuthedAppBotRouteImport.update({
   id: '/bot',
   path: '/bot',
+  getParentRoute: () => AuthedAppRoute,
+} as any)
+const AuthedAppORoute = AuthedAppORouteImport.update({
+  id: '/o',
+  path: '/o',
+  getParentRoute: () => AuthedAppRoute,
+} as any)
+const AuthedAppPlatformRoute = AuthedAppPlatformRouteImport.update({
+  id: '/platform',
+  path: '/platform',
   getParentRoute: () => AuthedAppRoute,
 } as any)
 const AuthedAppSkillsRoute = AuthedAppSkillsRouteImport.update({
@@ -147,6 +161,16 @@ const AuthedAppChannelNewRoute = AuthedAppChannelNewRouteImport.update({
   path: '/channel/new',
   getParentRoute: () => AuthedAppRoute,
 } as any)
+const AuthedAppInviteTokenRoute = AuthedAppInviteTokenRouteImport.update({
+  id: '/invite/$token',
+  path: '/invite/$token',
+  getParentRoute: () => AuthedAppRoute,
+} as any)
+const AuthedAppOOrgSlugRoute = AuthedAppOOrgSlugRouteImport.update({
+  id: '/$orgSlug',
+  path: '/$orgSlug',
+  getParentRoute: () => AuthedAppORoute,
+} as any)
 const AuthedAdminComponentsIndexRoute =
   AuthedAdminComponentsIndexRouteImport.update({
     id: '/components/',
@@ -184,6 +208,8 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AuthedAdminRouteRouteWithChildren
   '/settings': typeof AuthedSettingsRouteRouteWithChildren
   '/bot': typeof AuthedAppBotRoute
+  '/o': typeof AuthedAppORouteWithChildren
+  '/platform': typeof AuthedAppPlatformRoute
   '/skills': typeof AuthedAppSkillsRoute
   '/admin/audit': typeof AuthedAdminAuditRoute
   '/admin/boundaries': typeof AuthedAdminBoundariesRoute
@@ -198,6 +224,8 @@ export interface FileRoutesByFullPath {
   '/settings/': typeof AuthedSettingsIndexRoute
   '/channel/$channelId': typeof AuthedAppChannelChannelIdRoute
   '/channel/new': typeof AuthedAppChannelNewRoute
+  '/invite/$token': typeof AuthedAppInviteTokenRoute
+  '/o/$orgSlug': typeof AuthedAppOOrgSlugRoute
   '/admin/components/$name': typeof AuthedAdminComponentsNameRoute
   '/admin/connectors/google-drive': typeof AuthedAdminConnectorsGoogleDriveRoute
   '/settings/components-gallery/$name': typeof AuthedSettingsComponentsGalleryNameRoute
@@ -209,6 +237,8 @@ export interface FileRoutesByTo {
   '/': typeof AuthedAppIndexRoute
   '/sign': typeof SignRoute
   '/bot': typeof AuthedAppBotRoute
+  '/o': typeof AuthedAppORouteWithChildren
+  '/platform': typeof AuthedAppPlatformRoute
   '/skills': typeof AuthedAppSkillsRoute
   '/admin/audit': typeof AuthedAdminAuditRoute
   '/admin/boundaries': typeof AuthedAdminBoundariesRoute
@@ -223,6 +253,8 @@ export interface FileRoutesByTo {
   '/settings': typeof AuthedSettingsIndexRoute
   '/channel/$channelId': typeof AuthedAppChannelChannelIdRoute
   '/channel/new': typeof AuthedAppChannelNewRoute
+  '/invite/$token': typeof AuthedAppInviteTokenRoute
+  '/o/$orgSlug': typeof AuthedAppOOrgSlugRoute
   '/admin/components/$name': typeof AuthedAdminComponentsNameRoute
   '/admin/connectors/google-drive': typeof AuthedAdminConnectorsGoogleDriveRoute
   '/settings/components-gallery/$name': typeof AuthedSettingsComponentsGalleryNameRoute
@@ -238,6 +270,8 @@ export interface FileRoutesById {
   '/_authed/settings': typeof AuthedSettingsRouteRouteWithChildren
   '/_authed/_app': typeof AuthedAppRouteWithChildren
   '/_authed/_app/bot': typeof AuthedAppBotRoute
+  '/_authed/_app/o': typeof AuthedAppORouteWithChildren
+  '/_authed/_app/platform': typeof AuthedAppPlatformRoute
   '/_authed/_app/skills': typeof AuthedAppSkillsRoute
   '/_authed/admin/audit': typeof AuthedAdminAuditRoute
   '/_authed/admin/boundaries': typeof AuthedAdminBoundariesRoute
@@ -253,6 +287,8 @@ export interface FileRoutesById {
   '/_authed/settings/': typeof AuthedSettingsIndexRoute
   '/_authed/_app/channel/$channelId': typeof AuthedAppChannelChannelIdRoute
   '/_authed/_app/channel/new': typeof AuthedAppChannelNewRoute
+  '/_authed/_app/invite/$token': typeof AuthedAppInviteTokenRoute
+  '/_authed/_app/o/$orgSlug': typeof AuthedAppOOrgSlugRoute
   '/_authed/admin/components/$name': typeof AuthedAdminComponentsNameRoute
   '/_authed/admin/connectors/google-drive': typeof AuthedAdminConnectorsGoogleDriveRoute
   '/_authed/settings/components-gallery/$name': typeof AuthedSettingsComponentsGalleryNameRoute
@@ -268,6 +304,8 @@ export interface FileRouteTypes {
     | '/admin'
     | '/settings'
     | '/bot'
+    | '/o'
+    | '/platform'
     | '/skills'
     | '/admin/audit'
     | '/admin/boundaries'
@@ -282,6 +320,8 @@ export interface FileRouteTypes {
     | '/settings/'
     | '/channel/$channelId'
     | '/channel/new'
+    | '/invite/$token'
+    | '/o/$orgSlug'
     | '/admin/components/$name'
     | '/admin/connectors/google-drive'
     | '/settings/components-gallery/$name'
@@ -293,6 +333,8 @@ export interface FileRouteTypes {
     | '/'
     | '/sign'
     | '/bot'
+    | '/o'
+    | '/platform'
     | '/skills'
     | '/admin/audit'
     | '/admin/boundaries'
@@ -307,6 +349,8 @@ export interface FileRouteTypes {
     | '/settings'
     | '/channel/$channelId'
     | '/channel/new'
+    | '/invite/$token'
+    | '/o/$orgSlug'
     | '/admin/components/$name'
     | '/admin/connectors/google-drive'
     | '/settings/components-gallery/$name'
@@ -321,6 +365,8 @@ export interface FileRouteTypes {
     | '/_authed/settings'
     | '/_authed/_app'
     | '/_authed/_app/bot'
+    | '/_authed/_app/o'
+    | '/_authed/_app/platform'
     | '/_authed/_app/skills'
     | '/_authed/admin/audit'
     | '/_authed/admin/boundaries'
@@ -336,6 +382,8 @@ export interface FileRouteTypes {
     | '/_authed/settings/'
     | '/_authed/_app/channel/$channelId'
     | '/_authed/_app/channel/new'
+    | '/_authed/_app/invite/$token'
+    | '/_authed/_app/o/$orgSlug'
     | '/_authed/admin/components/$name'
     | '/_authed/admin/connectors/google-drive'
     | '/_authed/settings/components-gallery/$name'
@@ -398,6 +446,20 @@ declare module '@tanstack/react-router' {
       path: '/bot'
       fullPath: '/bot'
       preLoaderRoute: typeof AuthedAppBotRouteImport
+      parentRoute: typeof AuthedAppRoute
+    }
+    '/_authed/_app/o': {
+      id: '/_authed/_app/o'
+      path: '/o'
+      fullPath: '/o'
+      preLoaderRoute: typeof AuthedAppORouteImport
+      parentRoute: typeof AuthedAppRoute
+    }
+    '/_authed/_app/platform': {
+      id: '/_authed/_app/platform'
+      path: '/platform'
+      fullPath: '/platform'
+      preLoaderRoute: typeof AuthedAppPlatformRouteImport
       parentRoute: typeof AuthedAppRoute
     }
     '/_authed/_app/skills': {
@@ -505,6 +567,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedAppChannelNewRouteImport
       parentRoute: typeof AuthedAppRoute
     }
+    '/_authed/_app/invite/$token': {
+      id: '/_authed/_app/invite/$token'
+      path: '/invite/$token'
+      fullPath: '/invite/$token'
+      preLoaderRoute: typeof AuthedAppInviteTokenRouteImport
+      parentRoute: typeof AuthedAppRoute
+    }
+    '/_authed/_app/o/$orgSlug': {
+      id: '/_authed/_app/o/$orgSlug'
+      path: '/$orgSlug'
+      fullPath: '/o/$orgSlug'
+      preLoaderRoute: typeof AuthedAppOOrgSlugRouteImport
+      parentRoute: typeof AuthedAppORoute
+    }
     '/_authed/admin/components/': {
       id: '/_authed/admin/components/'
       path: '/components'
@@ -606,21 +682,39 @@ const AuthedSettingsRouteRouteChildren: AuthedSettingsRouteRouteChildren = {
 const AuthedSettingsRouteRouteWithChildren =
   AuthedSettingsRouteRoute._addFileChildren(AuthedSettingsRouteRouteChildren)
 
+interface AuthedAppORouteChildren {
+  AuthedAppOOrgSlugRoute: typeof AuthedAppOOrgSlugRoute
+}
+
+const AuthedAppORouteChildren: AuthedAppORouteChildren = {
+  AuthedAppOOrgSlugRoute: AuthedAppOOrgSlugRoute,
+}
+
+const AuthedAppORouteWithChildren = AuthedAppORoute._addFileChildren(
+  AuthedAppORouteChildren,
+)
+
 interface AuthedAppRouteChildren {
   AuthedAppBotRoute: typeof AuthedAppBotRoute
+  AuthedAppORoute: typeof AuthedAppORouteWithChildren
+  AuthedAppPlatformRoute: typeof AuthedAppPlatformRoute
   AuthedAppSkillsRoute: typeof AuthedAppSkillsRoute
   AuthedAppIndexRoute: typeof AuthedAppIndexRoute
   AuthedAppChannelChannelIdRoute: typeof AuthedAppChannelChannelIdRoute
   AuthedAppChannelNewRoute: typeof AuthedAppChannelNewRoute
+  AuthedAppInviteTokenRoute: typeof AuthedAppInviteTokenRoute
   AuthedAppAgentsIndexRoute: typeof AuthedAppAgentsIndexRoute
 }
 
 const AuthedAppRouteChildren: AuthedAppRouteChildren = {
   AuthedAppBotRoute: AuthedAppBotRoute,
+  AuthedAppORoute: AuthedAppORouteWithChildren,
+  AuthedAppPlatformRoute: AuthedAppPlatformRoute,
   AuthedAppSkillsRoute: AuthedAppSkillsRoute,
   AuthedAppIndexRoute: AuthedAppIndexRoute,
   AuthedAppChannelChannelIdRoute: AuthedAppChannelChannelIdRoute,
   AuthedAppChannelNewRoute: AuthedAppChannelNewRoute,
+  AuthedAppInviteTokenRoute: AuthedAppInviteTokenRoute,
   AuthedAppAgentsIndexRoute: AuthedAppAgentsIndexRoute,
 }
 

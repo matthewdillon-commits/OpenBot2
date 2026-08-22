@@ -8,6 +8,9 @@ import { createAuditReader, createAuditStore, recordAuditEvent } from "./audit";
 import { startAuditRetention } from "./audit-retention";
 import { createAuth } from "./auth";
 import { DEV_ACTOR, initializeDevActorUser } from "./auth/dev-actor";
+import { computerIdFor, intelligenceUserId, orgIdOf } from "./orgs/constants";
+import { bootstrapOrganizations } from "./orgs/bootstrap";
+import { createOrganizationStore } from "./orgs/store";
 import { createRoleRepository } from "./auth/guards";
 import { createIdentityProviderStore } from "./auth/identity-provider-store";
 import type { OpenBotRole } from "./auth/roles";
@@ -70,9 +73,15 @@ async function resolveRequestActor(request: Request): Promise<{
   id: string;
   name: string;
   role: OpenBotRole;
+  orgId: string;
 }> {
   if (config.singleUser) {
-    return { id: DEV_ACTOR.id, name: DEV_ACTOR.email, role: DEV_ACTOR.role };
+    return {
+      id: DEV_ACTOR.id,
+      name: DEV_ACTOR.email,
+      role: DEV_ACTOR.role,
+      orgId: orgIdOf(DEV_ACTOR),
+    };
   }
   const session = await auth?.api.getSession({ headers: request.headers });
   const user = session?.user;
@@ -83,17 +92,25 @@ async function resolveRequestActor(request: Request): Promise<{
   if (!roles.includes("admin") && !roles.includes("user")) {
     throw new Error("A CopilotKit run requires an authorized user.");
   }
+  const membership = await organizationStore.resolveActive(user.id);
   return {
     id: user.id,
     name: user.name ?? user.email ?? user.id,
-    role: roles.includes("admin") ? "admin" : "user",
+    role: membership
+      ? membership.role === "member"
+        ? "user"
+        : "admin"
+      : roles.includes("admin")
+        ? "admin"
+        : "user",
+    orgId: membership?.id ?? orgIdOf({}),
   };
 }
 
-/** The Intelligence projection of {@link resolveRequestActor}: threads are scoped to this person. */
+/** The Intelligence projection of {@link resolveRequestActor}: threads are scoped to this membership. */
 const identifyUser: IdentifyUser = async (request) => {
-  const { id, name } = await resolveRequestActor(request);
-  return { id, name };
+  const { id, name, orgId } = await resolveRequestActor(request);
+  return { id: intelligenceUserId(orgId, id), name };
 };
 
 /**
@@ -110,8 +127,8 @@ const ANONYMOUS_ACTOR = { id: "", role: "user" } as const;
 
 const identifyActor: IdentifyActor = async (request) => {
   try {
-    const { id, role } = await resolveRequestActor(request);
-    return { id, role };
+    const { id, role, orgId } = await resolveRequestActor(request);
+    return { id, role, orgId };
   } catch {
     return ANONYMOUS_ACTOR;
   }
@@ -120,7 +137,12 @@ const identifyActor: IdentifyActor = async (request) => {
 const config = loadConfig();
 const port = Number.parseInt(process.env.PORT ?? "3001", 10);
 const database = createDatabase(config.databaseUrl);
+const organizationStore = createOrganizationStore(database);
 await initializeDevActorUser(database, config.singleUser);
+await bootstrapOrganizations(database, organizationStore, {
+  singleUser: config.singleUser,
+  devUserId: DEV_ACTOR.id,
+});
 // The vault, built before the agent store because a customer's agent may sit behind a key and that
 // key belongs here rather than on the agent row. See agents/auth-header.ts.
 const credentialStore = createCredentialStore(database);
@@ -243,7 +265,7 @@ const computerGateway = computerProvider
   ? createComputerGateway({
       provider: computerProvider,
       auditStore: bootAuditStore,
-      policy: () => policyStore.get(),
+      policy: (orgId) => policyStore.get(orgId),
       // In Postgres, so the ref a click carries resolves against the snapshot that produced it even
       // when the snapshot was taken by another server. A Map here would be blank on every replica
       // but the one that snapshotted, and the boundary would decide with no element to look at.
@@ -268,7 +290,7 @@ const pluginStore = createPluginStore({
   auditStore: bootAuditStore,
   credentials: credentialStore,
   encryptionKey: config.keyEncryptionKey,
-  policy: () => policyStore.get(),
+  policy: (orgId) => policyStore.get(orgId),
 });
 
 /**
@@ -377,37 +399,41 @@ const webSearch = config.tavilyApiKey
  * search or a key to spend, not when an administrator ticked a grant. A framework Bot calls the
  * same list back through `/api/agent-tools/call`.
  */
-const loadToolsForActor = (actorId: string) => async (botId: string) => {
-  const granted = await grantedTools({
-    store: pluginStore,
-    botId,
-    actorId,
-  });
-  const extra: GrantedTool[] = [];
-  if (await knowledgeSearch.anyDocuments()) {
-    extra.push(
-      knowledgeSearchTool({
-        search: knowledgeSearch,
-        auditStore: bootAuditStore,
-        asker: await askerFor(database, actorId),
-        botId,
-      }),
-    );
-  }
-  if (webSearch) {
-    extra.push(
-      webSearchTool({
-        search: webSearch,
-        auditStore: bootAuditStore,
-        policy: () => policyStore.get(),
-        botId,
-        actorId,
-        actorUserId: actorId,
-      }),
-    );
-  }
-  return extra.length === 0 ? granted : [...granted, ...extra];
-};
+const loadToolsForActor =
+  (actorId: string, orgId?: string) => async (botId: string) => {
+    const scoped = orgIdOf({ orgId });
+    const granted = await grantedTools({
+      store: pluginStore,
+      botId,
+      actorId,
+      orgId: scoped,
+    });
+    const extra: GrantedTool[] = [];
+    if (await knowledgeSearch.anyDocuments(scoped)) {
+      extra.push(
+        knowledgeSearchTool({
+          search: knowledgeSearch,
+          auditStore: bootAuditStore,
+          asker: await askerFor(database, actorId),
+          botId,
+          orgId: scoped,
+        }),
+      );
+    }
+    if (webSearch) {
+      extra.push(
+        webSearchTool({
+          search: webSearch,
+          auditStore: bootAuditStore,
+          policy: () => policyStore.get(scoped),
+          botId,
+          actorId,
+          actorUserId: actorId,
+        }),
+      );
+    }
+    return extra.length === 0 ? granted : [...granted, ...extra];
+  };
 
 const app = createApp(
   config,
@@ -455,8 +481,11 @@ const app = createApp(
      * from: its own token proves which agent is calling, this proves who it is calling for, and
      * neither is read out of the request body any more.
      */
-    (actorId) => (botId, runId) =>
-      mintRunAssertion({ botId, actorId, runId }, config.keyEncryptionKey),
+    (actorId, orgId) => (botId, runId) =>
+      mintRunAssertion(
+        { botId, actorId, runId, orgId: orgIdOf({ orgId }) },
+        config.keyEncryptionKey,
+      ),
     /*
      * Asked per request so switching the browser off under Boundaries applies to the next turn.
      * Remote Bots still carry their own baked guidance; not registering the tools and refusing at
@@ -492,11 +521,12 @@ const app = createApp(
   identityProviderStore,
   // First-party tools a framework Bot calls back, by the name it was offered. MCP still has its
   // own path below this when the name is not on that list.
-  async ({ name, args, botId, actorId }) => {
-    const tools = await loadToolsForActor(actorId)(botId);
+  async ({ name, args, botId, actorId, orgId }) => {
+    const tools = await loadToolsForActor(actorId, orgId)(botId);
     const tool = tools.find((one) => one.name === name);
     return tool ? tool.execute(args) : null;
   },
+  organizationStore,
 );
 
 /**
@@ -567,7 +597,7 @@ serve<SocketData>({
       // so signing in is not enough: without this, anybody signed in watches anybody's Bot work.
       if (
         !(await agentProfileStore
-          .get({ id: actor.id, role: actor.role }, streamBotId)
+          .get({ id: actor.id, role: actor.role, orgId: actor.orgId }, streamBotId)
           .catch(() => null))
       ) {
         return new Response("There is no such Bot.", { status: 404 });
@@ -583,14 +613,17 @@ serve<SocketData>({
       let upstream: string;
       try {
         const streamBase = computerGateway
-          ? await computerGateway.locate(streamBotId)
+          ? await computerGateway.locate(streamBotId, actor.orgId)
           : undefined;
         if (!streamBase) {
           return new Response("No computer address is configured.", {
             status: 503,
           });
         }
-        upstream = toStreamUrl(streamBase, streamBotId);
+        upstream = toStreamUrl(
+          streamBase,
+          computerIdFor(orgIdOf(actor), streamBotId),
+        );
       } catch (error) {
         // Said out loud rather than falling back to another Bot's computer, which is the failure this
         // whole path exists to prevent.

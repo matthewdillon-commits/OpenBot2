@@ -1,6 +1,11 @@
 import type { MiddlewareHandler } from "hono";
 import type { Database } from "../db/client";
 import { users } from "../db/schema";
+import {
+  LOCAL_ORGANIZATION_ID,
+  LOCAL_ORGANIZATION_NAME,
+  LOCAL_ORGANIZATION_SLUG,
+} from "../orgs/constants";
 import type { AppVariables, AuthenticatedActor } from "./guards";
 
 /**
@@ -25,6 +30,10 @@ export const DEV_ACTOR: AuthenticatedActor = {
   id: "dev-local-user",
   email: "dev@openbot.local",
   role: "admin",
+  orgId: LOCAL_ORGANIZATION_ID,
+  orgSlug: LOCAL_ORGANIZATION_SLUG,
+  orgName: LOCAL_ORGANIZATION_NAME,
+  orgRole: "owner",
 };
 
 type UserWriter = Pick<Database, "insert">;

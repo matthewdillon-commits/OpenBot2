@@ -8,6 +8,10 @@ Newest first. `Unreleased` is what is on `main` and not yet tagged.
 
 ## Unreleased
 
+### Multi-tenant organizations
+
+A deployment can now hold more than one customer. People still sign in once; work is scoped to an organization. Existing data is backfilled into the `local` organization. Sales-led hosting sets `PLATFORM_SUPERADMINS` so someone can create an organization and invite its owner. Self-serve signup, Stripe, seat quotas, per-org SSO, and Postgres RLS are not in this release.
+
 ### Upgrading
 
 Two configurations now refuse to start:

@@ -2,6 +2,12 @@ import { eq } from "drizzle-orm";
 import type { Context, MiddlewareHandler } from "hono";
 import type { Database } from "../db/client";
 import { userRoles } from "../db/schema";
+import {
+  isOrgAdmin,
+  openBotRoleFor,
+  type OrganizationRole,
+} from "../orgs/constants";
+import type { OrganizationStore } from "../orgs/store";
 import type { OpenBotRole } from "./roles";
 
 export type AuthenticatedActor = {
@@ -10,6 +16,11 @@ export type AuthenticatedActor = {
   name?: string | null;
   image?: string | null;
   role: OpenBotRole;
+  orgId?: string;
+  orgSlug?: string;
+  orgName?: string;
+  orgRole?: OrganizationRole;
+  platformSuperadmin?: boolean;
 };
 
 export type AuthService = {
@@ -50,9 +61,21 @@ export function createRoleRepository(database: Database): RoleRepository {
   };
 }
 
+function isPlatformSuperadminEmail(
+  email: string,
+  allowlist: readonly string[],
+) {
+  const normalized = email.trim().toLowerCase();
+  return allowlist.some(
+    (allowed) => allowed.trim().toLowerCase() === normalized,
+  );
+}
+
 export function createRequireUser(
   auth: AuthService,
   roleRepository: RoleRepository,
+  organizations?: OrganizationStore,
+  platformSuperadmins: readonly string[] = [],
 ): MiddlewareHandler<{ Variables: AppVariables }> {
   return async (context, next) => {
     const session = await auth.api.getSession({
@@ -65,15 +88,22 @@ export function createRequireUser(
     }
 
     const roles = await roleRepository.rolesForUser(session.user.id);
-    const role = roles.includes("admin")
+    const fallbackRole = roles.includes("admin")
       ? "admin"
       : roles.includes("user")
         ? "user"
         : undefined;
 
-    if (!role) {
+    if (!fallbackRole) {
       return context.json({ error: "Authorization required." }, 403);
     }
+
+    const membership = organizations
+      ? await organizations.resolveActive(session.user.id)
+      : null;
+
+    const orgRole = membership?.role;
+    const role = orgRole ? openBotRoleFor(orgRole) : fallbackRole;
 
     context.set("actor", {
       id: session.user.id,
@@ -81,15 +111,47 @@ export function createRequireUser(
       name: session.user.name,
       image: session.user.image,
       role,
+      ...(membership
+        ? {
+            orgId: membership.id,
+            orgSlug: membership.slug,
+            orgName: membership.name,
+            orgRole: membership.role,
+          }
+        : {}),
+      platformSuperadmin: isPlatformSuperadminEmail(
+        session.user.email,
+        platformSuperadmins,
+      ),
     });
     await next();
   };
 }
 
 export function requireAdmin(context: Context<{ Variables: AppVariables }>) {
-  if (context.var.actor.role !== "admin") {
+  if (
+    context.var.actor.role !== "admin" &&
+    !isOrgAdmin(context.var.actor.orgRole)
+  ) {
     return context.json({ error: "Administrator access required." }, 403);
   }
 
   return undefined;
+}
+
+/** Owner or admin of the current organization. Same bar as {@link requireAdmin}. */
+export const requireOrgAdmin = requireAdmin;
+
+export function requirePlatformSuperadmin(
+  context: Context<{ Variables: AppVariables }>,
+  allowlist: readonly string[] = [],
+) {
+  const actor = context.var.actor;
+  if (
+    actor.platformSuperadmin ||
+    isPlatformSuperadminEmail(actor.email, allowlist)
+  ) {
+    return undefined;
+  }
+  return context.json({ error: "Platform administrator access required." }, 403);
 }

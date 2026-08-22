@@ -5,6 +5,7 @@ import type { AuditStore } from "../audit";
 import { recordAuditEvent } from "../audit";
 import type { AppVariables } from "../auth/guards";
 import { requireAdmin } from "../auth/guards";
+import { orgIdOf } from "../orgs/constants";
 import { DATA_FUNCTIONS, dataFunction } from "./functions";
 import { ComponentNotFoundError, type ComponentStore } from "./store";
 
@@ -41,6 +42,7 @@ export function createComponentRoutes(
   canUseBot: BotAccessCheck,
 ) {
   const routes = new Hono<{ Variables: AppVariables }>();
+  const orgOf = (context: { var: AppVariables }) => orgIdOf(context.var.actor);
 
   const audit = async (
     context: { var: AppVariables },
@@ -54,6 +56,7 @@ export function createComponentRoutes(
       eventType,
       targetType: "component",
       targetId,
+      orgId: orgIdOf(actor),
       ...(actor?.id && actor.email !== DEV_ACTOR_EMAIL
         ? { actorUserId: actor.id }
         : {}),
@@ -63,7 +66,7 @@ export function createComponentRoutes(
 
   /** Everything a person needs to see the whole grant surface at once. */
   routes.get("/", requireUser, async (context) =>
-    context.json({ components: await store.list() }),
+    context.json({ components: await store.list(orgOf(context)) }),
   );
 
   /**
@@ -128,7 +131,9 @@ export function createComponentRoutes(
     if (!(await canUseBot(context.var.actor, agentId))) {
       return context.json({ error: "There is no such Bot." }, 404);
     }
-    return context.json({ components: await store.listForAgent(agentId) });
+    return context.json({
+      components: await store.listForAgent(agentId, orgOf(context)),
+    });
   });
 
   /**
@@ -160,7 +165,7 @@ export function createComponentRoutes(
         )
       : [];
 
-    const decision = await store.decide(name, agentId);
+    const decision = await store.decide(name, agentId, orgOf(context));
     if (!decision.allowed) {
       await audit(context, "component.refused", name, {
         bot: agentId,
@@ -177,7 +182,7 @@ export function createComponentRoutes(
      * needs gets one verdict covering what it will do, rather than one covering only its name.
      */
     for (const functionName of functions) {
-      if (await store.mayCall(name, functionName)) continue;
+      if (await store.mayCall(name, functionName, orgOf(context))) continue;
       const reason = `${name} has not been granted the function ${functionName}. An administrator grants each function to each component.`;
       await audit(context, "component.function_refused", name, {
         bot: agentId,
@@ -243,7 +248,7 @@ export function createComponentRoutes(
     };
 
     // The component itself, first. A component this Bot may not use may not read on its behalf.
-    const decision = await store.decide(name, agentId);
+    const decision = await store.decide(name, agentId, orgOf(context));
     if (!decision.allowed) return refuse(decision.reason);
 
     const fn = dataFunction(functionName);
@@ -255,7 +260,7 @@ export function createComponentRoutes(
       );
     }
 
-    if (!(await store.mayCall(name, functionName))) {
+    if (!(await store.mayCall(name, functionName, orgOf(context)))) {
       return refuse(
         `${name} has not been granted the function ${functionName}. An administrator grants each function to each component.`,
       );
@@ -305,7 +310,12 @@ export function createComponentRoutes(
     }
 
     try {
-      await store.grantFunction(name, functionName, context.var.actor.email);
+      await store.grantFunction(
+        name,
+        functionName,
+        context.var.actor.email,
+        orgOf(context),
+      );
     } catch (error) {
       if (error instanceof ComponentNotFoundError) {
         return context.json({ error: error.message }, 404);
@@ -325,7 +335,7 @@ export function createComponentRoutes(
 
     const name = context.req.param("name");
     const functionName = context.req.param("function");
-    await store.revokeFunction(name, functionName);
+    await store.revokeFunction(name, functionName, orgOf(context));
     await audit(context, "component.function_revoked", name, {
       function: functionName,
     });
@@ -345,7 +355,7 @@ export function createComponentRoutes(
       return context.json({ error: "The Bot is required." }, 400);
     }
     try {
-      await store.grant(name, agentId);
+      await store.grant(name, agentId, orgOf(context));
     } catch (error) {
       if (error instanceof ComponentNotFoundError) {
         return context.json({ error: error.message }, 404);
@@ -364,7 +374,7 @@ export function createComponentRoutes(
     const name = context.req.param("name");
     const agentId = context.req.param("agentId");
     try {
-      await store.revoke(name, agentId, context.var.actor.email);
+      await store.revoke(name, agentId, context.var.actor.email, orgOf(context));
     } catch (error) {
       if (error instanceof ComponentNotFoundError) {
         return context.json({ error: error.message }, 404);
@@ -387,9 +397,9 @@ export function createComponentRoutes(
 
     try {
       if (published) {
-        await store.publish(name, context.var.actor.email);
+        await store.publish(name, context.var.actor.email, orgOf(context));
       } else {
-        await store.unpublish(name, context.var.actor.email);
+        await store.unpublish(name, context.var.actor.email, orgOf(context));
       }
     } catch (error) {
       if (error instanceof ComponentNotFoundError) {
@@ -426,7 +436,12 @@ export function createComponentRoutes(
     }
 
     try {
-      await store.saveDraft(name, description, context.var.actor.email);
+      await store.saveDraft(
+        name,
+        description,
+        context.var.actor.email,
+        orgOf(context),
+      );
     } catch (error) {
       if (error instanceof ComponentNotFoundError) {
         return context.json({ error: error.message }, 404);

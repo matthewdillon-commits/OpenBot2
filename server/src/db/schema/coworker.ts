@@ -12,7 +12,7 @@ import {
   text,
   timestamp,
 } from "drizzle-orm/pg-core";
-import { agents, users } from "./core";
+import { agents, organizationIdColumn, users } from "./core";
 
 const createdAt = () =>
   timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
@@ -30,6 +30,7 @@ export const agentProfiles = pgTable(
     agentId: text("agent_id")
       .primaryKey()
       .references(() => agents.id, { onDelete: "cascade" }),
+    orgId: organizationIdColumn(),
     ownerUserId: text("owner_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -66,6 +67,7 @@ export const agentProfiles = pgTable(
 export const agentPreferences = pgTable(
   "agent_preferences",
   {
+    orgId: organizationIdColumn(),
     userId: text("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),

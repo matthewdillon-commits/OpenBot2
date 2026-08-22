@@ -8,7 +8,7 @@ import {
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
-import { agents, users } from "./core";
+import { agents, organizationIdColumn, users } from "./core";
 import { jsonb } from "./json";
 
 const createdAt = () =>
@@ -41,6 +41,7 @@ const updatedAt = () =>
  */
 export const mcpServers = pgTable("mcp_servers", {
   id: text("id").primaryKey(),
+  orgId: organizationIdColumn(),
   title: text("title").notNull(),
   /** The vendor this server is maintained by, which is what the first-party rule is checked against. */
   vendor: text("vendor").notNull(),
@@ -84,6 +85,7 @@ export const mcpServers = pgTable("mcp_servers", {
 export const mcpTools = pgTable(
   "mcp_tools",
   {
+    orgId: organizationIdColumn(),
     serverId: text("server_id")
       .notNull()
       .references(() => mcpServers.id, { onDelete: "cascade" }),
@@ -109,6 +111,7 @@ export const skills = pgTable(
   "skills",
   {
     id: text("id").primaryKey(),
+    orgId: organizationIdColumn(),
     /**
      * Whose skill this is. Null means the deployment's: written by an administrator, or shipped,
      * and offered to everybody.
@@ -139,7 +142,7 @@ export const skills = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
-    uniqueIndex("skills_slug_key").on(table.slug),
+    uniqueIndex("skills_org_slug_key").on(table.orgId, table.slug),
     index("skills_owner_idx").on(table.ownerUserId),
   ],
 );
@@ -160,6 +163,7 @@ export const skills = pgTable(
 export const pluginGrants = pgTable(
   "plugin_grants",
   {
+    orgId: organizationIdColumn(),
     kind: text("kind").notNull(),
     ref: text("ref").notNull(),
     agentId: text("agent_id")
@@ -191,6 +195,7 @@ export const pluginGrants = pgTable(
 export const sandboxedComponents = pgTable("sandboxed_components", {
   /** The tool name the model calls. Namespaced on save so it can never collide with a compiled one. */
   name: text("name").primaryKey(),
+  orgId: organizationIdColumn(),
   title: text("title").notNull(),
 
   /**

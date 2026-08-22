@@ -11,6 +11,7 @@ import {
   channels as channelTable,
   deploymentPackages,
 } from "./db/schema";
+import { LOCAL_ORGANIZATION_ID } from "./orgs/constants";
 
 const approvedThemeVariables = new Set([
   "--background",
@@ -405,6 +406,7 @@ export async function loadTenantPackage(
 export async function synchronizeTenantPackage(
   database: Database,
   tenantPackage: LoadedTenantPackage,
+  orgId: string = LOCAL_ORGANIZATION_ID,
 ) {
   return database.transaction(async (transaction) => {
     const [deploymentPackage] = await transaction
@@ -434,6 +436,7 @@ export async function synchronizeTenantPackage(
         .insert(agentTable)
         .values({
           id: agent.id,
+          orgId,
           name: agent.name,
           type: agent.type,
           configuration: agent.configuration,
@@ -462,6 +465,7 @@ export async function synchronizeTenantPackage(
         .insert(agentProfiles)
         .values({
           agentId: canonicalAgent.id,
+          orgId,
           ownerUserId: null,
           title: agent.title,
           roleDescription: agent.roleDescription,
@@ -497,6 +501,7 @@ export async function synchronizeTenantPackage(
         .insert(channelTable)
         .values({
           id: channel.id,
+          orgId,
           name: channel.name,
           description: channel.description,
           allowedGroups: channel.allowedGroups,
@@ -518,6 +523,7 @@ export async function synchronizeTenantPackage(
       if (channel.permittedAgents.length) {
         await transaction.insert(channelAgents).values(
           channel.permittedAgents.map((agentId) => ({
+            orgId,
             channelId: channel.id,
             agentId,
           })),

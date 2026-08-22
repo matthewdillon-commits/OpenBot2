@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
+import { LOCAL_ORGANIZATION_ID } from "../orgs/constants";
 
 /**
  * Which deployment a conversation belongs to, carried by the thread's own id.
@@ -28,8 +29,8 @@ const UUID_V8 = 0x80;
 const VARIANT_RFC = 0x80;
 
 export type ThreadIdentity = {
-  /** A thread id belonging to this deployment. */
-  mint: () => string;
+  /** A thread id belonging to this deployment and organization. */
+  mint: (orgId?: string) => string;
   /**
    * Whether this deployment minted the thread id.
    *
@@ -37,7 +38,7 @@ export type ThreadIdentity = {
    * belongs to somebody else. A caller offering to take conversations back has to treat the two
    * differently: one is certainly yours, the other is only possibly.
    */
-  owns: (threadId: string) => boolean;
+  owns: (threadId: string, orgId?: string) => boolean;
 };
 
 function fingerprintOf(deploymentId: string): Buffer {
@@ -66,11 +67,18 @@ function bytesOf(threadId: string): Buffer | null {
   return Buffer.from(threadId.replaceAll("-", ""), "hex");
 }
 
-export function createThreadIdentity(deploymentId: string): ThreadIdentity {
-  const fingerprint = fingerprintOf(deploymentId);
+function namespaceFor(deploymentId: string, orgId: string) {
+  // The backfilled org keeps the deployment-only fingerprint so threads minted
+  // before tenancy still belong to it. Every other org is namespaced.
+  return orgId === LOCAL_ORGANIZATION_ID
+    ? deploymentId
+    : `${deploymentId}:org:${orgId}`;
+}
 
+export function createThreadIdentity(deploymentId: string): ThreadIdentity {
   return {
-    mint() {
+    mint(orgId = LOCAL_ORGANIZATION_ID) {
+      const fingerprint = fingerprintOf(namespaceFor(deploymentId, orgId));
       const bytes = randomBytes(16);
       fingerprint.copy(bytes, 0);
       // Version and variant are fixed by the format and sit outside the fingerprint's six bytes.
@@ -79,7 +87,8 @@ export function createThreadIdentity(deploymentId: string): ThreadIdentity {
       return format(bytes);
     },
 
-    owns(threadId) {
+    owns(threadId, orgId = LOCAL_ORGANIZATION_ID) {
+      const fingerprint = fingerprintOf(namespaceFor(deploymentId, orgId));
       const bytes = bytesOf(threadId);
       if (!bytes) return false;
       if ((bytes[6] & 0xf0) !== UUID_V8) return false;

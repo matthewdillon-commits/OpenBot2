@@ -1,6 +1,7 @@
-import { eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { documents, users } from "../db/schema";
+import { LOCAL_ORGANIZATION_ID } from "../orgs/constants";
 
 /**
  * Answering from the company's documents, with only the ones the asker may read.
@@ -56,6 +57,7 @@ export type KnowledgeSearch = {
     asker: KnowledgeAsker;
     query: string;
     limit?: number;
+    orgId?: string;
   }) => Promise<KnowledgeCitation[]>;
   /**
    * Whether there is anything to search at all.
@@ -67,7 +69,7 @@ export type KnowledgeSearch = {
    * Asked per run rather than at boot, for the reason plugins/tools.ts gives about grants: a source
    * connected this morning should work this afternoon, not after a restart.
    */
-  anyDocuments: () => Promise<boolean>;
+  anyDocuments: (orgId?: string) => Promise<boolean>;
 };
 
 /** Enough to answer from, few enough to fit a reply. */
@@ -128,16 +130,18 @@ export async function askerFor(
 
 export function createKnowledgeSearch(database: Database): KnowledgeSearch {
   return {
-    async anyDocuments() {
+    async anyDocuments(orgId = LOCAL_ORGANIZATION_ID) {
       const [row] = await database
         .select({ id: documents.id })
         .from(documents)
-        .where(isNull(documents.deletedAt))
+        .where(
+          and(isNull(documents.deletedAt), eq(documents.orgId, orgId)),
+        )
         .limit(1);
       return row !== undefined;
     },
 
-    async search({ asker, query, limit }) {
+    async search({ asker, query, limit, orgId = LOCAL_ORGANIZATION_ID }) {
       const terms = query.trim();
       /*
        * Answered here rather than by the database. `websearch_to_tsquery` turns an empty string into
@@ -199,6 +203,7 @@ export function createKnowledgeSearch(database: Database): KnowledgeSearch {
             join documents d on d.id = c.document_id
             cross join asked
             where d.deleted_at is null
+              and d.org_id = ${orgId}
               and to_tsvector(${TEXT_CONFIG}::regconfig, c.content) @@ asked.tsq
               and exists (
                 select 1 from document_acls a

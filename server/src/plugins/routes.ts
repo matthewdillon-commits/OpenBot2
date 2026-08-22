@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import type { BotAccessCheck } from "../agents/profile-policy";
 import type { AppVariables } from "../auth/guards";
 import { requireAdmin } from "../auth/guards";
+import { orgIdOf } from "../orgs/constants";
 import { CATALOGUE } from "./catalogue";
 import {
   CatalogueEntryUnknownError,
@@ -45,7 +46,10 @@ export function createPluginRoutes(
   const skillActor = (context: { var: AppVariables }) => ({
     id: context.var.actor.id,
     isAdmin: context.var.actor.role === "admin",
+    orgId: orgIdOf(context.var.actor),
   });
+
+  const orgOf = (context: { var: AppVariables }) => orgIdOf(context.var.actor);
 
   /**
    * May this person write, edit or delete this skill?
@@ -59,7 +63,7 @@ export function createPluginRoutes(
   ): Promise<string | null> {
     const actor = skillActor(context);
     if (actor.isAdmin) return null;
-    const owner = await store.skillOwner(slug);
+    const owner = await store.skillOwner(slug, orgOf(context));
     if (owner === undefined) return null; // A new skill. Ownership is decided on the way in.
     if (owner === null) {
       return `${slug} belongs to this deployment. An administrator looks after it.`;
@@ -79,7 +83,7 @@ export function createPluginRoutes(
         needsCredential: entry.needsCredential,
         perInstance: entry.host === null,
       })),
-      servers: await store.listServers(),
+      servers: await store.listServers(orgOf(context)),
       // Scoped: the deployment's skills plus this person's own. An administrator sees them all.
       skills: await store.listSkills(skillActor(context)),
     }),
@@ -105,6 +109,7 @@ export function createPluginRoutes(
         instanceHost: body.instanceHost,
         credentialId: body.credentialId,
         by: actorEmail(context),
+        orgId: orgOf(context),
       });
       return context.json({ server });
     } catch (error) {
@@ -146,6 +151,7 @@ export function createPluginRoutes(
         url: body.url,
         credentialId: body.credentialId,
         by: actorEmail(context),
+        orgId: orgOf(context),
       });
       return context.json({ server });
     } catch (error) {
@@ -163,7 +169,11 @@ export function createPluginRoutes(
     const forbidden = requireAdmin(context);
     if (forbidden) return forbidden;
 
-    await store.removeServer(context.req.param("id"), actorEmail(context));
+    await store.removeServer(
+      context.req.param("id"),
+      actorEmail(context),
+      orgOf(context),
+    );
     return context.json({ ok: true });
   });
 
@@ -173,8 +183,11 @@ export function createPluginRoutes(
     if (forbidden) return forbidden;
 
     try {
-      const result = await store.refreshTools(context.req.param("id"));
-      const servers = await store.listServers();
+      const result = await store.refreshTools(
+        context.req.param("id"),
+        orgOf(context),
+      );
+      const servers = await store.listServers(orgOf(context));
       return context.json({
         tools: result.tools,
         server: servers.find((server) => server.id === context.req.param("id")),
@@ -238,6 +251,7 @@ export function createPluginRoutes(
       instructions: body.instructions,
       ownerUserId: body.global ? null : actor.id,
       by: actorEmail(context),
+      orgId: actor.orgId,
     });
     return context.json({ skills: await store.listSkills(actor) });
   });
@@ -247,7 +261,7 @@ export function createPluginRoutes(
     const refusal = await skillRefusal(context, slug);
     if (refusal) return context.json({ error: refusal }, 403);
 
-    await store.uninstallSkill(slug, actorEmail(context));
+    await store.uninstallSkill(slug, actorEmail(context), orgOf(context));
     return context.json({ ok: true });
   });
 
@@ -278,7 +292,7 @@ export function createPluginRoutes(
       return "An administrator decides which Bots may reach a tool.";
     }
 
-    const owner = await store.skillOwner(ref);
+    const owner = await store.skillOwner(ref, actor.orgId);
     if (owner === undefined) return `There is no skill called ${ref}.`;
     if (owner !== actor.id) {
       return owner === null
@@ -286,7 +300,7 @@ export function createPluginRoutes(
         : `${ref} is somebody else's skill.`;
     }
 
-    const botOwner = await store.agentOwner(agentId);
+    const botOwner = await store.agentOwner(agentId, actor.orgId);
     if (botOwner === undefined) return "There is no such Bot.";
     if (botOwner !== actor.id) {
       // Including the shared Bots this deployment publishes, which have no owner at all: a skill
@@ -316,7 +330,13 @@ export function createPluginRoutes(
     );
     if (refusal) return context.json({ error: refusal }, 403);
 
-    await store.grant(body.kind, body.ref, body.agentId, actorEmail(context));
+    await store.grant(
+      body.kind,
+      body.ref,
+      body.agentId,
+      actorEmail(context),
+      orgOf(context),
+    );
     return context.json({ ok: true });
   });
 
@@ -333,7 +353,7 @@ export function createPluginRoutes(
     const refusal = await enablementRefusal(context, kind, ref, agentId);
     if (refusal) return context.json({ error: refusal }, 403);
 
-    await store.revoke(kind, ref, agentId, actorEmail(context));
+    await store.revoke(kind, ref, agentId, actorEmail(context), orgOf(context));
     return context.json({ ok: true });
   });
 
@@ -345,7 +365,7 @@ export function createPluginRoutes(
     if (!(await canUseBot(context.var.actor, agentId))) {
       return context.json({ error: "There is no such Bot." }, 404);
     }
-    return context.json(await store.listForAgent(agentId));
+    return context.json(await store.listForAgent(agentId, orgOf(context)));
   });
 
   /**
@@ -378,6 +398,7 @@ export function createPluginRoutes(
         args: body.args ?? {},
         botId: body.agentId,
         actorId: actorEmail(context),
+        orgId: orgOf(context),
       });
       return context.json(result);
     } catch (error) {

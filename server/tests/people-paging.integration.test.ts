@@ -4,6 +4,7 @@ import { createDatabase } from "../src/db/client";
 import { sessions, users } from "../src/db/schema";
 import { createPeopleStore } from "../src/people/store";
 import { TEST_POOL } from "./support/database";
+import { seedMembership } from "./support/organization";
 
 /**
  * The people list has to stop growing with the company.
@@ -51,6 +52,7 @@ async function person(
       createdAt: signedInAt,
     });
   }
+  await seedMembership(database, id, "member");
   return id;
 }
 

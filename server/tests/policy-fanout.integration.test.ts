@@ -54,6 +54,7 @@ async function until(
 
 afterEach(async () => {
   await database.delete(actionPolicy).where(eq(actionPolicy.id, "current"));
+  await database.delete(actionPolicy).where(eq(actionPolicy.id, "org_local"));
 });
 
 describe("a rule added on one server", () => {

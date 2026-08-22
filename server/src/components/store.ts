@@ -1,10 +1,11 @@
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne, or } from "drizzle-orm";
 import type { Database } from "../db/client";
 import {
   componentExclusions,
   componentFunctions,
   components,
 } from "../db/schema";
+import { LOCAL_ORGANIZATION_ID, orgIdOf } from "../orgs/constants";
 import { dataFunction } from "./functions";
 
 export type ComponentRecord = {
@@ -67,20 +68,29 @@ export type ComponentStore = {
    * Safe to call on every page load for that reason.
    */
   syncCatalogue(entries: CatalogueEntry[]): Promise<{ added: string[] }>;
-  list(): Promise<ComponentRecord[]>;
+  list(orgId?: string): Promise<ComponentRecord[]>;
   /** What this Bot may answer with: everything published, less whatever it has been held back from. */
-  listForAgent(agentId: string): Promise<GrantedComponent[]>;
+  listForAgent(agentId: string, orgId?: string): Promise<GrantedComponent[]>;
   /**
    * The one decision point. Everything that wants to know whether a Bot may use a component asks
    * here, so there is a single place where the answer is decided and a single place to audit it.
    */
-  decide(name: string, agentId: string): Promise<ComponentDecision>;
+  decide(name: string, agentId: string, orgId?: string): Promise<ComponentDecision>;
   /** Stop holding this Bot back from this component. Takes no actor: it writes no row. */
-  grant(name: string, agentId: string): Promise<void>;
+  grant(name: string, agentId: string, orgId?: string): Promise<void>;
   /** Hold this Bot back from this one component. Every other Bot is unaffected. */
-  revoke(name: string, agentId: string, by: string): Promise<void>;
-  grantFunction(name: string, functionName: string, by: string): Promise<void>;
-  revokeFunction(name: string, functionName: string): Promise<void>;
+  revoke(name: string, agentId: string, by: string, orgId?: string): Promise<void>;
+  grantFunction(
+    name: string,
+    functionName: string,
+    by: string,
+    orgId?: string,
+  ): Promise<void>;
+  revokeFunction(
+    name: string,
+    functionName: string,
+    orgId?: string,
+  ): Promise<void>;
   /**
    * May this component call this function?
    *
@@ -89,26 +99,48 @@ export type ComponentStore = {
    * whether the component may read this data. Answering them together would let a caller satisfy one
    * and believe it had satisfied the other.
    */
-  mayCall(name: string, functionName: string): Promise<boolean>;
+  mayCall(name: string, functionName: string, orgId?: string): Promise<boolean>;
   /** Run a data function against this deployment. Permission is the caller's question, not this one's. */
   callFunction(
     functionName: string,
     args: Record<string, unknown>,
   ): Promise<unknown>;
-  publish(name: string, by: string): Promise<void>;
-  unpublish(name: string, by: string): Promise<void>;
-  saveDraft(name: string, description: string, by: string): Promise<void>;
+  publish(name: string, by: string, orgId?: string): Promise<void>;
+  unpublish(name: string, by: string, orgId?: string): Promise<void>;
+  saveDraft(
+    name: string,
+    description: string,
+    by: string,
+    orgId?: string,
+  ): Promise<void>;
 };
+
+function scope(orgId?: string) {
+  return orgIdOf({ orgId });
+}
+
+/** Compiled catalogue components stay shared; sandboxed ones stay in their org. */
+function visibleComponents(orgId: string) {
+  return orgId === LOCAL_ORGANIZATION_ID
+    ? eq(components.orgId, LOCAL_ORGANIZATION_ID)
+    : or(
+        eq(components.orgId, orgId),
+        and(
+          eq(components.orgId, LOCAL_ORGANIZATION_ID),
+          ne(components.kind, "sandboxed"),
+        ),
+      );
+}
 
 const iso = (value: Date | string | null): string | null =>
   value === null ? null : value instanceof Date ? value.toISOString() : value;
 
 export function createComponentStore(database: Database): ComponentStore {
-  async function requireComponent(name: string) {
+  async function requireComponent(name: string, orgId = LOCAL_ORGANIZATION_ID) {
     const [row] = await database
       .select()
       .from(components)
-      .where(eq(components.name, name))
+      .where(and(eq(components.name, name), visibleComponents(orgId)))
       .limit(1);
     if (!row) throw new ComponentNotFoundError(name);
     return row;
@@ -130,6 +162,7 @@ export function createComponentStore(database: Database): ComponentStore {
         .values(
           missing.map((entry) => ({
             name: entry.name,
+            orgId: LOCAL_ORGANIZATION_ID,
             title: entry.title,
             kind: entry.kind,
             draftDescription: entry.description,
@@ -147,10 +180,12 @@ export function createComponentStore(database: Database): ComponentStore {
       return { added: missing.map((entry) => entry.name) };
     },
 
-    async list() {
+    async list(orgId) {
+      const scoped = scope(orgId);
       const rows = await database
         .select()
         .from(components)
+        .where(visibleComponents(scoped))
         .orderBy(asc(components.kind), asc(components.title));
       if (rows.length === 0) return [];
 
@@ -158,9 +193,12 @@ export function createComponentStore(database: Database): ComponentStore {
         .select()
         .from(componentFunctions)
         .where(
-          inArray(
-            componentFunctions.componentName,
-            rows.map((row) => row.name),
+          and(
+            eq(componentFunctions.orgId, scoped),
+            inArray(
+              componentFunctions.componentName,
+              rows.map((row) => row.name),
+            ),
           ),
         );
       const functionsByComponent = new Map<string, string[]>();
@@ -174,9 +212,12 @@ export function createComponentStore(database: Database): ComponentStore {
         .select()
         .from(componentExclusions)
         .where(
-          inArray(
-            componentExclusions.componentName,
-            rows.map((row) => row.name),
+          and(
+            eq(componentExclusions.orgId, scoped),
+            inArray(
+              componentExclusions.componentName,
+              rows.map((row) => row.name),
+            ),
           ),
         );
 
@@ -204,7 +245,8 @@ export function createComponentStore(database: Database): ComponentStore {
       }));
     },
 
-    async listForAgent(agentId) {
+    async listForAgent(agentId, orgId) {
+      const scoped = scope(orgId);
       const rows = await database
         .select({
           name: components.name,
@@ -217,10 +259,12 @@ export function createComponentStore(database: Database): ComponentStore {
           and(
             eq(componentExclusions.componentName, components.name),
             eq(componentExclusions.agentId, agentId),
+            eq(componentExclusions.orgId, scoped),
           ),
         )
         .where(
           and(
+            visibleComponents(scoped),
             eq(components.published, true),
             isNull(componentExclusions.agentId),
           ),
@@ -236,7 +280,8 @@ export function createComponentStore(database: Database): ComponentStore {
       );
     },
 
-    async decide(name, agentId) {
+    async decide(name, agentId, orgId) {
+      const scoped = scope(orgId);
       const [row] = await database
         .select({
           published: components.published,
@@ -250,9 +295,10 @@ export function createComponentStore(database: Database): ComponentStore {
           and(
             eq(componentExclusions.componentName, components.name),
             eq(componentExclusions.agentId, agentId),
+            eq(componentExclusions.orgId, scoped),
           ),
         )
-        .where(eq(components.name, name))
+        .where(and(eq(components.name, name), visibleComponents(scoped)))
         .limit(1);
 
       // Every refusal says which one it is. "Not allowed" sends a model round the same loop; naming
@@ -278,29 +324,38 @@ export function createComponentStore(database: Database): ComponentStore {
       return { allowed: true, description: row.description };
     },
 
-    async grant(name, agentId) {
-      await requireComponent(name);
+    async grant(name, agentId, orgId) {
+      const scoped = scope(orgId);
+      await requireComponent(name, scoped);
       await database
         .delete(componentExclusions)
         .where(
           and(
             eq(componentExclusions.componentName, name),
             eq(componentExclusions.agentId, agentId),
+            eq(componentExclusions.orgId, scoped),
           ),
         );
     },
 
-    async revoke(name, agentId, by) {
-      await requireComponent(name);
+    async revoke(name, agentId, by, orgId) {
+      const scoped = scope(orgId);
+      await requireComponent(name, scoped);
       await database
         .insert(componentExclusions)
-        .values({ componentName: name, agentId, withheldBy: by })
+        .values({
+          orgId: scoped,
+          componentName: name,
+          agentId,
+          withheldBy: by,
+        })
         // Withholding twice must not move the date.
         .onConflictDoNothing();
     },
 
-    async publish(name, by) {
-      const row = await requireComponent(name);
+    async publish(name, by, orgId) {
+      const scoped = scope(orgId);
+      const row = await requireComponent(name, scoped);
       await database
         .update(components)
         .set({
@@ -311,40 +366,47 @@ export function createComponentStore(database: Database): ComponentStore {
           updatedBy: by,
           updatedAt: new Date(),
         })
-        .where(eq(components.name, name));
+        .where(and(eq(components.name, name), eq(components.orgId, row.orgId)));
     },
 
-    async unpublish(name, by) {
-      await requireComponent(name);
+    async unpublish(name, by, orgId) {
+      const row = await requireComponent(name, scope(orgId));
       await database
         .update(components)
         .set({ published: false, updatedBy: by, updatedAt: new Date() })
         // Grants are left alone. Unpublishing is "nobody may use this for now", not "forget who was
         // trusted with it", clearing them would silently destroy an administrator's work and make
         // re-publishing a re-grant of everything.
-        .where(eq(components.name, name));
+        .where(and(eq(components.name, name), eq(components.orgId, row.orgId)));
     },
 
-    async grantFunction(name, functionName, by) {
-      await requireComponent(name);
+    async grantFunction(name, functionName, by, orgId) {
+      const scoped = scope(orgId);
+      await requireComponent(name, scoped);
       await database
         .insert(componentFunctions)
-        .values({ componentName: name, functionName, grantedBy: by })
+        .values({
+          orgId: scoped,
+          componentName: name,
+          functionName,
+          grantedBy: by,
+        })
         .onConflictDoNothing();
     },
 
-    async revokeFunction(name, functionName) {
+    async revokeFunction(name, functionName, orgId) {
       await database
         .delete(componentFunctions)
         .where(
           and(
             eq(componentFunctions.componentName, name),
             eq(componentFunctions.functionName, functionName),
+            eq(componentFunctions.orgId, scope(orgId)),
           ),
         );
     },
 
-    async mayCall(name, functionName) {
+    async mayCall(name, functionName, orgId) {
       const [row] = await database
         .select({ granted: componentFunctions.functionName })
         .from(componentFunctions)
@@ -352,6 +414,7 @@ export function createComponentStore(database: Database): ComponentStore {
           and(
             eq(componentFunctions.componentName, name),
             eq(componentFunctions.functionName, functionName),
+            eq(componentFunctions.orgId, scope(orgId)),
           ),
         )
         .limit(1);
@@ -369,8 +432,8 @@ export function createComponentStore(database: Database): ComponentStore {
       return fn.run(database, args);
     },
 
-    async saveDraft(name, description, by) {
-      await requireComponent(name);
+    async saveDraft(name, description, by, orgId) {
+      const row = await requireComponent(name, scope(orgId));
       await database
         .update(components)
         .set({
@@ -378,7 +441,7 @@ export function createComponentStore(database: Database): ComponentStore {
           updatedBy: by,
           updatedAt: new Date(),
         })
-        .where(eq(components.name, name));
+        .where(and(eq(components.name, name), eq(components.orgId, row.orgId)));
     },
   };
 }

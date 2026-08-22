@@ -1,7 +1,12 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { type AuditStore, recordAuditEvent } from "../audit";
 import type { Database } from "../db/client";
 import { components, sandboxedComponents } from "../db/schema";
+import {
+  LOCAL_ORGANIZATION_ID,
+  orgIdOf,
+  scopedResourceId,
+} from "../orgs/constants";
 
 /**
  * Components authored in a browser rather than compiled into the build.
@@ -87,19 +92,29 @@ const iso = (value: Date | string | null): string | null =>
  */
 export const SANDBOXED_PREFIX = "custom_";
 
-export function sandboxedNameFor(slug: string): string {
-  return `${SANDBOXED_PREFIX}${slug}`;
+export function sandboxedNameFor(
+  slug: string,
+  orgId = LOCAL_ORGANIZATION_ID,
+): string {
+  return `${SANDBOXED_PREFIX}${scopedResourceId(orgId, slug)}`;
 }
 
 export function createSandboxedStore(
   database: Database,
   auditStore: AuditStore,
 ) {
-  async function requireRow(name: string) {
+  const scope = (orgId?: string) => orgIdOf({ orgId });
+
+  async function requireRow(name: string, orgId = LOCAL_ORGANIZATION_ID) {
     const [row] = await database
       .select()
       .from(sandboxedComponents)
-      .where(eq(sandboxedComponents.name, name))
+      .where(
+        and(
+          eq(sandboxedComponents.name, name),
+          eq(sandboxedComponents.orgId, orgId),
+        ),
+      )
       .limit(1);
     if (!row) throw new SandboxedNotFoundError(name);
     return row;
@@ -135,10 +150,11 @@ export function createSandboxedStore(
   });
 
   return {
-    async list(): Promise<SandboxedRecord[]> {
+    async list(orgId?: string): Promise<SandboxedRecord[]> {
       const rows = await database
         .select()
         .from(sandboxedComponents)
+        .where(eq(sandboxedComponents.orgId, scope(orgId)))
         .orderBy(asc(sandboxedComponents.title));
       return rows.map(toRecord);
     },
@@ -160,18 +176,21 @@ export function createSandboxedStore(
       argumentSchema: Record<string, unknown>;
       sampleArguments: Record<string, unknown>;
       by: string;
+      orgId?: string;
     }): Promise<SandboxedRecord> {
       if (!/^[a-z0-9][a-z0-9_]{0,38}[a-z0-9]$/.test(input.slug)) {
         throw new SandboxedNameRefusedError(
           "A name is lower-case letters, numbers and underscores.",
         );
       }
-      const name = sandboxedNameFor(input.slug);
+      const orgId = scope(input.orgId);
+      const name = sandboxedNameFor(input.slug, orgId);
 
       await database
         .insert(sandboxedComponents)
         .values({
           name,
+          orgId,
           title: input.title,
           draftDescription: input.description,
           draftHtml: input.html,
@@ -202,6 +221,7 @@ export function createSandboxedStore(
         .insert(components)
         .values({
           name,
+          orgId,
           title: input.title,
           kind: "sandboxed",
           draftDescription: input.description,
@@ -223,10 +243,11 @@ export function createSandboxedStore(
         eventType: "component.draft_saved",
         targetType: "component",
         targetId: name,
+        orgId,
         payload: { actor: input.by, kind: "sandboxed" },
       });
 
-      return toRecord(await requireRow(name));
+      return toRecord(await requireRow(name, orgId));
     },
 
     /**
@@ -237,8 +258,13 @@ export function createSandboxedStore(
      * wording would leave a component no model is told about. Either half on its own is a state
      * nobody wants and both would be reachable if this were two endpoints.
      */
-    async publish(name: string, by: string): Promise<SandboxedRecord> {
-      const row = await requireRow(name);
+    async publish(
+      name: string,
+      by: string,
+      orgId?: string,
+    ): Promise<SandboxedRecord> {
+      const scoped = scope(orgId);
+      const row = await requireRow(name, scoped);
 
       await database
         .update(sandboxedComponents)
@@ -253,7 +279,12 @@ export function createSandboxedStore(
           revision: row.revision + 1,
           updatedAt: new Date(),
         })
-        .where(eq(sandboxedComponents.name, name));
+        .where(
+          and(
+            eq(sandboxedComponents.name, name),
+            eq(sandboxedComponents.orgId, scoped),
+          ),
+        );
 
       await database
         .update(components)
@@ -264,19 +295,21 @@ export function createSandboxedStore(
           updatedBy: by,
           updatedAt: new Date(),
         })
-        .where(eq(components.name, name));
+        .where(and(eq(components.name, name), eq(components.orgId, scoped)));
 
       await recordAuditEvent(auditStore, {
         eventType: "component.published",
         targetType: "component",
         targetId: name,
+        orgId: scoped,
         payload: { actor: by, kind: "sandboxed", revision: row.revision + 1 },
       });
 
-      return toRecord(await requireRow(name));
+      return toRecord(await requireRow(name, scoped));
     },
 
-    async remove(name: string, by: string): Promise<void> {
+    async remove(name: string, by: string, orgId?: string): Promise<void> {
+      const scoped = scope(orgId);
       /*
        * Refuse a name this surface does not own.
        *
@@ -301,7 +334,7 @@ export function createSandboxedStore(
       const [governance] = await database
         .select({ kind: components.kind })
         .from(components)
-        .where(eq(components.name, name))
+        .where(and(eq(components.name, name), eq(components.orgId, scoped)))
         .limit(1);
       // "sandboxed" is the kind `save` writes above. A name with no row at all is refused for the
       // same reason `publish` refuses one: this surface has nothing by that name to act on.
@@ -313,13 +346,21 @@ export function createSandboxedStore(
       // "catalogue disagrees with the build" state.
       await database
         .delete(sandboxedComponents)
-        .where(eq(sandboxedComponents.name, name));
-      await database.delete(components).where(eq(components.name, name));
+        .where(
+          and(
+            eq(sandboxedComponents.name, name),
+            eq(sandboxedComponents.orgId, scoped),
+          ),
+        );
+      await database
+        .delete(components)
+        .where(and(eq(components.name, name), eq(components.orgId, scoped)));
 
       await recordAuditEvent(auditStore, {
         eventType: "component.unpublished",
         targetType: "component",
         targetId: name,
+        orgId: scoped,
         payload: { actor: by, kind: "sandboxed", change: "deleted" },
       });
     },
@@ -331,11 +372,16 @@ export function createSandboxedStore(
      * published source, so it is absent from this list and the app has nothing to draw. A draft
      * quietly rendering in production is the one outcome the draft column exists to prevent.
      */
-    async published(): Promise<PublishedSandboxed[]> {
+    async published(orgId?: string): Promise<PublishedSandboxed[]> {
       const rows = await database
         .select()
         .from(sandboxedComponents)
-        .where(eq(sandboxedComponents.published, true));
+        .where(
+          and(
+            eq(sandboxedComponents.published, true),
+            eq(sandboxedComponents.orgId, scope(orgId)),
+          ),
+        );
       return rows
         .filter((row) => row.publishedHtml !== null)
         .map((row) => ({

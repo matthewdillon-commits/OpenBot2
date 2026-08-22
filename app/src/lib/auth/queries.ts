@@ -7,6 +7,11 @@ export type AuthenticatedUser = {
   name?: string | null;
   image?: string | null;
   role: "admin" | "user";
+  orgId?: string;
+  orgSlug?: string;
+  orgName?: string;
+  orgRole?: "owner" | "admin" | "member";
+  platformSuperadmin?: boolean;
 };
 
 export const authKeys = {

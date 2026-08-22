@@ -70,7 +70,9 @@ describe("server authorization", () => {
         name: "OpenBot Member",
         image: "https://example.test/member.png",
         role: "user",
+        platformSuperadmin: false,
       },
+      organizations: [],
     });
   });
 

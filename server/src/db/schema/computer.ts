@@ -11,6 +11,7 @@ import {
   text,
   timestamp,
 } from "drizzle-orm/pg-core";
+import { organizationIdColumn } from "./core";
 import { jsonb } from "./json";
 
 /**
@@ -19,17 +20,16 @@ import { jsonb } from "./json";
  * This table keeps policy across restarts. The policy can be changed while running, and a restart
  * must not silently return to the default.
  *
- * One row, by construction. A deployment has one boundary, so the primary key is a constant and every
- * write is an upsert onto it. A table that can hold two policies is a table that will eventually hold
- * two and have to decide between them, and "which of these is in force" is not a question this should
- * ever be able to ask.
+ * One row per organization. `id` is the org id (it used to be the literal `current` when
+ * a deployment had one boundary).
  *
  * Memory is still the cache. The gateway asks for the policy on every action, so it reads from
  * memory; this is the record that survives a restart, not something on the path of a click.
  */
 export const actionPolicy = pgTable("action_policy", {
-  /** Always `current`. See the note above on there being exactly one. */
+  /** The organization this boundary belongs to. Was the literal `current` before tenancy. */
   id: text("id").primaryKey(),
+  orgId: organizationIdColumn(),
   /** `enforce` or `dry-run`. Not an enum: the policy module owns that vocabulary. */
   mode: text("mode").notNull(),
   deny: text("deny").array().notNull(),
@@ -70,6 +70,7 @@ export const actionPolicy = pgTable("action_policy", {
 export const computerSnapshot = pgTable("computer_snapshot", {
   /** The computer these refs belong to. One live snapshot each, so it is the key. */
   computerId: text("computer_id").primaryKey(),
+  orgId: organizationIdColumn(),
   /** The generation the computer stamped on this snapshot. A ref names the one it came from. */
   snapshotId: integer("snapshot_id").notNull(),
   /** The page it was taken on, so a rule about the host still has a page to match after a handover. */

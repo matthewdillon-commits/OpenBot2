@@ -59,9 +59,10 @@ export async function grantedTools(options: {
   store: PluginStore;
   botId: string;
   actorId: string;
+  orgId?: string;
 }): Promise<GrantedTool[]> {
-  const { store, botId, actorId } = options;
-  const granted = await store.listForAgent(botId);
+  const { store, botId, actorId, orgId } = options;
+  const granted = await store.listForAgent(botId, orgId);
 
   return granted.tools.map((tool) => ({
     name: tool.toolName,
@@ -79,6 +80,7 @@ export async function grantedTools(options: {
               : {},
           botId,
           actorId,
+          orgId,
         });
         return result.text;
       } catch (error) {

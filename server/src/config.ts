@@ -140,6 +140,13 @@ export type DeploymentConfig = {
    * reaching somewhere other people can get to.
    */
   singleUser: boolean;
+  /**
+   * Emails that may provision and suspend organizations. Not an org role.
+   *
+   * Empty in ordinary deployments. Sales-led hosting sets this so somebody can create a customer
+   * without also being that customer's owner.
+   */
+  platformSuperadmins: string[];
   /** Names OpenBot on the analytics the runtime already sends. Off with OPENBOT_ACCESSIBILITY_DISABLED. */
   accessibility: boolean;
   /**
@@ -605,6 +612,7 @@ export function loadConfig(
       environment,
       configuredAuthProviders(auth).length > 0,
     ),
+    platformSuperadmins: commaSeparated(environment, "PLATFORM_SUPERADMINS"),
     accessibility: accessibilityEnabled(environment),
     ...(optional(environment, "APP_DIST_DIR")
       ? { appDistDir: optional(environment, "APP_DIST_DIR") as string }

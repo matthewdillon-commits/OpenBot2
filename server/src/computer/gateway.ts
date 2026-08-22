@@ -18,6 +18,7 @@
  * The refs are opaque to the caller precisely so that the server holds the mapping.
  */
 import { type AuditStore, recordAuditEvent } from "../audit";
+import { computerIdFor, LOCAL_ORGANIZATION_ID } from "../orgs/constants";
 import { ComputerUnavailableError, createComputerTransport } from "./client";
 import { checkComputerAddress } from "./target";
 
@@ -87,13 +88,15 @@ export type ActionActor = {
   id: string;
   /** Null unless this is a real row in `users`, because the audit table has a foreign key to it. */
   userId?: string;
+  /** The organization this action is for. Absent lands in the backfilled local org. */
+  orgId?: string;
 };
 
 export type ComputerGatewayOptions = {
   provider: ComputerProvider;
   auditStore: AuditStore;
   /** Absent denies everything. See evaluateActionPolicy. */
-  policy: () => ActionPolicy | undefined;
+  policy: (orgId?: string) => ActionPolicy | undefined;
   /** True on a laptop, where browsing private network addresses is required. */
   allowPrivateHosts?: boolean;
   /** The secret that agent-computer requires on each request. */
@@ -112,11 +115,11 @@ export type ComputerGatewayOptions = {
 
 export interface ComputerGateway {
   readonly provider: ComputerProvider;
-  locate(botId: string): Promise<string>;
-  status(botId: string): Promise<ComputerStatus>;
-  screenshot(botId: string): Promise<ScreenshotResult>;
-  snapshot(botId: string): Promise<SnapshotResult>;
-  read(botId: string): Promise<ReadResult>;
+  locate(botId: string, orgId?: string): Promise<string>;
+  status(botId: string, orgId?: string): Promise<ComputerStatus>;
+  screenshot(botId: string, orgId?: string): Promise<ScreenshotResult>;
+  snapshot(botId: string, orgId?: string): Promise<SnapshotResult>;
+  read(botId: string, orgId?: string): Promise<ReadResult>;
   navigate(
     botId: string,
     actor: ActionActor,
@@ -166,7 +169,7 @@ export interface ComputerGateway {
     actor: ActionActor,
     input: WriteFileInput,
   ): Promise<WriteFileResult>;
-  control(botId: string): Promise<ControlState>;
+  control(botId: string, orgId?: string): Promise<ControlState>;
   requestHelp(
     botId: string,
     actor: ActionActor,
@@ -184,7 +187,11 @@ export interface ComputerGateway {
     actor: ActionActor,
     text: string,
   ): Promise<SecretResult>;
-  humanInput(botId: string, input: HumanInput): Promise<HumanInputResult>;
+  humanInput(
+    botId: string,
+    input: HumanInput,
+    orgId?: string,
+  ): Promise<HumanInputResult>;
   computers(): Promise<{
     isolation: "per-bot" | "shared";
     computers: {
@@ -228,6 +235,11 @@ export function createComputerGateway(
    */
   const snapshots = options.snapshots ?? createInMemorySnapshotStore();
 
+  function isolation(botId: string, orgId?: string) {
+    const org = orgId?.trim() || LOCAL_ORGANIZATION_ID;
+    return { orgId: org, computerId: computerIdFor(org, botId) };
+  }
+
   /**
    * Where this Bot's computer is, checked before anything is sent to it.
    *
@@ -239,8 +251,9 @@ export function createComputerGateway(
    * Not the navigation check. That one refuses private hosts, which is the right answer for where a
    * Bot may browse and the wrong one here, where loopback is the normal case.
    */
-  async function locate(botId: string): Promise<string> {
-    const address = await provider.locate(botId);
+  async function locate(botId: string, orgId?: string): Promise<string> {
+    const { computerId } = isolation(botId, orgId);
+    const address = await provider.locate(computerId);
     const verdict = checkComputerAddress(address);
     if (!verdict.allowed) {
       throw new ComputerUnavailableError(verdict.reason);
@@ -252,10 +265,12 @@ export function createComputerGateway(
     botId: string,
     path: string,
     signal?: AbortSignal,
+    orgId?: string,
   ): Promise<T> {
+    const { computerId } = isolation(botId, orgId);
     return transport.call<T>(
-      await locate(botId),
-      botId,
+      await locate(botId, orgId),
+      computerId,
       path,
       undefined,
       signal,
@@ -268,10 +283,12 @@ export function createComputerGateway(
     payload: unknown,
     signal?: AbortSignal,
     timeoutMs?: number,
+    orgId?: string,
   ): Promise<T> {
+    const { computerId } = isolation(botId, orgId);
     return transport.post<T>(
-      await locate(botId),
-      botId,
+      await locate(botId, orgId),
+      computerId,
       path,
       payload,
       signal,
@@ -290,8 +307,11 @@ export function createComputerGateway(
   const COMMAND_BACKSTOP_MS = 615_000;
 
   /** Read-only, so it passes straight through. Nothing has changed and there is nothing to decide. */
-  async function screenshot(botId: string): Promise<ScreenshotResult> {
-    return get<ScreenshotResult>(botId, "/screenshot");
+  async function screenshot(
+    botId: string,
+    orgId?: string,
+  ): Promise<ScreenshotResult> {
+    return get<ScreenshotResult>(botId, "/screenshot", undefined, orgId);
   }
 
   /**
@@ -304,14 +324,18 @@ export function createComputerGateway(
    * the refs are returned, so the snapshot cannot be resolved against on one server before it exists
    * on the store.
    */
-  async function snapshot(botId: string): Promise<SnapshotResult> {
+  async function snapshot(
+    botId: string,
+    orgId?: string,
+  ): Promise<SnapshotResult> {
+    const { computerId } = isolation(botId, orgId);
     const result = await transport.call<SnapshotResult>(
-      await locate(botId),
-      botId,
+      await locate(botId, orgId),
+      computerId,
       "/snapshot",
       { method: "POST" },
     );
-    await snapshots.save(botId, {
+    await snapshots.save(computerId, {
       snapshotId: result.snapshotId,
       url: result.url,
       elements: new Map(
@@ -321,8 +345,8 @@ export function createComputerGateway(
     return result;
   }
 
-  async function read(botId: string): Promise<ReadResult> {
-    return get<ReadResult>(botId, "/read");
+  async function read(botId: string, orgId?: string): Promise<ReadResult> {
+    return get<ReadResult>(botId, "/read", undefined, orgId);
   }
 
   /**
@@ -375,7 +399,8 @@ export function createComputerGateway(
     const { ref, filePath, snapshotId } = subject;
     // Loaded from the store, not this process's memory: the snapshot these refs belong to was very
     // likely taken by another replica, and resolving against a local map would find nothing there.
-    const stored = await snapshots.load(botId);
+    const { orgId, computerId } = isolation(botId, actor.orgId);
+    const stored = await snapshots.load(computerId);
     const element = resolve(stored, ref, snapshotId);
     // For a navigation the relevant page is the one being opened, not the one already loaded. Using
     // the stored URL would mean `page.host == "..."` could never match the destination, which is the
@@ -422,7 +447,7 @@ export function createComputerGateway(
       command: subject.command ?? "",
     };
 
-    const policy = options.policy();
+    const policy = options.policy(orgId);
     /*
      * The administrator's kill switch, asked before CEL and not dry-runnable.
      *
@@ -515,8 +540,8 @@ export function createComputerGateway(
     snapshot,
     read,
 
-    status(botId: string): Promise<ComputerStatus> {
-      return provider.status(botId);
+    status(botId: string, orgId?: string): Promise<ComputerStatus> {
+      return provider.status(isolation(botId, orgId).computerId);
     },
 
     /**
@@ -529,9 +554,14 @@ export function createComputerGateway(
      * an investigator wants is that a human drove this browser between two times.
      */
     async requestHelp(botId: string, actor: ActionActor, reason: string) {
-      const state = await post<ControlState>(botId, "/control/request", {
-        reason,
-      });
+      const state = await post<ControlState>(
+        botId,
+        "/control/request",
+        { reason },
+        undefined,
+        undefined,
+        actor.orgId,
+      );
       await writeControlEvent(auditStore, "computer.help_requested", {
         botId,
         actor,
@@ -541,7 +571,14 @@ export function createComputerGateway(
     },
 
     async takeControl(botId: string, actor: ActionActor) {
-      const state = await post<ControlState>(botId, "/control/take", {});
+      const state = await post<ControlState>(
+        botId,
+        "/control/take",
+        {},
+        undefined,
+        undefined,
+        actor.orgId,
+      );
       await writeControlEvent(auditStore, "computer.control_taken", {
         botId,
         actor,
@@ -553,7 +590,14 @@ export function createComputerGateway(
     },
 
     async releaseControl(botId: string, actor: ActionActor) {
-      const state = await post<ControlState>(botId, "/control/release", {});
+      const state = await post<ControlState>(
+        botId,
+        "/control/release",
+        {},
+        undefined,
+        undefined,
+        actor.orgId,
+      );
       await writeControlEvent(auditStore, "computer.control_released", {
         botId,
         actor,
@@ -561,8 +605,8 @@ export function createComputerGateway(
       return state;
     },
 
-    control(botId: string): Promise<ControlState> {
-      return get<ControlState>(botId, "/control");
+    control(botId: string, orgId?: string): Promise<ControlState> {
+      return get<ControlState>(botId, "/control", undefined, orgId);
     },
 
     /** Return every computer that the configured provider owns. */
@@ -588,7 +632,7 @@ export function createComputerGateway(
      * tried.
      */
     async stopComputer(botId: string, actor: ActionActor) {
-      const result = await provider.stop(botId);
+      const result = await provider.stop(isolation(botId, actor.orgId).computerId);
       await writeControlEvent(auditStore, "computer.stopped", {
         botId,
         actor,
@@ -606,10 +650,12 @@ export function createComputerGateway(
      * row is written whatever happens next.
      */
     async resetComputer(botId: string, actor: ActionActor) {
-      const result = await provider.reset(botId);
+      const result = await provider.reset(
+        isolation(botId, actor.orgId).computerId,
+      );
       // The refs the last snapshot handed out describe a page that no longer exists, and a fresh
       // computer counts generations from one again, so the row has to go with the profile.
-      await snapshots.clear(botId);
+      await snapshots.clear(isolation(botId, actor.orgId).computerId);
       await writeControlEvent(auditStore, "computer.reset", {
         botId,
         actor,
@@ -633,7 +679,14 @@ export function createComputerGateway(
       actor: ActionActor,
       input: SecretRequest,
     ) {
-      const state = await post<ControlState>(botId, "/control/secret", input);
+      const state = await post<ControlState>(
+        botId,
+        "/control/secret",
+        input,
+        undefined,
+        undefined,
+        actor.orgId,
+      );
       await writeControlEvent(auditStore, "computer.secret_requested", {
         botId,
         actor,
@@ -643,7 +696,14 @@ export function createComputerGateway(
     },
 
     async supplySecret(botId: string, actor: ActionActor, text: string) {
-      const result = await post<SecretResult>(botId, "/human/secret", { text });
+      const result = await post<SecretResult>(
+        botId,
+        "/human/secret",
+        { text },
+        undefined,
+        undefined,
+        actor.orgId,
+      );
       await writeControlEvent(auditStore, "computer.secret_supplied", {
         botId,
         actor,
@@ -656,6 +716,7 @@ export function createComputerGateway(
     async humanInput(
       botId: string,
       input: HumanInput,
+      orgId?: string,
     ): Promise<HumanInputResult> {
       const { kind, ...payload } = input;
       /*
@@ -673,7 +734,14 @@ export function createComputerGateway(
           `A person's input is one of ${[...HUMAN_GESTURES].join(", ")}, not ${JSON.stringify(kind)}.`,
         );
       }
-      return post<HumanInputResult>(botId, `/human/${kind}`, payload);
+      return post<HumanInputResult>(
+        botId,
+        `/human/${kind}`,
+        payload,
+        undefined,
+        undefined,
+        orgId,
+      );
     },
 
     /**
@@ -688,7 +756,12 @@ export function createComputerGateway(
         botId,
         actor,
         { targetUrl: url },
-        async () => transport.navigate(await locate(botId), botId, url),
+        async () =>
+          transport.navigate(
+            await locate(botId, actor.orgId),
+            isolation(botId, actor.orgId).computerId,
+            url,
+          ),
       );
     },
 
@@ -707,7 +780,15 @@ export function createComputerGateway(
           snapshotId: input.snapshotId,
           ...(signal ? { signal } : {}),
         },
-        () => post<ActionResult>(botId, "/click", input, signal),
+        () =>
+          post<ActionResult>(
+            botId,
+            "/click",
+            input,
+            signal,
+            undefined,
+            actor.orgId,
+          ),
       );
     },
 
@@ -726,7 +807,15 @@ export function createComputerGateway(
           snapshotId: input.snapshotId,
           ...(signal ? { signal } : {}),
         },
-        () => post<ActionResult>(botId, "/type", input, signal),
+        () =>
+          post<ActionResult>(
+            botId,
+            "/type",
+            input,
+            signal,
+            undefined,
+            actor.orgId,
+          ),
       );
     },
 
@@ -748,13 +837,28 @@ export function createComputerGateway(
           key: input.key,
           ...(signal ? { signal } : {}),
         },
-        () => post<ActionResult>(botId, "/key", input, signal),
+        () =>
+          post<ActionResult>(
+            botId,
+            "/key",
+            input,
+            signal,
+            undefined,
+            actor.orgId,
+          ),
       );
     },
 
     scroll(botId: string, actor: ActionActor, input: ScrollInput) {
       return govern("computer_scroll", botId, actor, {}, () =>
-        post<ActionResult>(botId, "/scroll", input),
+        post<ActionResult>(
+          botId,
+          "/scroll",
+          input,
+          undefined,
+          undefined,
+          actor.orgId,
+        ),
       );
     },
 
@@ -771,7 +875,15 @@ export function createComputerGateway(
         botId,
         actor,
         { filePath: input.path },
-        () => post<ReadFileResult>(botId, "/files/read", input),
+        () =>
+          post<ReadFileResult>(
+            botId,
+            "/files/read",
+            input,
+            undefined,
+            undefined,
+            actor.orgId,
+          ),
       );
     },
 
@@ -786,7 +898,15 @@ export function createComputerGateway(
         botId,
         actor,
         { filePath: input.path ?? "." },
-        () => post<ListFilesResult>(botId, "/files/list", input),
+        () =>
+          post<ListFilesResult>(
+            botId,
+            "/files/list",
+            input,
+            undefined,
+            undefined,
+            actor.orgId,
+          ),
       );
     },
 
@@ -815,6 +935,7 @@ export function createComputerGateway(
             input,
             caller,
             COMMAND_BACKSTOP_MS,
+            actor.orgId,
           ),
       );
     },
@@ -825,7 +946,15 @@ export function createComputerGateway(
         botId,
         actor,
         { filePath: input.path },
-        () => post<WriteFileResult>(botId, "/files/write", input),
+        () =>
+          post<WriteFileResult>(
+            botId,
+            "/files/write",
+            input,
+            undefined,
+            undefined,
+            actor.orgId,
+          ),
       );
     },
   };
@@ -943,6 +1072,7 @@ async function write(
         : "computer.action_refused",
     targetType: "computer",
     targetId: entry.botId,
+    orgId: entry.actor.orgId,
     // Only ever a real users row. The audit table has a foreign key to it, so writing the local
     // development actor's id here makes every action fail on a constraint violation instead of being
     // recorded. Who it was is in the payload either way.
@@ -1033,6 +1163,7 @@ async function writeControlEvent(
     eventType,
     targetType: "computer",
     targetId: entry.botId,
+    orgId: entry.actor.orgId,
     ...(entry.actor.userId ? { actorUserId: entry.actor.userId } : {}),
     payload: {
       bot: entry.botId,

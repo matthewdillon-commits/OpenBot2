@@ -475,9 +475,9 @@ export function createRequestAgents(
    */
   stallGuard?: StallGuard,
   /** What each Bot may call, resolved for whoever is asking. Absent means no tools. */
-  loadToolsForActor?: (actorId: string) => LoadToolsForBot,
+  loadToolsForActor?: (actorId: string, orgId?: string) => LoadToolsForBot,
   /** Resolved per request, because what it signs is who this request turned out to be. */
-  signRunForActor?: (actorId: string) => SignRun,
+  signRunForActor?: (actorId: string, orgId?: string) => SignRun,
   /**
    * What every built-in Bot is told about the computer.
    *
@@ -494,8 +494,8 @@ export function createRequestAgents(
       model,
       resolveModelApiKey,
       stallGuard,
-      loadToolsForActor?.(actor.id),
-      signRunForActor?.(actor.id),
+      loadToolsForActor?.(actor.id, actor.orgId),
+      signRunForActor?.(actor.id, actor.orgId),
       typeof computerGuidance === "function"
         ? computerGuidance()
         : computerGuidance,
@@ -523,8 +523,8 @@ export function mountCopilotRuntime(
    * there is no reason for a caller to have to say `undefined` here to reach `basePath`.
    */
   stallGuard: StallGuard,
-  loadToolsForActor?: (actorId: string) => LoadToolsForBot,
-  signRunForActor?: (actorId: string) => SignRun,
+  loadToolsForActor?: (actorId: string, orgId?: string) => LoadToolsForBot,
+  signRunForActor?: (actorId: string, orgId?: string) => SignRun,
   /**
    * What built-in Bots are told about the computer, asked per request.
    *

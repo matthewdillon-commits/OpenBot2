@@ -5,7 +5,7 @@ import {
   text,
   timestamp,
 } from "drizzle-orm/pg-core";
-import { agents } from "./core";
+import { agents, organizationIdColumn } from "./core";
 
 const createdAt = () =>
   timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
@@ -28,6 +28,7 @@ const updatedAt = () =>
  */
 export const components = pgTable("components", {
   name: text("name").primaryKey(),
+  orgId: organizationIdColumn(),
   title: text("title").notNull(),
   /** Grouping for the Admin page only: chart, card, decision. Never read by the model. */
   kind: text("kind").notNull(),
@@ -63,6 +64,7 @@ export const components = pgTable("components", {
 export const componentExclusions = pgTable(
   "component_exclusions",
   {
+    orgId: organizationIdColumn(),
     componentName: text("component_name")
       .notNull()
       .references(() => components.name, { onDelete: "cascade" }),
@@ -92,6 +94,7 @@ export const componentExclusions = pgTable(
 export const componentFunctions = pgTable(
   "component_functions",
   {
+    orgId: organizationIdColumn(),
     componentName: text("component_name")
       .notNull()
       .references(() => components.name, { onDelete: "cascade" }),

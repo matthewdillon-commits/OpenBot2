@@ -3,11 +3,13 @@ import { isConfiguredAdmin, type OpenBotRole, setRole } from "../auth/roles";
 import type { Database } from "../db/client";
 import {
   accounts,
+  organizationMemberships,
   revokedAccess,
   sessions,
   userRoles,
   users,
 } from "../db/schema";
+import { LOCAL_ORGANIZATION_ID } from "../orgs/constants";
 
 /**
  * Everybody who has signed in, and what an administrator may do about them.
@@ -60,6 +62,7 @@ export type PeopleQuery = {
   limit?: number;
   /** One person, by id. Used by `find`, which needs the same aggregate for one row. */
   id?: string;
+  orgId?: string;
 };
 
 export type PeopleStore = {
@@ -70,11 +73,15 @@ export type PeopleStore = {
    * joined to their roles, accounts and sessions, on every render of the admin screen.
    */
   list: (query?: PeopleQuery) => Promise<PeoplePage>;
-  setRole: (userId: string, role: OpenBotRole) => Promise<void>;
-  revoke: (userId: string, revokedBy: string) => Promise<void>;
-  restore: (userId: string) => Promise<void>;
-  find: (userId: string) => Promise<Person | undefined>;
-  isRevoked: (email: string) => Promise<boolean>;
+  setRole: (
+    userId: string,
+    role: OpenBotRole,
+    orgId?: string,
+  ) => Promise<void>;
+  revoke: (userId: string, revokedBy: string, orgId?: string) => Promise<void>;
+  restore: (userId: string, orgId?: string) => Promise<void>;
+  find: (userId: string, orgId?: string) => Promise<Person | undefined>;
+  isRevoked: (email: string, orgId?: string) => Promise<boolean>;
 };
 
 /** How many people a page holds when the caller does not say. */
@@ -139,7 +146,10 @@ export function createPeopleStore(
     const cursor = decodeCursor(query.cursor);
     const search = query.search?.trim();
 
-    const filters = [];
+    const orgId = query.orgId ?? LOCAL_ORGANIZATION_ID;
+    const filters = [
+      eq(organizationMemberships.orgId, orgId),
+    ];
     if (query.id) filters.push(eq(users.id, query.id));
     if (search) {
       // Both fields, because an administrator looking for somebody has one or the other in mind and
@@ -163,7 +173,7 @@ export function createPeopleStore(
          */
         roles: sql<
           string[]
-        >`coalesce(array_agg(distinct ${userRoles.role}) filter (where ${userRoles.role} is not null), '{}')`,
+        >`coalesce(array_agg(distinct ${organizationMemberships.role}::text) filter (where ${organizationMemberships.role} is not null), '{}')`,
         providers: sql<
           string[]
         >`coalesce(array_agg(distinct ${accounts.providerId}) filter (where ${accounts.providerId} is not null), '{}')`,
@@ -171,12 +181,18 @@ export function createPeopleStore(
         revoked: sql<boolean>`bool_or(${revokedAccess.email} is not null)`,
       })
       .from(users)
-      .leftJoin(userRoles, eq(userRoles.userId, users.id))
+      .innerJoin(
+        organizationMemberships,
+        eq(organizationMemberships.userId, users.id),
+      )
       .leftJoin(accounts, eq(accounts.userId, users.id))
       .leftJoin(sessions, eq(sessions.userId, users.id))
       .leftJoin(
         revokedAccess,
-        eq(revokedAccess.email, sql`lower(${users.email})`),
+        and(
+          eq(revokedAccess.email, sql`lower(${users.email})`),
+          eq(revokedAccess.orgId, orgId),
+        ),
       )
       .where(filters.length > 0 ? and(...filters) : undefined)
       .groupBy(users.id)
@@ -221,7 +237,9 @@ export function createPeopleStore(
         name: row.name,
         image: row.image,
         // `admin` wins, the same way the request guard reads it. Anything else is a plain user.
-        role: row.roles.includes("admin") ? "admin" : "user",
+        role: row.roles.some((role) => role === "owner" || role === "admin")
+          ? "admin"
+          : "user",
         providers: row.providers,
         lastSignedInAt: row.lastSignedInAt
           ? new Date(row.lastSignedInAt).toISOString()
@@ -248,8 +266,11 @@ export function createPeopleStore(
    * every user in the deployment and filtered the result in JavaScript, and it is called twice by
    * every role change and every access change.
    */
-  async function find(userId: string): Promise<Person | undefined> {
-    const { people } = await list({ id: userId, limit: 1 });
+  async function find(
+    userId: string,
+    orgId?: string,
+  ): Promise<Person | undefined> {
+    const { people } = await list({ id: userId, limit: 1, orgId });
     return people[0];
   }
 
@@ -257,8 +278,17 @@ export function createPeopleStore(
     list,
     find,
 
-    async setRole(userId, role) {
+    async setRole(userId, role, orgId = LOCAL_ORGANIZATION_ID) {
       await setRole(database, userId, role);
+      await database
+        .update(organizationMemberships)
+        .set({ role: role === "admin" ? "admin" : "member" })
+        .where(
+          and(
+            eq(organizationMemberships.userId, userId),
+            eq(organizationMemberships.orgId, orgId),
+          ),
+        );
     },
 
     /**
@@ -268,7 +298,7 @@ export function createPeopleStore(
      * current one: without that, somebody removed keeps working until their cookie happens to
      * expire, which can be days.
      */
-    async revoke(userId, revokedBy) {
+    async revoke(userId, revokedBy, orgId = LOCAL_ORGANIZATION_ID) {
       const [user] = await database
         .select({ email: users.email })
         .from(users)
@@ -279,13 +309,24 @@ export function createPeopleStore(
       await database.transaction(async (tx) => {
         await tx
           .insert(revokedAccess)
-          .values({ email: normalize(user.email), revokedBy })
+          .values({
+            orgId,
+            email: normalize(user.email),
+            revokedBy,
+          })
           .onConflictDoNothing();
-        await tx.delete(sessions).where(eq(sessions.userId, userId));
+        await tx
+          .delete(organizationMemberships)
+          .where(
+            and(
+              eq(organizationMemberships.userId, userId),
+              eq(organizationMemberships.orgId, orgId),
+            ),
+          );
       });
     },
 
-    async restore(userId) {
+    async restore(userId, orgId = LOCAL_ORGANIZATION_ID) {
       const [user] = await database
         .select({ email: users.email })
         .from(users)
@@ -295,14 +336,24 @@ export function createPeopleStore(
 
       await database
         .delete(revokedAccess)
-        .where(eq(revokedAccess.email, normalize(user.email)));
+        .where(
+          and(
+            eq(revokedAccess.email, normalize(user.email)),
+            eq(revokedAccess.orgId, orgId),
+          ),
+        );
     },
 
-    async isRevoked(email) {
+    async isRevoked(email, orgId = LOCAL_ORGANIZATION_ID) {
       const rows = await database
         .select({ email: revokedAccess.email })
         .from(revokedAccess)
-        .where(inArray(revokedAccess.email, [normalize(email)]))
+        .where(
+          and(
+            inArray(revokedAccess.email, [normalize(email)]),
+            eq(revokedAccess.orgId, orgId),
+          ),
+        )
         .limit(1);
       return rows.length > 0;
     },

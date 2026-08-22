@@ -2,6 +2,7 @@ import type { MiddlewareHandler } from "hono";
 import { Hono } from "hono";
 import type { AppVariables } from "../auth/guards";
 import { requireAdmin } from "../auth/guards";
+import { orgIdOf } from "../orgs/constants";
 import {
   SandboxedNameRefusedError,
   SandboxedNotFoundError,
@@ -28,13 +29,14 @@ export function createSandboxedRoutes(
 
   const actorEmail = (context: { var: AppVariables }) =>
     context.var.actor?.email ?? "unknown";
+  const orgOf = (context: { var: AppVariables }) => orgIdOf(context.var.actor);
 
   /** Everything the playground edits. Admin-only: this is the source of what Bots draw. */
   routes.get("/", requireUser, async (context) => {
     const forbidden = requireAdmin(context);
     if (forbidden) return forbidden;
 
-    return context.json({ components: await store.list() });
+    return context.json({ components: await store.list(orgOf(context)) });
   });
 
   /**
@@ -45,7 +47,7 @@ export function createSandboxedRoutes(
    * theirs to read.
    */
   routes.get("/published", requireUser, async (context) =>
-    context.json({ components: await store.published() }),
+    context.json({ components: await store.published(orgOf(context)) }),
   );
 
   routes.post("/", requireUser, async (context) => {
@@ -78,6 +80,7 @@ export function createSandboxedRoutes(
         argumentSchema: body.argumentSchema ?? {},
         sampleArguments: body.sampleArguments ?? {},
         by: actorEmail(context),
+        orgId: orgOf(context),
       });
       return context.json({ component });
     } catch (error) {
@@ -96,6 +99,7 @@ export function createSandboxedRoutes(
       const component = await store.publish(
         context.req.param("name"),
         actorEmail(context),
+        orgOf(context),
       );
       return context.json({ component });
     } catch (error) {
@@ -115,7 +119,11 @@ export function createSandboxedRoutes(
     // rather than as success also stops a caller reading `{ ok: true }` as "the thing you named is
     // gone", which it was not.
     try {
-      await store.remove(context.req.param("name"), actorEmail(context));
+      await store.remove(
+        context.req.param("name"),
+        actorEmail(context),
+        orgOf(context),
+      );
       return context.json({ ok: true });
     } catch (error) {
       if (error instanceof SandboxedNotFoundError) {

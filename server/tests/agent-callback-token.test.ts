@@ -111,6 +111,7 @@ describe("who may call a tool back, and as whom", () => {
       ok: true,
       botId: AGENT_A,
       actorId: "visitor_9",
+      orgId: undefined,
     });
   });
 
@@ -163,6 +164,29 @@ describe("who may call a tool back, and as whom", () => {
       ok: true,
       botId: AGENT_A,
       actorId: "visitor_9",
+      orgId: undefined,
+    });
+
+    const otherOrg = mintRunAssertion(
+      { botId: AGENT_A, actorId: "visitor_9", runId: "r1", orgId: "org_a" },
+      KEY,
+    );
+    const lookupWithOrg = async (hash: string) => {
+      if (hash === hashCallbackToken(tokenA))
+        return { id: AGENT_A, orgId: "org_b" };
+      return null;
+    };
+    expect(
+      await authoriseAgentCall({
+        presented: tokenA,
+        run: otherOrg,
+        encryptionKey: KEY,
+        lookup: lookupWithOrg,
+      }),
+    ).toEqual({
+      ok: false,
+      status: 403,
+      reason: "That token is not for this organization.",
     });
   });
 

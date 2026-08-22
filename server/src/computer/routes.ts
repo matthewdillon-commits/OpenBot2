@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import type { BotAccessCheck } from "../agents/profile-policy";
 import type { AppVariables } from "../auth/guards";
 import { requireAdmin } from "../auth/guards";
+import { orgIdOf } from "../orgs/constants";
 import {
   type ActionActor,
   ActionRefusedError,
@@ -76,12 +77,19 @@ export function createComputerRoutes(
 
   routes.get("/:botId/status", async (context) => {
     const botId = context.req.param("botId");
-    return context.json(await gateway.status(botId));
+    return context.json(
+      await gateway.status(botId, orgIdOf(context.var.actor)),
+    );
   });
 
   routes.get("/:botId/screenshot", async (context) => {
     try {
-      return context.json(await gateway.screenshot(context.req.param("botId")));
+      return context.json(
+        await gateway.screenshot(
+          context.req.param("botId"),
+          orgIdOf(context.var.actor),
+        ),
+      );
     } catch (error) {
       return context.json({ error: describe(error) }, statusFor(error));
     }
@@ -89,7 +97,12 @@ export function createComputerRoutes(
 
   routes.get("/:botId/read", async (context) => {
     try {
-      return context.json(await gateway.read(context.req.param("botId")));
+      return context.json(
+        await gateway.read(
+          context.req.param("botId"),
+          orgIdOf(context.var.actor),
+        ),
+      );
     } catch (error) {
       return context.json({ error: describe(error) }, statusFor(error));
     }
@@ -109,6 +122,7 @@ export function createComputerRoutes(
           context.req.param("botId") ?? "default",
           {
             id: context.var.actor.id,
+            orgId: orgIdOf(context.var.actor),
             ...(context.var.actor.email === DEV_ACTOR_EMAIL
               ? {}
               : { userId: context.var.actor.id }),
@@ -132,7 +146,12 @@ export function createComputerRoutes(
 
   routes.post("/:botId/snapshot", async (context) => {
     try {
-      return context.json(await gateway.snapshot(context.req.param("botId")));
+      return context.json(
+        await gateway.snapshot(
+          context.req.param("botId"),
+          orgIdOf(context.var.actor),
+        ),
+      );
     } catch (error) {
       return context.json({ error: describe(error) }, statusFor(error));
     }
@@ -204,7 +223,12 @@ export function createComputerRoutes(
    */
   routes.get("/:botId/control", async (context) => {
     try {
-      return context.json(await gateway.control(context.req.param("botId")));
+      return context.json(
+        await gateway.control(
+          context.req.param("botId"),
+          orgIdOf(context.var.actor),
+        ),
+      );
     } catch (error) {
       return context.json({ error: describe(error) }, statusFor(error));
     }
@@ -323,13 +347,17 @@ export function createComputerRoutes(
     > | null;
     try {
       return context.json(
-        await gateway.humanInput(context.req.param("botId"), {
-          ...(body ?? {}),
-          // Last, so the checked value wins. Spread over it, a body carrying its own `kind` replaced
-          // the one this route had just checked, and the gateway puts that value into the path it
-          // calls on the computer.
-          kind,
-        } as Parameters<typeof gateway.humanInput>[1]),
+        await gateway.humanInput(
+          context.req.param("botId"),
+          {
+            ...(body ?? {}),
+            // Last, so the checked value wins. Spread over it, a body carrying its own `kind` replaced
+            // the one this route had just checked, and the gateway puts that value into the path it
+            // calls on the computer.
+            kind,
+          } as Parameters<typeof gateway.humanInput>[1],
+          orgIdOf(context.var.actor),
+        ),
       );
     } catch (error) {
       return context.json({ error: describe(error) }, statusFor(error));
@@ -410,7 +438,10 @@ export function createComputerRoutes(
    */
   routes.get("/policy", requireUser, (context) => {
     const denied = requireAdmin(context);
-    return denied ?? context.json({ policy: policyStore.get() });
+    return (
+      denied ??
+      context.json({ policy: policyStore.get(orgIdOf(context.var.actor)) })
+    );
   });
 
   routes.put("/policy", requireUser, async (context) => {
@@ -424,7 +455,11 @@ export function createComputerRoutes(
       return context.json({ error: parsed.error }, 400);
     }
     try {
-      await policyStore.set(parsed.policy, context.var.actor.email);
+      await policyStore.set(
+        parsed.policy,
+        context.var.actor.email,
+        orgIdOf(context.var.actor),
+      );
     } catch {
       /*
        * Saved, or said so. A boundary that is enforced now and gone after the next restart is worse
@@ -441,7 +476,9 @@ export function createComputerRoutes(
     }
     // Echoed back so a caller can see exactly what is now in force rather than assuming its request
     // was stored verbatim.
-    return context.json({ policy: policyStore.get() });
+    return context.json({
+      policy: policyStore.get(orgIdOf(context.var.actor)),
+    });
   });
 
   return routes;
@@ -496,6 +533,7 @@ async function act(
       botId,
       {
         id: record.id,
+        orgId: orgIdOf(record),
         // Only a real users row may go in the audit table's foreign key column. The local development
         // actor is not one, so writing it there fails the constraint and loses the row entirely. Who
         // it was is recorded in the payload regardless. See gateway.ts.

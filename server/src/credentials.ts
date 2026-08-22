@@ -2,9 +2,10 @@ import { and, desc, eq, isNull } from "drizzle-orm";
 import { type AuditStore, recordAuditEvent } from "./audit";
 import type { Database } from "./db/client";
 import { credentials } from "./db/schema";
+import { LOCAL_ORGANIZATION_ID } from "./orgs/constants";
 
 type CredentialEnvelope = {
-  version: 1;
+  version: 1 | 2;
   iv: string;
   ciphertext: string;
 };
@@ -35,8 +36,9 @@ export type CredentialStore = {
     keyId: string;
     metadata: Record<string, unknown>;
     encryptedValue: string;
+    orgId?: string;
   }) => Promise<StoredCredential>;
-  revoke: (id: string) => Promise<Date>;
+  revoke: (id: string, orgId?: string) => Promise<Date>;
 };
 
 export type CredentialSecretReader = {
@@ -47,7 +49,7 @@ export type CredentialSecretReader = {
 };
 
 export type CredentialStatusReader = {
-  list: () => Promise<CredentialStatus[]>;
+  list: (orgId?: string) => Promise<CredentialStatus[]>;
 };
 
 export type ModelCredentialSecretReader = {
@@ -77,7 +79,7 @@ function parseEnvelope(value: string): CredentialEnvelope {
   try {
     const envelope = JSON.parse(value) as CredentialEnvelope;
     if (
-      envelope.version !== 1 ||
+      (envelope.version !== 1 && envelope.version !== 2) ||
       typeof envelope.iv !== "string" ||
       typeof envelope.ciphertext !== "string"
     ) {
@@ -89,25 +91,40 @@ function parseEnvelope(value: string): CredentialEnvelope {
   }
 }
 
-export async function encryptSecret(encodedKey: string, plaintext: string) {
+export async function encryptSecret(
+  encodedKey: string,
+  plaintext: string,
+  orgId?: string,
+) {
   const iv = crypto.getRandomValues(new Uint8Array(12));
+  const additionalData = orgId ? encoder.encode(orgId) : undefined;
   const ciphertext = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv },
+    { name: "AES-GCM", iv, ...(additionalData ? { additionalData } : {}) },
     await aesKey(encodedKey),
     encoder.encode(plaintext),
   );
 
   return JSON.stringify({
-    version: 1,
+    version: orgId ? 2 : 1,
     iv: Buffer.from(iv).toString("base64"),
     ciphertext: Buffer.from(ciphertext).toString("base64"),
   } satisfies CredentialEnvelope);
 }
 
-export async function decryptSecret(encodedKey: string, value: string) {
+export async function decryptSecret(
+  encodedKey: string,
+  value: string,
+  orgId?: string,
+) {
   const envelope = parseEnvelope(value);
+  const additionalData =
+    envelope.version === 2 && orgId ? encoder.encode(orgId) : undefined;
   const plaintext = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: Buffer.from(envelope.iv, "base64") },
+    {
+      name: "AES-GCM",
+      iv: Buffer.from(envelope.iv, "base64"),
+      ...(additionalData ? { additionalData } : {}),
+    },
     await aesKey(encodedKey),
     Buffer.from(envelope.ciphertext, "base64"),
   );
@@ -119,6 +136,7 @@ export async function decryptCredentialForUse(
   encodedKey: string,
   reader: CredentialSecretReader,
   credentialId: string,
+  orgId?: string,
 ) {
   const credential = await reader.readSecret(credentialId);
   if (!credential) {
@@ -128,7 +146,7 @@ export async function decryptCredentialForUse(
     throw new Error("Credential is revoked");
   }
 
-  return decryptSecret(encodedKey, credential.encryptedValue);
+  return decryptSecret(encodedKey, credential.encryptedValue, orgId);
 }
 
 export async function resolveModelApiKey(input: {
@@ -160,7 +178,10 @@ export function createCredentialStore(
     create: async (value) => {
       const [credential] = await database
         .insert(credentials)
-        .values(value)
+        .values({
+          ...value,
+          orgId: value.orgId ?? LOCAL_ORGANIZATION_ID,
+        })
         .returning({ id: credentials.id, revokedAt: credentials.revokedAt });
 
       if (!credential) {
@@ -168,12 +189,17 @@ export function createCredentialStore(
       }
       return credential;
     },
-    revoke: async (id) => {
+    revoke: async (id, orgId) => {
       const revokedAt = new Date();
       const [credential] = await database
         .update(credentials)
         .set({ revokedAt, updatedAt: revokedAt })
-        .where(eq(credentials.id, id))
+        .where(
+          and(
+            eq(credentials.id, id),
+            eq(credentials.orgId, orgId ?? LOCAL_ORGANIZATION_ID),
+          ),
+        )
         .returning({ revokedAt: credentials.revokedAt });
 
       if (!credential?.revokedAt) {
@@ -188,7 +214,7 @@ export function createCredentialStore(
           revokedAt: credentials.revokedAt,
         })
         .from(credentials)
-        .where(eq(credentials.id, id));
+        .where(eq(credentials.id, id)); // callers that know the org re-check it after read
 
       return credential ?? null;
     },
@@ -213,7 +239,7 @@ export function createCredentialStore(
 
       return credential ?? null;
     },
-    list: async () => {
+    list: async (orgId) => {
       const records = await database
         .select({
           id: credentials.id,
@@ -224,6 +250,7 @@ export function createCredentialStore(
           revokedAt: credentials.revokedAt,
         })
         .from(credentials)
+        .where(eq(credentials.orgId, orgId ?? LOCAL_ORGANIZATION_ID))
         .orderBy(credentials.createdAt);
 
       return records.map((credential) => ({
@@ -241,6 +268,7 @@ export type CredentialInput = {
   metadata: Record<string, unknown>;
   plaintext: string;
   actorUserId?: string;
+  orgId?: string;
 };
 
 export type CredentialAdminService = CredentialStatusReader & {
@@ -251,6 +279,7 @@ export type CredentialAdminService = CredentialStatusReader & {
   revoke: (
     credentialId: string,
     actorUserId?: string,
+    orgId?: string,
   ) => Promise<{
     id: string;
     revokedAt: Date;
@@ -266,7 +295,12 @@ async function persistCredential(
     provider: input.provider,
     keyId: input.keyId,
     metadata: input.metadata,
-    encryptedValue: await encryptSecret(service.encryptionKey, input.plaintext),
+    orgId: input.orgId,
+    encryptedValue: await encryptSecret(
+      service.encryptionKey,
+      input.plaintext,
+      input.orgId ?? LOCAL_ORGANIZATION_ID,
+    ),
   });
 
   return {
@@ -305,7 +339,10 @@ export async function rotateCredential(
   input: CredentialInput & { previousCredentialId: string },
 ) {
   const credential = await persistCredential(service, input);
-  await service.store.revoke(input.previousCredentialId);
+  await service.store.revoke(
+    input.previousCredentialId,
+    input.orgId ?? LOCAL_ORGANIZATION_ID,
+  );
 
   await recordAuditEvent(service.auditStore, {
     eventType: "credential.rotated",
@@ -327,8 +364,12 @@ export async function revokeCredential(
   service: CredentialService,
   credentialId: string,
   actorUserId?: string,
+  orgId?: string,
 ) {
-  const revokedAt = await service.store.revoke(credentialId);
+  const revokedAt = await service.store.revoke(
+    credentialId,
+    orgId ?? LOCAL_ORGANIZATION_ID,
+  );
 
   await recordAuditEvent(service.auditStore, {
     eventType: "credential.revoked",
@@ -352,7 +393,7 @@ export function createCredentialAdminService(
     list: store.list,
     create: (input) => createCredential(service, input),
     rotate: (input) => rotateCredential(service, input),
-    revoke: (credentialId, actorUserId) =>
-      revokeCredential(service, credentialId, actorUserId),
+    revoke: (credentialId, actorUserId, orgId) =>
+      revokeCredential(service, credentialId, actorUserId, orgId),
   };
 }

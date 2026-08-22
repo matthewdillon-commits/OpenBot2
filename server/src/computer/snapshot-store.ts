@@ -30,6 +30,7 @@
 import { eq, lt } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { computerSnapshot } from "../db/schema";
+import { orgIdFromComputerId } from "../orgs/constants";
 import type { SnapshotElement } from "./schema";
 
 /**
@@ -81,6 +82,7 @@ export function createSnapshotStore(database?: Database): SnapshotStore {
       const elements = objectFromElements(snapshot.elements);
       const values = {
         computerId,
+        orgId: orgIdFromComputerId(computerId),
         snapshotId: snapshot.snapshotId,
         url: snapshot.url,
         elements,

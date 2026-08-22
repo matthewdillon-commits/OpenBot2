@@ -3,10 +3,12 @@ import type { Database } from "../db/client";
 import {
   chunks,
   connectorCursors,
+  connectorInstances,
   documentAcls,
   documents,
   syncRuns,
 } from "../db/schema";
+import { LOCAL_ORGANIZATION_ID } from "../orgs/constants";
 import type { ConnectorChange } from "./contract";
 
 export function createSyncPersistence(
@@ -15,6 +17,13 @@ export function createSyncPersistence(
 ) {
   return {
     async persistBatch(changes: ConnectorChange[], cursor: string | null) {
+      const [instance] = await database
+        .select({ orgId: connectorInstances.orgId })
+        .from(connectorInstances)
+        .where(eq(connectorInstances.id, connectorInstanceId))
+        .limit(1);
+      const orgId = instance?.orgId ?? LOCAL_ORGANIZATION_ID;
+
       await database.transaction(async (transaction) => {
         for (const change of changes) {
           if (change.kind === "delete") {
@@ -32,6 +41,7 @@ export function createSyncPersistence(
           const [document] = await transaction
             .insert(documents)
             .values({
+              orgId,
               connectorInstanceId,
               sourceId: change.sourceId,
               title: change.title,
@@ -64,6 +74,7 @@ export function createSyncPersistence(
           if (change.chunks.length) {
             await transaction.insert(chunks).values(
               change.chunks.map((chunk) => ({
+                orgId,
                 documentId: document.id,
                 position: chunk.position,
                 content: chunk.content,
@@ -75,11 +86,16 @@ export function createSyncPersistence(
             await transaction
               .insert(documentAcls)
               .values(
-                change.acls.map((acl) => ({ documentId: document.id, ...acl })),
+                change.acls.map((acl) => ({
+                  orgId,
+                  documentId: document.id,
+                  ...acl,
+                })),
               );
           }
         }
         await transaction.insert(syncRuns).values({
+          orgId,
           connectorInstanceId,
           status: "succeeded",
           completedAt: new Date(),
@@ -88,7 +104,12 @@ export function createSyncPersistence(
         if (cursor !== null) {
           await transaction
             .insert(connectorCursors)
-            .values({ connectorInstanceId, cursor, updatedAt: new Date() })
+            .values({
+              orgId,
+              connectorInstanceId,
+              cursor,
+              updatedAt: new Date(),
+            })
             .onConflictDoUpdate({
               target: connectorCursors.connectorInstanceId,
               set: { cursor, updatedAt: new Date() },

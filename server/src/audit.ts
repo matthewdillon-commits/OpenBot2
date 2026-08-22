@@ -1,6 +1,7 @@
 import { and, desc, eq, gt, inArray, lt, or } from "drizzle-orm";
 import type { Database } from "./db/client";
 import { auditEvents } from "./db/schema";
+import { LOCAL_ORGANIZATION_ID } from "./orgs/constants";
 
 const sensitiveKeys = new Set([
   "access_token",
@@ -228,6 +229,7 @@ export type AuditEventInput = {
   targetType: string;
   targetId?: string;
   actorUserId?: string;
+  orgId?: string;
   payload: Record<string, unknown>;
 };
 
@@ -259,6 +261,7 @@ export type AuditEventQuery = {
   actorUserId?: string;
   targetType?: string;
   targetId?: string;
+  orgId?: string;
   from?: string;
   to?: string;
 };
@@ -316,7 +319,10 @@ export async function recordAuditEvent(
 export function createAuditStore(database: Database): AuditStore {
   return {
     insert: async (event) => {
-      await database.insert(auditEvents).values(event);
+      await database.insert(auditEvents).values({
+        ...event,
+        orgId: event.orgId ?? LOCAL_ORGANIZATION_ID,
+      });
     },
   };
 }
@@ -360,6 +366,7 @@ export function createAuditReader(database: Database): AuditReader {
           ? eq(auditEvents.targetType, query.targetType)
           : undefined,
         query.targetId ? eq(auditEvents.targetId, query.targetId) : undefined,
+        eq(auditEvents.orgId, query.orgId ?? LOCAL_ORGANIZATION_ID),
         query.from
           ? gt(auditEvents.createdAt, new Date(query.from))
           : undefined,

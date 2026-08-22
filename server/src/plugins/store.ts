@@ -24,6 +24,11 @@ import {
   customUrlRefusal,
   resolveServerUrl,
 } from "./catalogue";
+import {
+  orgIdOf,
+  scopedResourceId,
+  unscopedResourceId,
+} from "../orgs/constants";
 import { callTool as callRemoteTool, listTools, McpServerError } from "./mcp";
 
 /**
@@ -84,7 +89,7 @@ export type SkillRecord = {
  * An administrator sees and governs the whole deployment. Everybody else sees the deployment's
  * skills and their own, and may act only on their own.
  */
-export type SkillActor = { id: string; isAdmin: boolean };
+export type SkillActor = { id: string; isAdmin: boolean; orgId?: string };
 
 /** What one Bot holds. Everything the runtime needs to offer it, and nothing it does not. */
 export type GrantedPlugins = {
@@ -158,18 +163,26 @@ export type PluginStoreOptions = {
   credentials: CredentialSecretReader;
   encryptionKey: string;
   /** Read at call time, never captured, so a policy changed a moment ago applies to this call. */
-  policy: () => ActionPolicy;
+  policy: (orgId?: string) => ActionPolicy;
 };
 
 export function createPluginStore(options: PluginStoreOptions) {
   const { database, auditStore, credentials, encryptionKey } = options;
 
-  async function grantsFor(kind: PluginKind, refs: string[]) {
+  const scope = (orgId?: string) => orgIdOf({ orgId });
+
+  async function grantsFor(kind: PluginKind, refs: string[], orgId: string) {
     if (refs.length === 0) return new Map<string, string[]>();
     const rows = await database
       .select()
       .from(pluginGrants)
-      .where(and(eq(pluginGrants.kind, kind), inArray(pluginGrants.ref, refs)));
+      .where(
+        and(
+          eq(pluginGrants.kind, kind),
+          eq(pluginGrants.orgId, orgId),
+          inArray(pluginGrants.ref, refs),
+        ),
+      );
     const byRef = new Map<string, string[]>();
     for (const row of rows) {
       byRef.set(row.ref, [...(byRef.get(row.ref) ?? []), row.agentId]);
@@ -187,20 +200,26 @@ export function createPluginStore(options: PluginStoreOptions) {
   /** The credential for a server, decrypted for one call and never held. */
   async function tokenFor(
     credentialId: string | null,
+    orgId: string,
   ): Promise<string | undefined> {
     if (!credentialId) return undefined;
-    return decryptCredentialForUse(encryptionKey, credentials, credentialId);
+    return decryptCredentialForUse(
+      encryptionKey,
+      credentials,
+      credentialId,
+      orgId,
+    );
   }
 
-  async function requireServer(serverId: string) {
+  async function requireServer(serverId: string, orgId: string) {
     const [row] = await database
       .select()
       .from(mcpServers)
-      .where(eq(mcpServers.id, serverId))
+      .where(and(eq(mcpServers.id, serverId), eq(mcpServers.orgId, orgId)))
       .limit(1);
     if (!row) throw new CatalogueEntryUnknownError(serverId);
 
-    const entry = catalogueEntry(row.id);
+    const entry = catalogueEntry(unscopedResourceId(orgId, row.id));
     if (row.provenance === "first-party" && !entry) {
       // The row outlived its catalogue entry, which means a build removed a vendor while a
       // deployment still had it added. Refused rather than reached: the pinned host that made it
@@ -226,14 +245,18 @@ export function createPluginStore(options: PluginStoreOptions) {
       instanceHost?: string;
       credentialId?: string;
       by: string;
+      orgId?: string;
     }): Promise<ServerRecord> {
+      const orgId = scope(input.orgId);
       const resolved = resolveServerUrl(input.key, input.instanceHost);
       if (!resolved) throw new CatalogueEntryUnknownError(input.key);
+      const serverId = scopedResourceId(orgId, resolved.entry.key);
 
       await database
         .insert(mcpServers)
         .values({
-          id: resolved.entry.key,
+          id: serverId,
+          orgId,
           title: resolved.entry.title,
           vendor: resolved.entry.vendor,
           url: resolved.url,
@@ -253,7 +276,8 @@ export function createPluginStore(options: PluginStoreOptions) {
       await recordAuditEvent(auditStore, {
         eventType: "configuration.changed",
         targetType: "mcp_server",
-        targetId: resolved.entry.key,
+        targetId: serverId,
+        orgId,
         payload: {
           actor: input.by,
           change: "mcp_server_added",
@@ -264,9 +288,9 @@ export function createPluginStore(options: PluginStoreOptions) {
 
       // Refreshed immediately so the page that added it can show what it offers, and so a bad
       // credential is reported now rather than the first time a Bot tries to use it.
-      await this.refreshTools(resolved.entry.key);
-      const servers = await this.listServers();
-      const added = servers.find((server) => server.id === resolved.entry.key);
+      await this.refreshTools(serverId, orgId);
+      const servers = await this.listServers(orgId);
+      const added = servers.find((server) => server.id === serverId);
       if (!added) throw new CatalogueEntryUnknownError(input.key);
       return added;
     },
@@ -286,7 +310,9 @@ export function createPluginStore(options: PluginStoreOptions) {
       url: string;
       credentialId?: string;
       by: string;
+      orgId?: string;
     }): Promise<ServerRecord> {
+      const orgId = scope(input.orgId);
       const refusal = customUrlRefusal(input.url);
       if (refusal) throw new CustomServerRefusedError(refusal);
 
@@ -303,11 +329,13 @@ export function createPluginStore(options: PluginStoreOptions) {
           "A server name is lower-case letters, numbers and hyphens.",
         );
       }
+      const serverId = scopedResourceId(orgId, input.id);
 
       await database
         .insert(mcpServers)
         .values({
-          id: input.id,
+          id: serverId,
+          orgId,
           title: input.title,
           vendor: new URL(input.url).hostname,
           url: input.url,
@@ -329,7 +357,8 @@ export function createPluginStore(options: PluginStoreOptions) {
       await recordAuditEvent(auditStore, {
         eventType: "configuration.changed",
         targetType: "mcp_server",
-        targetId: input.id,
+        targetId: serverId,
+        orgId,
         payload: {
           actor: input.by,
           change: "mcp_server_added",
@@ -341,20 +370,28 @@ export function createPluginStore(options: PluginStoreOptions) {
         },
       });
 
-      await this.refreshTools(input.id);
-      const added = (await this.listServers()).find(
-        (server) => server.id === input.id,
+      await this.refreshTools(serverId, orgId);
+      const added = (await this.listServers(orgId)).find(
+        (server) => server.id === serverId,
       );
       if (!added) throw new CatalogueEntryUnknownError(input.id);
       return added;
     },
 
-    async removeServer(serverId: string, by: string): Promise<void> {
-      await database.delete(mcpServers).where(eq(mcpServers.id, serverId));
+    async removeServer(
+      serverId: string,
+      by: string,
+      orgId?: string,
+    ): Promise<void> {
+      const scoped = scope(orgId);
+      await database
+        .delete(mcpServers)
+        .where(and(eq(mcpServers.id, serverId), eq(mcpServers.orgId, scoped)));
       await recordAuditEvent(auditStore, {
         eventType: "configuration.changed",
         targetType: "mcp_server",
         targetId: serverId,
+        orgId: scoped,
         payload: { actor: by, change: "mcp_server_removed", server: serverId },
       });
     },
@@ -365,17 +402,26 @@ export function createPluginStore(options: PluginStoreOptions) {
      * Replaced wholesale, never merged. A tool a vendor withdrew has to stop being offered, and a
      * merge would leave it in the list forever as a name the model will happily call.
      */
-    async refreshTools(serverId: string): Promise<{ tools: number }> {
-      const { row } = await requireServer(serverId);
+    async refreshTools(
+      serverId: string,
+      orgId?: string,
+    ): Promise<{ tools: number }> {
+      const scoped = scope(orgId);
+      const { row } = await requireServer(serverId, scoped);
 
       try {
-        const token = await tokenFor(row.credentialId);
+        const token = await tokenFor(row.credentialId, scoped);
         const tools = await listTools({ url: row.url, token });
 
-        await database.delete(mcpTools).where(eq(mcpTools.serverId, serverId));
+        await database
+          .delete(mcpTools)
+          .where(
+            and(eq(mcpTools.serverId, serverId), eq(mcpTools.orgId, scoped)),
+          );
         if (tools.length > 0) {
           await database.insert(mcpTools).values(
             tools.map((tool) => ({
+              orgId: scoped,
               serverId,
               name: tool.name,
               description: tool.description,
@@ -391,7 +437,9 @@ export function createPluginStore(options: PluginStoreOptions) {
             lastError: null,
             updatedAt: new Date(),
           })
-          .where(eq(mcpServers.id, serverId));
+          .where(
+            and(eq(mcpServers.id, serverId), eq(mcpServers.orgId, scoped)),
+          );
 
         return { tools: tools.length };
       } catch (error) {
@@ -406,15 +454,19 @@ export function createPluginStore(options: PluginStoreOptions) {
         await database
           .update(mcpServers)
           .set({ lastError: message, updatedAt: new Date() })
-          .where(eq(mcpServers.id, serverId));
+          .where(
+            and(eq(mcpServers.id, serverId), eq(mcpServers.orgId, scoped)),
+          );
         return { tools: 0 };
       }
     },
 
-    async listServers(): Promise<ServerRecord[]> {
+    async listServers(orgId?: string): Promise<ServerRecord[]> {
+      const scoped = scope(orgId);
       const rows = await database
         .select()
         .from(mcpServers)
+        .where(eq(mcpServers.orgId, scoped))
         .orderBy(asc(mcpServers.title));
       if (rows.length === 0) return [];
 
@@ -432,10 +484,11 @@ export function createPluginStore(options: PluginStoreOptions) {
       const grants = await grantsFor(
         "mcp",
         tools.map((tool) => `${tool.serverId}/${tool.name}`),
+        scoped,
       );
 
       return rows.map((row) => {
-        const entry = catalogueEntry(row.id);
+        const entry = catalogueEntry(unscopedResourceId(scoped, row.id));
         return {
           id: row.id,
           title: row.title,
@@ -473,10 +526,14 @@ export function createPluginStore(options: PluginStoreOptions) {
      * governing what Bots are told is the job of the surface they are looking at.
      */
     async listSkills(actor?: SkillActor): Promise<SkillRecord[]> {
+      const scoped = scope(actor?.orgId);
       const visible =
         !actor || actor.isAdmin
-          ? undefined
-          : or(isNull(skills.ownerUserId), eq(skills.ownerUserId, actor.id));
+          ? eq(skills.orgId, scoped)
+          : and(
+              eq(skills.orgId, scoped),
+              or(isNull(skills.ownerUserId), eq(skills.ownerUserId, actor.id)),
+            );
       const rows = await database
         .select()
         .from(skills)
@@ -485,6 +542,7 @@ export function createPluginStore(options: PluginStoreOptions) {
       const grants = await grantsFor(
         "skill",
         rows.map((row) => row.slug),
+        scoped,
       );
       return rows.map((row) => ({
         id: row.id,
@@ -500,11 +558,14 @@ export function createPluginStore(options: PluginStoreOptions) {
     },
 
     /** Whose a skill is, or `undefined` if there is no such skill. Null owner means the deployment's. */
-    async skillOwner(slug: string): Promise<string | null | undefined> {
+    async skillOwner(
+      slug: string,
+      orgId?: string,
+    ): Promise<string | null | undefined> {
       const [row] = await database
         .select({ ownerUserId: skills.ownerUserId })
         .from(skills)
-        .where(eq(skills.slug, slug))
+        .where(and(eq(skills.slug, slug), eq(skills.orgId, scope(orgId))))
         .limit(1);
       return row ? row.ownerUserId : undefined;
     },
@@ -515,11 +576,19 @@ export function createPluginStore(options: PluginStoreOptions) {
      * Read here rather than through the coworker store because the only question this file asks is
      * "may this person put their skill on that Bot", and a whole profile is more than that needs.
      */
-    async agentOwner(agentId: string): Promise<string | null | undefined> {
+    async agentOwner(
+      agentId: string,
+      orgId?: string,
+    ): Promise<string | null | undefined> {
       const [row] = await database
         .select({ ownerUserId: agentProfiles.ownerUserId })
         .from(agentProfiles)
-        .where(eq(agentProfiles.agentId, agentId))
+        .where(
+          and(
+            eq(agentProfiles.agentId, agentId),
+            eq(agentProfiles.orgId, scope(orgId)),
+          ),
+        )
         .limit(1);
       return row ? row.ownerUserId : undefined;
     },
@@ -533,11 +602,14 @@ export function createPluginStore(options: PluginStoreOptions) {
       /** Whose it is. Null writes a skill for the whole deployment, which is an admin's to make. */
       ownerUserId: string | null;
       by: string;
+      orgId?: string;
     }): Promise<void> {
+      const orgId = scope(input.orgId);
       await database
         .insert(skills)
         .values({
-          id: input.slug,
+          id: scopedResourceId(orgId, input.slug),
+          orgId,
           slug: input.slug,
           ownerUserId: input.ownerUserId,
           title: input.title,
@@ -549,7 +621,7 @@ export function createPluginStore(options: PluginStoreOptions) {
         // Editing keeps the owner it already had. Whose a skill is, is not something a re-save
         // should quietly change, and the route has already checked this person may edit it.
         .onConflictDoUpdate({
-          target: skills.slug,
+          target: [skills.orgId, skills.slug],
           set: {
             title: input.title,
             summary: input.summary,
@@ -562,6 +634,7 @@ export function createPluginStore(options: PluginStoreOptions) {
         eventType: "configuration.changed",
         targetType: "skill",
         targetId: input.slug,
+        orgId,
         payload: {
           actor: input.by,
           change: "skill_installed",
@@ -570,12 +643,20 @@ export function createPluginStore(options: PluginStoreOptions) {
       });
     },
 
-    async uninstallSkill(slug: string, by: string): Promise<void> {
-      await database.delete(skills).where(eq(skills.slug, slug));
+    async uninstallSkill(
+      slug: string,
+      by: string,
+      orgId?: string,
+    ): Promise<void> {
+      const scoped = scope(orgId);
+      await database
+        .delete(skills)
+        .where(and(eq(skills.slug, slug), eq(skills.orgId, scoped)));
       await recordAuditEvent(auditStore, {
         eventType: "configuration.changed",
         targetType: "skill",
         targetId: slug,
+        orgId: scoped,
         payload: { actor: by, change: "skill_uninstalled", skill: slug },
       });
     },
@@ -585,10 +666,12 @@ export function createPluginStore(options: PluginStoreOptions) {
       ref: string,
       agentId: string,
       by: string,
+      orgId?: string,
     ): Promise<void> {
+      const scoped = scope(orgId);
       await database
         .insert(pluginGrants)
-        .values({ kind, ref, agentId, grantedBy: by })
+        .values({ orgId: scoped, kind, ref, agentId, grantedBy: by })
         .onConflictDoUpdate({
           target: [pluginGrants.kind, pluginGrants.ref, pluginGrants.agentId],
           set: { grantedBy: by, updatedAt: new Date() },
@@ -598,6 +681,7 @@ export function createPluginStore(options: PluginStoreOptions) {
         eventType: "configuration.changed",
         targetType: kind === "mcp" ? "mcp_tool" : "skill",
         targetId: ref,
+        orgId: scoped,
         payload: {
           actor: by,
           change: "plugin_granted",
@@ -613,7 +697,9 @@ export function createPluginStore(options: PluginStoreOptions) {
       ref: string,
       agentId: string,
       by: string,
+      orgId?: string,
     ): Promise<void> {
+      const scoped = scope(orgId);
       await database
         .delete(pluginGrants)
         .where(
@@ -621,6 +707,7 @@ export function createPluginStore(options: PluginStoreOptions) {
             eq(pluginGrants.kind, kind),
             eq(pluginGrants.ref, ref),
             eq(pluginGrants.agentId, agentId),
+            eq(pluginGrants.orgId, scoped),
           ),
         );
 
@@ -628,6 +715,7 @@ export function createPluginStore(options: PluginStoreOptions) {
         eventType: "configuration.changed",
         targetType: kind === "mcp" ? "mcp_tool" : "skill",
         targetId: ref,
+        orgId: scoped,
         payload: {
           actor: by,
           change: "plugin_revoked",
@@ -639,11 +727,20 @@ export function createPluginStore(options: PluginStoreOptions) {
     },
 
     /** Everything one Bot may use. The runtime asks this and offers exactly what comes back. */
-    async listForAgent(agentId: string): Promise<GrantedPlugins> {
+    async listForAgent(
+      agentId: string,
+      orgId?: string,
+    ): Promise<GrantedPlugins> {
+      const scoped = scope(orgId);
       const held = await database
         .select()
         .from(pluginGrants)
-        .where(eq(pluginGrants.agentId, agentId));
+        .where(
+          and(
+            eq(pluginGrants.agentId, agentId),
+            eq(pluginGrants.orgId, scoped),
+          ),
+        );
       if (held.length === 0) return { tools: [], skills: [] };
 
       const toolRefs = held
@@ -656,7 +753,11 @@ export function createPluginStore(options: PluginStoreOptions) {
       const toolRows =
         toolRefs.length === 0
           ? []
-          : await database.select().from(mcpTools).orderBy(asc(mcpTools.name));
+          : await database
+              .select()
+              .from(mcpTools)
+              .where(eq(mcpTools.orgId, scoped))
+              .orderBy(asc(mcpTools.name));
       const grantedTools = toolRows
         .filter((row) => toolRefs.includes(`${row.serverId}/${row.name}`))
         .map((row) => {
@@ -675,7 +776,12 @@ export function createPluginStore(options: PluginStoreOptions) {
           : await database
               .select()
               .from(skills)
-              .where(inArray(skills.slug, skillSlugs));
+              .where(
+                and(
+                  inArray(skills.slug, skillSlugs),
+                  eq(skills.orgId, scoped),
+                ),
+              );
 
       return {
         tools: grantedTools,
@@ -698,6 +804,7 @@ export function createPluginStore(options: PluginStoreOptions) {
       kind: PluginKind,
       ref: string,
       agentId: string,
+      orgId?: string,
     ): Promise<PluginDecision> {
       const [row] = await database
         .select()
@@ -707,6 +814,7 @@ export function createPluginStore(options: PluginStoreOptions) {
             eq(pluginGrants.kind, kind),
             eq(pluginGrants.ref, ref),
             eq(pluginGrants.agentId, agentId),
+            eq(pluginGrants.orgId, scope(orgId)),
           ),
         )
         .limit(1);
@@ -736,19 +844,22 @@ export function createPluginStore(options: PluginStoreOptions) {
       args: Record<string, unknown>;
       botId: string;
       actorId: string;
+      orgId?: string;
     }): Promise<{ text: string; isError: boolean }> {
+      const orgId = scope(input.orgId);
       const [serverId, ...rest] = input.ref.split("/");
       const toolName = rest.join("/");
       if (!serverId || !toolName) {
         throw new PluginRefusedError(`${input.ref} is not a tool.`, null);
       }
 
-      const decision = await this.decide("mcp", input.ref, input.botId);
+      const decision = await this.decide("mcp", input.ref, input.botId, orgId);
       if (!decision.allowed) {
         await recordAuditEvent(auditStore, {
           eventType: "mcp.call_rejected",
           targetType: "mcp_tool",
           targetId: input.ref,
+          orgId,
           payload: {
             actor: input.actorId,
             bot: input.botId,
@@ -761,13 +872,17 @@ export function createPluginStore(options: PluginStoreOptions) {
         throw new PluginRefusedError(decision.reason, null);
       }
 
-      const { row, entry } = await requireServer(serverId);
+      const { row, entry } = await requireServer(serverId, orgId);
 
       const advertised = await database
         .select({ name: mcpTools.name, inputSchema: mcpTools.inputSchema })
         .from(mcpTools)
         .where(
-          and(eq(mcpTools.serverId, serverId), eq(mcpTools.name, toolName)),
+          and(
+            eq(mcpTools.serverId, serverId),
+            eq(mcpTools.name, toolName),
+            eq(mcpTools.orgId, orgId),
+          ),
         )
         .limit(1);
 
@@ -806,12 +921,13 @@ export function createPluginStore(options: PluginStoreOptions) {
         mcp: { server: serverId, tool: toolName, effect },
       };
 
-      const verdict = evaluateActionPolicy(options.policy(), context);
+      const verdict = evaluateActionPolicy(options.policy(orgId), context);
 
       await recordAuditEvent(auditStore, {
         eventType: verdict.forward ? "mcp.call_succeeded" : "mcp.call_rejected",
         targetType: "mcp_tool",
         targetId: input.ref,
+        orgId,
         payload: {
           actor: input.actorId,
           bot: input.botId,
@@ -832,7 +948,7 @@ export function createPluginStore(options: PluginStoreOptions) {
         throw new PluginRefusedError(verdict.reason, verdict.matched);
       }
 
-      const token = await tokenFor(row.credentialId);
+      const token = await tokenFor(row.credentialId, orgId);
       const result = await callRemoteTool(
         { url: row.url, token },
         toolName,

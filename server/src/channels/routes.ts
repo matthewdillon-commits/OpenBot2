@@ -15,6 +15,7 @@ import {
   channels,
   intelligenceChannelMappings,
 } from "../db/schema";
+import { orgIdOf } from "../orgs/constants";
 import {
   CHANNEL_ACTIVITY_TOPIC,
   type ChannelActivityEvent,
@@ -162,7 +163,7 @@ export function createChannelStore(
           const id = `channel_${crypto.randomUUID()}`;
           // Minted rather than a bare random id, so the thread says which deployment it belongs to
           // in a project that may hold more than one. See thread-identity.ts.
-          const threadId = threadIdentity.mint();
+          const threadId = threadIdentity.mint(orgIdOf(actor));
           // Named from the caller's ordering, which is the order the channel presents its agents in.
           const name = channelName(
             agentIds.map((agentId) => {
@@ -174,21 +175,25 @@ export function createChannelStore(
 
           await transaction.insert(channels).values({
             id,
+            orgId: orgIdOf(actor),
             name,
             description: PRIVATE_AGENT_CHANNEL_DESCRIPTION,
           });
           await transaction.insert(channelMemberships).values({
+            orgId: orgIdOf(actor),
             channelId: id,
             userId: actor.id,
           });
           await transaction.insert(channelAgents).values(
             agentIds.map((agentId, position) => ({
+              orgId: orgIdOf(actor),
               channelId: id,
               agentId,
               position,
             })),
           );
           await transaction.insert(intelligenceChannelMappings).values({
+            orgId: orgIdOf(actor),
             userId: actor.id,
             channelId: id,
             threadId,
@@ -229,7 +234,9 @@ export function createChannelStore(
           agentProfiles,
           eq(agentProfiles.agentId, channelAgents.agentId),
         )
-        .where(eq(channels.id, channelId))
+        .where(
+          and(eq(channels.id, channelId), eq(channels.orgId, orgIdOf(actor))),
+        )
         .orderBy(asc(channelAgents.position), asc(channelAgents.agentId));
 
       const first = rows[0];
@@ -272,9 +279,12 @@ export function createChannelStore(
           ),
         )
         .where(
-          cursor
-            ? sql`(coalesce(${channels.lastMessageAt}, ${channels.createdAt}), ${channels.id}) < (${cursor.recency}::timestamptz, ${cursor.id})`
-            : undefined,
+          and(
+            eq(channels.orgId, orgIdOf(actor)),
+            cursor
+              ? sql`(coalesce(${channels.lastMessageAt}, ${channels.createdAt}), ${channels.id}) < (${cursor.recency}::timestamptz, ${cursor.id})`
+              : undefined,
+          ),
         )
         .orderBy(
           sql`coalesce(${channels.lastMessageAt}, ${channels.createdAt}) desc`,
@@ -380,6 +390,7 @@ export function createChannelStore(
               and(
                 eq(channelMemberships.channelId, channelId),
                 eq(channelMemberships.userId, actor.id),
+                eq(channelMemberships.orgId, orgIdOf(actor)),
               ),
             );
           // Not a member, or no such channel: the same answer either way, so belonging to a channel

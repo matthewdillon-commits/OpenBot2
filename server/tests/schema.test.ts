@@ -119,6 +119,12 @@ describe("OpenBot database schema", () => {
     ).toEqual([
       { name: "agent_id", notNull: true, hasDefault: false, primary: true },
       {
+        name: "org_id",
+        notNull: true,
+        hasDefault: true,
+        primary: false,
+      },
+      {
         name: "owner_user_id",
         notNull: false,
         hasDefault: false,
@@ -191,6 +197,13 @@ describe("OpenBot database schema", () => {
       })),
     ).toEqual([
       {
+        name: "org_id",
+        sqlType: "text",
+        notNull: true,
+        hasDefault: true,
+        primary: false,
+      },
+      {
         name: "user_id",
         sqlType: "text",
         notNull: true,
@@ -237,10 +250,24 @@ describe("OpenBot database schema", () => {
         onUpdate: "no action",
       },
       {
+        sourceColumns: ["org_id"],
+        targetTable: "organizations",
+        targetColumns: ["id"],
+        onDelete: "restrict",
+        onUpdate: "no action",
+      },
+      {
         sourceColumns: ["owner_user_id"],
         targetTable: "users",
         targetColumns: ["id"],
         onDelete: "set null",
+        onUpdate: "no action",
+      },
+      {
+        sourceColumns: ["org_id"],
+        targetTable: "organizations",
+        targetColumns: ["id"],
+        onDelete: "restrict",
         onUpdate: "no action",
       },
       {

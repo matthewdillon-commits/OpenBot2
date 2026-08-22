@@ -1,4 +1,4 @@
-import { IconLock, IconShieldCheck, IconUser } from "@tabler/icons-react";
+import { IconLock, IconMail, IconShieldCheck, IconUser } from "@tabler/icons-react";
 import { useInfiniteQuery, useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
@@ -22,6 +22,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { currentUserQueryOptions } from "@/lib/auth/queries";
+import { inviteOrgMemberMutationOptions } from "@/lib/orgs/mutations";
 import {
   setPersonAccessMutationOptions,
   setPersonRoleMutationOptions,
@@ -78,6 +79,9 @@ function PeoplePage() {
   const currentUser = useQuery(currentUserQueryOptions());
   const setRole = useMutation(setPersonRoleMutationOptions(queryClient));
   const setAccess = useMutation(setPersonAccessMutationOptions(queryClient));
+  const invite = useMutation(inviteOrgMemberMutationOptions(queryClient));
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteToken, setInviteToken] = useState<string | null>(null);
 
   // The server refuses these too. Disabling them here is so the screen does not offer something it
   // knows will be refused, not so the rule is enforced in the browser.
@@ -88,6 +92,50 @@ function PeoplePage() {
       description="Everybody who has signed in. Administrators reach these screens; everybody else talks to Bots."
       title="People"
     >
+      <PageSection
+        description="An owner or administrator can invite a colleague into this organization. They sign in with the same account they already have, or create one from the invite link."
+        title="Invite someone"
+      >
+        <form
+          className="flex flex-col gap-3"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            if (!inviteEmail.trim()) return;
+            const result = await invite.mutateAsync({
+              email: inviteEmail.trim(),
+              role: "member",
+            });
+            setInviteToken(result.token);
+            setInviteEmail("");
+          }}
+        >
+          <Input
+            aria-label="Invite email"
+            onChange={(event) => setInviteEmail(event.target.value)}
+            placeholder="colleague@company.com"
+            type="email"
+            value={inviteEmail}
+          />
+          <Button
+            disabled={invite.isPending || !inviteEmail.trim()}
+            size="sm"
+            type="submit"
+          >
+            <IconMail />
+            {invite.isPending ? "Inviting…" : "Send invite"}
+          </Button>
+        </form>
+        {invite.error ? (
+          <p className="mt-3 text-destructive text-sm" role="alert">
+            {invite.error.message}
+          </p>
+        ) : null}
+        {inviteToken ? (
+          <p className="mt-3 text-sm">
+            Invite link: <code>/invite/{inviteToken}</code>
+          </p>
+        ) : null}
+      </PageSection>
       <PageSection
         description="An address named in INITIAL_ADMIN_EMAILS is an administrator whatever this screen says, so it cannot be changed here."
         title="Who is here"

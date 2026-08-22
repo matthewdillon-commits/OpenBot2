@@ -7,11 +7,12 @@ export type ConnectorStatus = {
 };
 
 export type ConnectorAdminService = {
-  list: () => Promise<ConnectorStatus[]>;
+  list: (orgId?: string) => Promise<ConnectorStatus[]>;
   configureGoogleDrive?: (input: {
     serviceAccountJson: string;
     impersonationSubject: string;
     actorUserId: string;
+    orgId?: string;
   }) => Promise<ConnectorStatus>;
 };
 
@@ -58,12 +59,13 @@ export function createConnectorAdminService(
      * `knowledge.yaml` says what a deployment may connect to rather than what it has, so whether a
      * connector is configured is read from the instances table instead.
      */
-    list: async () => {
+    list: async (orgId = LOCAL_ORGANIZATION_ID) => {
       const configured = new Set(
         (
           await database
             .select({ type: connectorInstances.type })
             .from(connectorInstances)
+            .where(eq(connectorInstances.orgId, orgId))
         ).map((row) => row.type),
       );
       return (await catalog.list()).map((connector) => ({
@@ -75,6 +77,7 @@ export function createConnectorAdminService(
       const source = sources.find((item) => item.type === "google-drive");
       if (!source)
         throw new Error("Google Drive is not enabled by knowledge.yaml");
+      const orgId = input.orgId ?? LOCAL_ORGANIZATION_ID;
       const credential = await credentials.create({
         kind: "connector",
         provider: "google_drive",
@@ -82,6 +85,7 @@ export function createConnectorAdminService(
         metadata: {},
         plaintext: input.serviceAccountJson,
         actorUserId: input.actorUserId,
+        orgId,
       });
       const sourceMetadata = {
         roots: source.roots,
@@ -90,7 +94,12 @@ export function createConnectorAdminService(
       const [existing] = await database
         .select({ id: connectorInstances.id })
         .from(connectorInstances)
-        .where(eq(connectorInstances.type, "google_drive"));
+        .where(
+          and(
+            eq(connectorInstances.type, "google_drive"),
+            eq(connectorInstances.orgId, orgId),
+          ),
+        );
       if (existing) {
         await database
           .update(connectorInstances)
@@ -102,6 +111,7 @@ export function createConnectorAdminService(
           .where(eq(connectorInstances.id, existing.id));
       } else {
         await database.insert(connectorInstances).values({
+          orgId,
           type: "google_drive",
           credentialId: credential.id,
           sourceMetadata,
@@ -118,7 +128,8 @@ export function createConnectorAdminService(
   };
 }
 
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { CredentialAdminService } from "./credentials";
 import type { Database } from "./db/client";
 import { connectorInstances } from "./db/schema";
+import { LOCAL_ORGANIZATION_ID } from "./orgs/constants";

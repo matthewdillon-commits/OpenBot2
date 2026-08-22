@@ -8,6 +8,7 @@ import {
   channelAgents,
   channelMemberships,
 } from "../db/schema";
+import { orgIdOf } from "../orgs/constants";
 import { agentAuthHeaders, authFromConfiguration } from "./auth-header";
 import type { AgentActor } from "./profile-types";
 
@@ -87,6 +88,7 @@ function selectActiveAgents(database: Database, actor: AgentActor) {
     .innerJoin(agentProfiles, eq(agentProfiles.agentId, agents.id))
     .where(
       and(
+        eq(agents.orgId, orgIdOf(actor)),
         isNull(agentProfiles.deletedAt),
         actor.role === "admin"
           ? undefined
@@ -118,5 +120,7 @@ function selectTombstoneAgents(database: Database, actor: AgentActor) {
         eq(channelMemberships.userId, actor.id),
       ),
     )
-    .where(isNotNull(agentProfiles.deletedAt));
+    .where(
+      and(eq(agents.orgId, orgIdOf(actor)), isNotNull(agentProfiles.deletedAt)),
+    );
 }
