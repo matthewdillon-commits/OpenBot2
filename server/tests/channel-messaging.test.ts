@@ -415,9 +415,54 @@ describe("the messaging tools", () => {
     ]);
   });
 
-  test("a wake reply is not itself woken past the hop ceiling", async () => {
-    expect(MAX_MESSAGE_HOP).toBe(2);
+  test("a real wake reply is stored and wakes the other members, not the sender", async () => {
+    const room = channel({ agentIds: ["risk", "knowledge", "ops"] });
+    const messages = memoryMessages();
+    const wake = wakeCapture();
     const postedReply = await createMessagingGateway({
+      channels: memoryChannels([room]),
+      messages,
+      auditStore: recorder().auditStore,
+      policy: () => PERMISSIVE,
+      wake,
+    }).postWakeReply({
+      botId: "knowledge",
+      actor,
+      channelId: room.id,
+      text: "Vendor 12's residual risk is 0.42. Risk, does that match your model?",
+      hop: 2,
+    });
+
+    expect(postedReply?.body).toContain("residual risk");
+    expect(postedReply?.hop).toBe(2);
+    expect(messages.rows).toHaveLength(1);
+    expect(wake.jobs.map((job) => job.botId).sort()).toEqual(["ops", "risk"]);
+    expect(wake.jobs.every((job) => job.botId !== "knowledge")).toBe(true);
+  });
+
+  test("a long unattended chain stops waking after the last allowed hop", async () => {
+    expect(MAX_MESSAGE_HOP).toBe(8);
+    const messages = memoryMessages();
+    const wake = wakeCapture();
+    const last = await createMessagingGateway({
+      channels: memoryChannels([channel()]),
+      messages,
+      auditStore: recorder().auditStore,
+      policy: () => PERMISSIVE,
+      wake,
+    }).postWakeReply({
+      botId: "knowledge",
+      actor,
+      channelId: "channel-room",
+      text: "That is the last finding I will send without a person.",
+      hop: MAX_MESSAGE_HOP,
+    });
+
+    expect(last?.hop).toBe(MAX_MESSAGE_HOP);
+    expect(messages.rows).toHaveLength(1);
+    expect(wake.jobs).toHaveLength(0);
+
+    const past = await createMessagingGateway({
       channels: memoryChannels([channel()]),
       messages: memoryMessages(),
       auditStore: recorder().auditStore,
@@ -427,9 +472,30 @@ describe("the messaging tools", () => {
       botId: "knowledge",
       actor,
       channelId: "channel-room",
+      text: "This should never land.",
+      hop: MAX_MESSAGE_HOP + 1,
+    });
+    expect(past).toBeNull();
+  });
+
+  test("an empty acknowledgement is still not stored at a real hop", async () => {
+    const messages = memoryMessages();
+    const wake = wakeCapture();
+    const postedReply = await createMessagingGateway({
+      channels: memoryChannels([channel()]),
+      messages,
+      auditStore: recorder().auditStore,
+      policy: () => PERMISSIVE,
+      wake,
+    }).postWakeReply({
+      botId: "knowledge",
+      actor,
+      channelId: "channel-room",
       text: "ok",
       hop: 2,
     });
     expect(postedReply).toBeNull();
+    expect(messages.rows).toHaveLength(0);
+    expect(wake.jobs).toHaveLength(0);
   });
 });

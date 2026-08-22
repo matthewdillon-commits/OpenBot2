@@ -311,6 +311,10 @@ export function ChannelChat({
       id: newId(),
       role: "user",
     });
+    const justSaid = agent.messages.at(-1) as
+      | (Message & { createdAt?: string })
+      | undefined;
+    if (justSaid) justSaid.createdAt = new Date().toISOString();
     report(trimmed, null);
 
     // Providers reject later turns if prior tool calls have no result; repair before sending.

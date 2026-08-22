@@ -49,7 +49,42 @@ describe("transcriptMessages", () => {
         role: "assistant",
         content: "Please review vendor 12.",
         name: "Risk",
+        createdAt: "2026-08-22T00:00:00.000Z",
       },
+    ]);
+  });
+
+  test("interleaves a Bot post between earlier and later human turns", () => {
+    const morning = {
+      ...seedMessage("Start the vendor review.", "human-1"),
+      createdAt: "2026-08-22T09:00:00.000Z",
+    };
+    const afternoon = {
+      ...seedMessage("Any update on vendor 12?", "human-2"),
+      createdAt: "2026-08-22T11:00:00.000Z",
+    };
+    const posted = [
+      {
+        id: "msg_mid",
+        channelId: "channel-1",
+        senderAgentId: "knowledge",
+        senderName: "Knowledge",
+        body: "Vendor 12's policy expired in June.",
+        hop: 2,
+        createdAt: "2026-08-22T10:00:00.000Z",
+      },
+    ];
+
+    expect(transcriptMessages([morning, afternoon], null, posted)).toEqual([
+      morning,
+      {
+        id: "msg_mid",
+        role: "assistant",
+        content: "Vendor 12's policy expired in June.",
+        name: "Knowledge",
+        createdAt: "2026-08-22T10:00:00.000Z",
+      },
+      afternoon,
     ]);
   });
 });

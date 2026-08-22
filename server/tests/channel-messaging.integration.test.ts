@@ -110,7 +110,7 @@ describe("agent messaging against a real channel store", () => {
       messages,
       auditStore,
       policy: () => PERMISSIVE,
-      wake: { enqueue: (job) => wakes.push(job) },
+      wake: { enqueue: (job) => wakes.push(job), isRunning: () => false },
     });
 
     const answer = await gateway.messageAgent({
@@ -151,7 +151,7 @@ describe("agent messaging against a real channel store", () => {
       messages,
       auditStore,
       policy: () => PERMISSIVE,
-      wake: { enqueue: (job) => wakes.push(job) },
+      wake: { enqueue: (job) => wakes.push(job), isRunning: () => false },
     }).messageChannel({
       botId: risk,
       actor,
@@ -180,7 +180,7 @@ describe("agent messaging against a real channel store", () => {
         deny: ['tool.name == "message_agent"'],
         allow: ["true"],
       }),
-      wake: { enqueue: () => {} },
+      wake: { enqueue: () => {}, isRunning: () => false },
     }).messageAgent({
       botId: risk,
       actor,
@@ -192,5 +192,62 @@ describe("agent messaging against a real channel store", () => {
     expect(written[0]?.eventType).toBe("channel.message_refused");
     const listed = await channelStore.list(actor);
     expect(listed.channels).toHaveLength(0);
+  });
+
+  test("a named room can have more than one unattended reply hop", async () => {
+    const actor = await createUser();
+    const risk = await createAgent(actor, "Risk");
+    const knowledge = await createAgent(actor, "Knowledge");
+    const ops = await createAgent(actor, "Ops");
+    const created = await channelStore.create(actor, [risk, knowledge, ops], {
+      name: "Vendor review",
+    });
+    createdChannelIds.push(created.id);
+    const wakes: WakeJob[] = [];
+    const gateway = createMessagingGateway({
+      channels: channelStore,
+      messages,
+      auditStore: recorder().auditStore,
+      policy: () => PERMISSIVE,
+      wake: { enqueue: (job) => wakes.push(job), isRunning: () => false },
+    });
+
+    await gateway.messageChannel({
+      botId: risk,
+      actor,
+      channelId: created.id,
+      text: "Vendor 12 exceeds residual risk. Knowledge, please confirm the source.",
+    });
+    expect(wakes.map((job) => job.botId).sort()).toEqual(
+      [knowledge, ops].sort(),
+    );
+
+    const firstReply = await gateway.postWakeReply({
+      botId: knowledge,
+      actor,
+      channelId: created.id,
+      text: "The source is the June vendor policy, section 4.",
+      hop: 2,
+    });
+    expect(firstReply?.hop).toBe(2);
+    expect(wakes.map((job) => job.botId)).toContain(risk);
+    expect(wakes.map((job) => job.botId)).toContain(ops);
+
+    const secondReply = await gateway.postWakeReply({
+      botId: ops,
+      actor,
+      channelId: created.id,
+      text: "I will pull the contract addendum next.",
+      hop: 3,
+    });
+    expect(secondReply?.hop).toBe(3);
+
+    const posted = await messages.list(actor, created.id);
+    expect(posted.map((row) => row.body)).toEqual([
+      "Vendor 12 exceeds residual risk. Knowledge, please confirm the source.",
+      "The source is the June vendor policy, section 4.",
+      "I will pull the contract addendum next.",
+    ]);
+    expect(posted.map((row) => row.hop)).toEqual([1, 2, 3]);
   });
 });

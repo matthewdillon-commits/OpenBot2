@@ -43,7 +43,7 @@ Starting a channel creates a new conversation and Intelligence thread. Two chann
 
 A channel can hold up to eight coworkers. The compose screen's To: field seats them, in order; the first is the lead. One shared thread; `@` a member to have them answer that turn. A room can be named when two or more coworkers are seated, and members can be added or removed later from the channel settings pane.
 
-Bots can also message each other. `message_agent` opens or reuses a 1:1 between two coworkers for the person whose run it is. `message_channel` posts to a room the sender already belongs to. Both are governed actions: the gateway resolves the target, evaluates the policy (`intent == "message"` or the tool name), writes an audit row, and only then stores the message and wakes the recipient. The sender is not held open waiting for a reply. Empty acknowledgements are refused and never delivered.
+Bots can also message each other. `message_agent` opens or reuses a 1:1 between two coworkers for the person whose run it is. `message_channel` posts to a room the sender already belongs to. Both are governed actions: the gateway resolves the target, evaluates the policy (`intent == "message"` or the tool name), writes an audit row, and only then stores the message and wakes the recipient. The sender is not held open waiting for a reply. A real wake reply — a finding, an answer, or a question — is stored and wakes the other members, so a room can go a few turns without a person. Empty acknowledgements are refused and never delivered. A long unattended chain stops after eight hops.
 
 Each channel routes through a channel-local proxy agent id, pinned to that channel's thread id, then forwards to the coworker runtime id.
 

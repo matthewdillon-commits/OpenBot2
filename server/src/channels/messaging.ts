@@ -109,7 +109,7 @@ export function createMessagingGateway(options: {
     channel: AgentChannel;
     recipientAgentId: string | null;
     wakeAgentIds: string[];
-  }): Promise<string> => {
+  }): Promise<ChannelPostedMessage> => {
     const posted = await messages.post({
       channelId: input.channel.id,
       senderAgentId: input.botId,
@@ -134,10 +134,16 @@ export function createMessagingGateway(options: {
       }
     }
 
-    return input.tool === MESSAGE_AGENT_TOOL
-      ? `Sent to the other coworker in ${input.channel.name}. They will see it and may reply later; do not wait.`
-      : `Posted in ${input.channel.name}. Members will see it and may reply later; do not wait.`;
+    return posted;
   };
+
+  const sentCopy = (
+    tool: typeof MESSAGE_AGENT_TOOL | typeof MESSAGE_CHANNEL_TOOL,
+    name: string,
+  ) =>
+    tool === MESSAGE_AGENT_TOOL
+      ? `Sent to the other coworker in ${name}. They will see it and may reply later; do not wait.`
+      : `Posted in ${name}. Members will see it and may reply later; do not wait.`;
 
   return {
     async messageAgent(input) {
@@ -178,7 +184,7 @@ export function createMessagingGateway(options: {
         }
       }
 
-      return deliver({
+      await deliver({
         botId: input.botId,
         actor: input.actor,
         tool: MESSAGE_AGENT_TOOL,
@@ -188,6 +194,7 @@ export function createMessagingGateway(options: {
         recipientAgentId: input.recipientAgentId,
         wakeAgentIds: [input.recipientAgentId],
       });
+      return sentCopy(MESSAGE_AGENT_TOOL, channel.name);
     },
 
     async messageChannel(input) {
@@ -216,7 +223,7 @@ export function createMessagingGateway(options: {
       });
       if (!decided.ok) return decided.refused;
 
-      return deliver({
+      await deliver({
         botId: input.botId,
         actor: input.actor,
         tool: MESSAGE_CHANNEL_TOOL,
@@ -226,15 +233,16 @@ export function createMessagingGateway(options: {
         recipientAgentId: null,
         wakeAgentIds: channel.agentIds.filter((id) => id !== input.botId),
       });
+      return sentCopy(MESSAGE_CHANNEL_TOOL, channel.name);
     },
 
     async postWakeReply(input) {
       const trimmed = input.text.trim();
       if (isEmptyOrAck(trimmed)) return null;
-      if (input.hop > MAX_MESSAGE_HOP) return null;
 
       const channel = await channels.get(input.actor, input.channelId);
       if (!channel?.agentIds.includes(input.botId)) return null;
+      if (!channel.active) return null;
 
       const decided = await decide({
         botId: input.botId,
@@ -247,18 +255,16 @@ export function createMessagingGateway(options: {
       });
       if (!decided.ok) return null;
 
-      const posted = await messages.post({
-        channelId: channel.id,
-        senderAgentId: input.botId,
-        body: decided.text,
-        hop: input.hop,
-      });
-      await channels.recordActivity(input.actor, channel.id, {
+      return deliver({
+        botId: input.botId,
+        actor: input.actor,
+        tool: MESSAGE_CHANNEL_TOOL,
         text: decided.text,
-        agentId: input.botId,
-        at: posted.createdAt,
+        hop: input.hop,
+        channel,
+        recipientAgentId: null,
+        wakeAgentIds: channel.agentIds.filter((id) => id !== input.botId),
       });
-      return posted;
     },
   };
 }

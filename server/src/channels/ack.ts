@@ -10,8 +10,15 @@
 const ACK_PATTERN =
   /^(ok|okay|k|kk|yes|yep|yeah|sure|thanks|thank you|thx|ty|got it|gotcha|roger|copy|acknowledged|ack|noted|will do|sounds good|perfect|great|cool|👍|✅|👌)[.!\s]*$/i;
 
-/** How far a Bot-only chain may run. The originating send is 1; the recipient's wake reply is 2. */
-export const MAX_MESSAGE_HOP = 2;
+/**
+ * How far a Bot-only chain may run without a person.
+ *
+ * The originating send is 1. Each real wake reply increments. Empty acknowledgements are refused
+ * and do not count: they are the ping-pong guard. A finding or a question at hop 2, 3, 4 still
+ * lands and wakes the other members, so a room can talk for a few turns on its own. Hop 8 is
+ * the last stored reply; it does not wake anyone else.
+ */
+export const MAX_MESSAGE_HOP = 8;
 
 export function isEmptyOrAck(text: string): boolean {
   const trimmed = text.trim();

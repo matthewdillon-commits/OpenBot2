@@ -97,8 +97,9 @@ export const channelMessages = pgTable(
     }),
     body: text("body").notNull(),
     /**
-     * Distance from a human-started send. A Bot's own tool call is 1; the recipient's wake
-     * reply is 2. The wake runner will not post past that, so two Bots cannot bounce forever.
+     * Distance from a human-started send. A Bot's own tool call is 1; each real wake reply
+     * increments. Empty acknowledgements are never stored. A long unattended chain stops at
+     * `MAX_MESSAGE_HOP` so two Bots cannot bounce forever.
      */
     hop: integer("hop").notNull().default(0),
     createdAt: createdAt(),
