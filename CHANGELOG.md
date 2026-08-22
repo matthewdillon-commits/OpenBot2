@@ -10,17 +10,18 @@ Newest first. `Unreleased` is what is on `main` and not yet tagged.
 
 ### Multi-tenant organizations
 
-A deployment can now hold more than one customer. People still sign in once; work is scoped to an organization. Existing data is backfilled into the `local` organization. Sales-led hosting sets `PLATFORM_SUPERADMINS` so someone can create an organization and invite its owner. Self-serve signup, Stripe, seat quotas, per-org SSO, and Postgres RLS are not in this release.
+A deployment can now hold more than one customer. People still sign in once; work is scoped to an organization. Existing data is backfilled into the `local` organization. Sales-led hosting sets `PLATFORM_SUPERADMINS` so someone can create an organization and invite its owner. `OPENBOT_EMAIL_AUTH=true` turns on email and password without an OAuth client; create-account asks for an organization name, and a signed-in person can also create a workspace they own. Stripe, seat quotas, per-org SSO, and Postgres RLS are not in this release.
 
 ### Upgrading
 
 Two configurations now refuse to start:
 
 - A provider configured with no `INITIAL_ADMIN_EMAILS`. Set it to at least one address.
-- No provider at all and no `OPENBOT_SINGLE_USER=true`. Configure a provider, or set that to say you
-  meant a deployment where every visitor is one administrator. This no longer depends on `NODE_ENV`,
-  which is unset by default and so let exactly the dangerous case through. A deployment already
-  running open needs the line added before it will start again.
+- No provider at all and no `OPENBOT_SINGLE_USER=true`. Configure a provider, set
+  `OPENBOT_EMAIL_AUTH=true`, or set `OPENBOT_SINGLE_USER=true` to say you meant a deployment where
+  every visitor is one administrator. This no longer depends on `NODE_ENV`, which is unset by
+  default and so let exactly the dangerous case through. A deployment already running open needs the
+  line added before it will start again.
 
 Registering an OpenID Connect provider needs every host in its discovery document in
 `TRUSTED_ORIGINS`, not only the issuer. Better Auth 1.7 checks each endpoint it finds, so a Google
@@ -50,6 +51,8 @@ Sessions survive and nobody signs in again.
 
 ### Added
 
+- **Email and password sign-in, without an OAuth client.** `OPENBOT_EMAIL_AUTH=true` with the usual Better Auth session values shows Sign in / Create account. Create-account asks for an organization name so the first workspace is visible before anybody is inside the app. A signed-in person can also create another organization from `/o`.
+- **A phone can open the sidebar.** The rail becomes a sheet under 768px; a bar at the top of the app, Admin, and Settings opens it. The composer no longer assumes a desktop width, and a channel's detail pane is a full-screen overlay on a phone instead of shrinking the transcript.
 - **A channel can hold a room of up to eight coworkers.** New channel's To: field takes several people, in the order they will appear, and the first is the lead. One shared thread; one speaker per message you send. `@` a member to have them answer that turn — a name that is not already in the room stays in the words and does not invite them yet. Replies are labelled with who spoke, and Watch / settings follow the current speaker. Home still starts a 1:1.
 - **An administrator can switch browser use off**, under Admin → Boundaries, so Bots are not offered the computer tools and do not try to open pages. The switch is not a CEL rule and is not dry-runnable: the chat surface skips the tools, built-in Bots are not told they have a computer, and the gateway refuses every computer action. MCP tools are not this — a deployment that has turned the browser off can still let a Bot talk to Jira. A deployment that has never said otherwise stays on.
 - **Bots can search the public web.** A deployment with `TAVILY_API_KEY` offers every Bot a `search_web` tool: titles, links and short passages, so a fact can be cited without opening a browser. The call is judged by the same policy MCP is (`tool.name == "search_web"` or `intent == "read_tool"`) and written on the trail as `web.searched` / `web.search_refused` — the query and the addresses, never the passages. Absent key, the tool is not offered. A framework Bot that calls it back through `/api/agent-tools/call` now reaches first-party tools as well as MCP, which also lets `search_company_knowledge` run on a remote Bot.
