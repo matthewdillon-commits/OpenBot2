@@ -56,7 +56,7 @@ export function agentTrigger(agents: readonly AgentOption[]): TriggerConfig {
     char: AGENT_TRIGGER,
     accessibilityLabel: "agent",
     reopenOnChipClick: true,
-    emptyMessage: "No agents in this channel",
+    emptyMessage: "No matching coworkers.",
     onSearch: (query): TriggerSuggestion[] =>
       agents
         .filter((agent) => matches(query, agent.name, agent.description))

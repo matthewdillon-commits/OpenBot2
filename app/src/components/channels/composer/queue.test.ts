@@ -2,8 +2,12 @@ import { describe, expect, test } from "bun:test";
 import type { ComposerDraft } from "./draft";
 import { type QueuedMessage, reduceQueue } from "./queue";
 
-function draft(text: string, commandIds: string[] = []): ComposerDraft {
-  return { text, agentId: null, commandIds, isEmpty: false };
+function draft(
+  text: string,
+  commandIds: string[] = [],
+  agentId: string | null = null,
+): ComposerDraft {
+  return { text, agentId, commandIds, isEmpty: false };
 }
 
 /** Park one message and hand back the queue it produced, which is what every case starts from. */
@@ -12,10 +16,11 @@ function park(
   id: string,
   text: string,
   commandIds: string[] = [],
+  agentId: string | null = null,
 ): readonly QueuedMessage[] {
   return reduceQueue(queue, {
     busy: true,
-    draft: draft(text, commandIds),
+    draft: draft(text, commandIds, agentId),
     id,
     type: "submit",
   }).queue;
@@ -72,7 +77,12 @@ describe("submitting", () => {
 
     expect(result.run).toBeNull();
     expect(result.queue).toEqual([
-      { id: "one", text: "no, the other one", commandIds: [] },
+      {
+        id: "one",
+        text: "no, the other one",
+        commandIds: [],
+        agentId: null,
+      },
     ]);
   });
 
@@ -86,6 +96,17 @@ describe("submitting", () => {
       "second",
       "third",
     ]);
+  });
+
+  test("remembers who a parked draft is for", () => {
+    const result = reduceQueue([], {
+      busy: true,
+      draft: draft("@Risk check that again", [], "risk-analyst"),
+      id: "one",
+      type: "submit",
+    });
+
+    expect(result.queue[0]?.agentId).toBe("risk-analyst");
   });
 });
 
@@ -121,11 +142,30 @@ describe("settling", () => {
     expect(result.queue).toEqual([]);
   });
 
-  test("the drained turn is addressed to nobody in particular", () => {
-    const queue = park([], "one", "@Knowledge check that again");
+  test("a parked mention keeps who it is for", () => {
+    const queue = park([], "one", "@Risk check that again", [], "risk-analyst");
 
-    // The mention stays in the words; the conversation is already bound to one coworker.
-    expect(reduceQueue(queue, { type: "settle" }).run?.agentId).toBeNull();
+    expect(reduceQueue(queue, { type: "settle" }).run?.agentId).toBe(
+      "risk-analyst",
+    );
+  });
+
+  test("does not join parked drafts that name different speakers", () => {
+    let queue = park([], "one", "@Knowledge first", [], "knowledge");
+    queue = park(queue, "two", "@Risk second", [], "risk-analyst");
+
+    const result = reduceQueue(queue, { type: "settle" });
+
+    expect(result.run?.text).toBe("@Knowledge first");
+    expect(result.run?.agentId).toBe("knowledge");
+    expect(result.queue).toEqual([
+      {
+        id: "two",
+        text: "@Risk second",
+        commandIds: [],
+        agentId: "risk-analyst",
+      },
+    ]);
   });
 
   test("carries the skills that were invoked, once each", () => {
@@ -192,7 +232,12 @@ describe("removing", () => {
     const result = reduceQueue(queue, { id: "one", type: "remove" });
 
     expect(result.queue).toEqual([
-      { id: "two", text: "no, the other one", commandIds: [] },
+      {
+        id: "two",
+        text: "no, the other one",
+        commandIds: [],
+        agentId: null,
+      },
     ]);
   });
 });

@@ -21,7 +21,6 @@ import {
 import { createThreadIdentity } from "../src/channels/thread-identity";
 import { loadConfig } from "../src/config";
 import { createDatabase } from "../src/db/client";
-import { TEST_POOL } from "./support/database";
 import {
   agentProfiles,
   agents,
@@ -31,6 +30,7 @@ import {
   intelligenceChannelMappings,
   users,
 } from "../src/db/schema";
+import { TEST_POOL } from "./support/database";
 import { testEnvironment } from "./support/environment";
 
 const actor = {
@@ -120,11 +120,15 @@ describe("channel input parser", () => {
     [[null], "Agent IDs must be non-empty strings."],
     [[{}], "Agent IDs must be non-empty strings."],
     [["agent-1", " agent-1 "], "Agent IDs must be unique."],
+    [
+      Array.from({ length: 9 }, (_, index) => `agent-${index}`),
+      "A channel can have at most 8 coworkers.",
+    ],
   ])("rejects invalid agent ID members: %p", (agentIds, error) => {
     expect(parseChannelInput({ agentIds })).toEqual({ ok: false, error });
   });
 
-  test("trims, sorts, and whitelists channel input", () => {
+  test("trims and preserves To: order", () => {
     expect(
       parseChannelInput({
         agentIds: [" agent-2 ", "agent-1"],
@@ -133,7 +137,7 @@ describe("channel input parser", () => {
         threadId: "forged-thread",
         active: false,
       }),
-    ).toEqual({ ok: true, value: { agentIds: ["agent-1", "agent-2"] } });
+    ).toEqual({ ok: true, value: { agentIds: ["agent-2", "agent-1"] } });
   });
 });
 
@@ -156,7 +160,7 @@ describe("channel routes", () => {
     expect(store.calls).toEqual([]);
   });
 
-  test("uses the authenticated context actor and canonical agent IDs", async () => {
+  test("uses the authenticated context actor and To: order", async () => {
     const store = fakeStore();
     const app = appFor(store);
 
@@ -170,7 +174,7 @@ describe("channel routes", () => {
     expect(created.status).toBe(201);
     expect(fetched.status).toBe(200);
     expect(store.calls).toEqual([
-      ["create", actor, ["agent-1", "agent-2"]],
+      ["create", actor, ["agent-2", "agent-1"]],
       ["get", actor, "channel-1"],
     ]);
   });
@@ -541,7 +545,7 @@ describe("channel store integration", () => {
     expect(await json(response)).toEqual({ error: "Channel not found." });
   });
 
-  test("reads linked agent IDs in lexicographic order", async () => {
+  test("reads linked agent IDs in To: order", async () => {
     const actor = await createPersistentUser();
     const agentIdBase = persistentId("ordered-agent");
     const laterAgentId = await createPersistentAgent({
@@ -560,9 +564,14 @@ describe("channel store integration", () => {
     ]);
     createdChannelIds.push(created.id);
 
-    expect((await persistentStore.get(actor, created.id))?.agentIds).toEqual(
-      [earlierAgentId, laterAgentId].sort(),
-    );
+    expect((await persistentStore.get(actor, created.id))?.agentIds).toEqual([
+      laterAgentId,
+      earlierAgentId,
+    ]);
+    const listed = await persistentStore.list(actor);
+    expect(
+      listed.channels.find((entry) => entry.id === created.id)?.agentIds,
+    ).toEqual([laterAgentId, earlierAgentId]);
   });
 
   test("keeps a historical channel readable but inactive after a linked profile is deleted", async () => {
@@ -662,7 +671,7 @@ describe("channel store integration", () => {
     }
   });
 
-  test("persists every canonical agent and derives its name in canonical order", async () => {
+  test("persists every agent and derives its name in To: order", async () => {
     const actor = await createPersistentUser();
     const firstId = await createPersistentAgent({
       id: persistentId("agent-a"),
@@ -674,23 +683,26 @@ describe("channel store integration", () => {
       name: "Alpha",
       owner: actor,
     });
-    const canonicalAgentIds = [firstId, secondId].sort();
+    const agentIds = [firstId, secondId];
 
-    const created = await persistentStore.create(actor, canonicalAgentIds);
+    const created = await persistentStore.create(actor, agentIds);
     createdChannelIds.push(created.id);
 
     expect(created).toEqual({
       id: created.id,
       name: "Zulu, Alpha",
-      agentIds: canonicalAgentIds,
+      agentIds,
       threadId: created.threadId,
       active: true,
     });
     const persisted = await persistedChannel(created.id);
     expect(persisted.channelRow?.name).toBe("Zulu, Alpha");
-    expect(persisted.linkedAgents.map(({ agentId }) => agentId).sort()).toEqual(
-      canonicalAgentIds,
-    );
+    expect(
+      persisted.linkedAgents
+        .slice()
+        .sort((left, right) => left.position - right.position)
+        .map(({ agentId }) => agentId),
+    ).toEqual(agentIds);
   });
 
   test("truncates derived names to 120 Unicode code points with an ellipsis", async () => {

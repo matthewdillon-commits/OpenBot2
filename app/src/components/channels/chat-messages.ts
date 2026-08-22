@@ -5,7 +5,14 @@ import type { Message, ToolCall } from "@ag-ui/core";
  */
 
 export type VisibleChatItem =
-  | { kind: "text"; id: string; role: "user" | "assistant"; text: string }
+  | {
+      kind: "text";
+      id: string;
+      role: "user" | "assistant";
+      text: string;
+      /** Who said it, when the run stamped a coworker name on the assistant message. */
+      name?: string;
+    }
   | {
       kind: "tool";
       id: string;
@@ -36,11 +43,13 @@ export function toVisibleChatItems(
     if (message.role === "assistant") {
       const items: VisibleChatItem[] = [];
       if (message.content) {
+        const name = messageName(message);
         items.push({
           kind: "text",
           id: message.id,
           role: "assistant",
           text: message.content,
+          ...(name ? { name } : {}),
         });
       }
       for (const toolCall of message.toolCalls ?? []) {
@@ -69,4 +78,10 @@ export function toVisibleChatItems(
 
     return text ? [{ kind: "text", id: message.id, role: "user", text }] : [];
   });
+}
+
+function messageName(message: Readonly<Message>): string | undefined {
+  if (!("name" in message)) return undefined;
+  const name = message.name;
+  return typeof name === "string" && name.trim().length > 0 ? name : undefined;
 }

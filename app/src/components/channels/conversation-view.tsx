@@ -29,6 +29,8 @@ export function ConversationView({
   stopped,
   stoppable,
   queueWhileBusy = false,
+  thinkingName,
+  onDraftChange,
   onSubmit,
   onStop,
 }: {
@@ -73,6 +75,10 @@ export function ConversationView({
    * moving it onto this composer or asking for it upstream, and neither is a queue.
    */
   queueWhileBusy?: boolean;
+  /** Shown on the thinking line so a room names who is answering. */
+  thinkingName?: string;
+  /** Live draft, so `/` can follow who will speak without switching the runtime yet. */
+  onDraftChange?: (draft: ComposerDraft) => void;
   onSubmit: (draft: ComposerDraft) => void | Promise<void>;
   /** Stop the Bot mid-answer; forwarded to turn the send button into a stop button. */
   onStop?: () => void;
@@ -214,6 +220,7 @@ export function ConversationView({
           }}
           queued={queued}
           {...(stopped ? { stopped } : {})}
+          {...(thinkingName ? { thinkingName } : {})}
         />
       </div>
       <div className="max-w-2xl mx-auto w-full px-0 pb-4 shrink-0">
@@ -224,6 +231,7 @@ export function ConversationView({
           className="w-full mt-auto"
           compact
           disabled={disabled}
+          {...(onDraftChange ? { onDraftChange } : {})}
           onQueue={
             queueWhileBusy
               ? (draft) => {

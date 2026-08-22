@@ -1,15 +1,14 @@
 import type { Message } from "@ag-ui/core";
-import { IconBox } from "@tabler/icons-react";
 import { useRenderToolCall } from "@copilotkit/react-core/v2";
+import { IconBox } from "@tabler/icons-react";
 import { motion, useReducedMotion } from "motion/react";
 import { memo, useEffect, useMemo, useRef } from "react";
 import { Streamdown } from "streamdown";
-import { markdownComponents } from "@/lib/markdown";
-import { EASE_OUT, ENTRANCE_SECONDS } from "@/lib/motion";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import {
   MessageContent,
   MessageFooter,
+  MessageHeader,
   Message as MessageRow,
 } from "@/components/ui/message";
 import {
@@ -21,12 +20,14 @@ import {
   MessageScrollerViewport,
   useMessageScroller,
 } from "@/components/ui/message-scroller";
-import { toVisibleChatItems } from "./chat-messages";
-import { asText, forDisplay, REFUSAL_MARKER } from "@/lib/plugins/tool-result";
+import { markdownComponents } from "@/lib/markdown";
+import { EASE_OUT, ENTRANCE_SECONDS } from "@/lib/motion";
 import { readToolName } from "@/lib/plugins/tool-name";
+import { asText, forDisplay, REFUSAL_MARKER } from "@/lib/plugins/tool-result";
+import { toVisibleChatItems } from "./chat-messages";
 import type { QueuedMessage } from "./composer";
-import { ToolLine } from "./tool-line";
 import { ToolRenderBoundary } from "./tool-boundary";
+import { ToolLine } from "./tool-line";
 
 type ChatTranscriptProps = {
   busy?: boolean;
@@ -48,6 +49,8 @@ type ChatTranscriptProps = {
    * be told, and only the thing that ended the turn knows which one happened.
    */
   stopped?: string;
+  /** Who is answering, for the thinking line in a room. */
+  thinkingName?: string;
 };
 
 /** One shared empty array, so a screen without a queue does not hand down a new one per render. */
@@ -88,7 +91,7 @@ function splitSkillChip(
  * It borrows the shimmer a running tool line uses, so "working on it" reads the same whether the
  * work is a tool call or a model that has not spoken yet.
  */
-function Thinking() {
+function Thinking({ name }: { name?: string }) {
   return (
     <p
       className="tool-line-running text-muted-foreground text-sm"
@@ -96,7 +99,7 @@ function Thinking() {
       // is doing. The text says it, so a screen reader is told the same thing the shimmer implies.
       role="status"
     >
-      Thinking
+      {name ? `${name} is thinking` : "Thinking"}
     </p>
   );
 }
@@ -356,11 +359,13 @@ function Arriving({
 const TranscriptMessage = memo(function TranscriptMessage({
   commandNames = "",
   delay,
+  name,
   role,
   text,
 }: {
   commandNames?: string;
   delay: number;
+  name?: string;
   role: "user" | "assistant";
   text: string;
 }) {
@@ -371,6 +376,7 @@ const TranscriptMessage = memo(function TranscriptMessage({
   return (
     <MessageRow align={align}>
       <MessageContent>
+        {name ? <MessageHeader>{name}</MessageHeader> : null}
         <Arriving delay={delay}>
           <Bubble align={align} variant={isUser ? "muted" : "ghost"}>
             <BubbleContent>
@@ -530,6 +536,7 @@ export function ChatTranscript({
   onRemoveQueued,
   queued = EMPTY_QUEUE,
   stopped,
+  thinkingName,
 }: ChatTranscriptProps) {
   /*
    * NOT MEMOISED, AND THAT IS DELIBERATE. `useMemo` keyed on `messages` looks obviously right and
@@ -613,6 +620,7 @@ export function ChatTranscript({
                   <TranscriptMessage
                     commandNames={commandNames}
                     delay={delays.delayFor(item.id, index, items.length)}
+                    {...(item.name ? { name: item.name } : {})}
                     role={item.role}
                     text={item.text}
                   />
@@ -630,7 +638,7 @@ export function ChatTranscript({
             {stopped ? (
               <Stopped reason={stopped} />
             ) : waitingOnFirstToken ? (
-              <Thinking />
+              <Thinking {...(thinkingName ? { name: thinkingName } : {})} />
             ) : null}
             {/*
              * Below the thinking line, and outside the item list for the same reason it is: these

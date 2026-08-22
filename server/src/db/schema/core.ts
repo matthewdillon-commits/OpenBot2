@@ -307,6 +307,11 @@ export const channelAgents = pgTable(
     agentId: text("agent_id")
       .notNull()
       .references(() => agents.id, { onDelete: "cascade" }),
+    /**
+     * To: order. Zero is the lead. Create writes 0..n-1; get and list sort on this rather than
+     * agent id, so "first in To:" stays first after a reload.
+     */
+    position: integer("position").notNull().default(0),
     createdAt: createdAt(),
   },
   (table) => [primaryKey({ columns: [table.channelId, table.agentId] })],

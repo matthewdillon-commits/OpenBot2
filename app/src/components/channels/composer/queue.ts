@@ -8,10 +8,14 @@ import type { ComposerDraft } from "./draft";
  * again, losing whatever it had already done, or wait for it to finish being wrong. Neither is the
  * thing they wanted, which was to say "no, the other one" while it was working and have that land.
  *
- * So a message typed mid-turn is parked rather than dropped, and everything parked runs as ONE
- * follow-up turn when the current one settles. One turn and not one per message, because three
- * quick corrections are usually one correction typed in three breaths: replaying them separately
- * makes the Bot answer the first, act on it, and only then read the sentence saying not to.
+ * So a message typed mid-turn is parked rather than dropped, and everything parked for the SAME
+ * speaker runs as ONE follow-up turn when the current one settles. One turn and not one per
+ * message, because three quick corrections are usually one correction typed in three breaths:
+ * replaying them separately makes the Bot answer the first, act on it, and only then read the
+ * sentence saying not to.
+ *
+ * Two parked drafts that name different speakers stay two turns. Joining them would send one
+ * message to nobody in particular, and a room has one speaker per user message.
  *
  * Settling is not the same as succeeding. The drain is keyed on the turn ENDING and never asks how
  * it ended, which is what makes Stop a way of steering rather than a way of giving up: park a
@@ -44,6 +48,13 @@ export type QueuedMessage = {
    * eventually runs rather than being silently dropped on the way through the queue.
    */
   commandIds: string[];
+  /**
+   * Who this parked draft is for. `null` means "whoever is already speaking".
+   *
+   * Held on the entry so two corrections that name different coworkers are not joined into one
+   * turn addressed to nobody.
+   */
+  agentId: string | null;
 };
 
 export type QueueAction =
@@ -83,39 +94,28 @@ export function reduceQueue(
        * An idle send is not a queue of one. There is nothing to wait behind, so it goes straight
        * out exactly as it did before any of this existed.
        *
-       * WITH SOMETHING ALREADY WAITING IT TAKES THAT WITH IT rather than going first. The two
-       * disagreeing is not supposed to be reachable — the drain empties the queue on the same edge
-       * that frees the composer — but "not supposed to be reachable" is an argument about two
-       * components' timing, and this file is meant to hold the rule on its own. Jumping the line
-       * would run a correction after the sentence correcting it, which is the exact reordering the
-       * whole queue exists to prevent, so the safe reading of an impossible state is the one that
-       * keeps what the person typed in the order they typed it.
+       * WITH SOMETHING ALREADY WAITING IT TAKES THE SAME-SPEAKER PREFIX WITH IT rather than going
+       * first. The two disagreeing is not supposed to be reachable — the drain empties the queue on
+       * the same edge that frees the composer — but "not supposed to be reachable" is an argument
+       * about two components' timing, and this file is meant to hold the rule on its own. Jumping
+       * the line would run a correction after the sentence correcting it, which is the exact
+       * reordering the whole queue exists to prevent, so the safe reading of an impossible state is
+       * the one that keeps what the person typed in the order they typed it.
+       *
+       * Drafts that name a different speaker stay queued. The drain fires again when the turn it
+       * just started ends.
        */
       if (!action.busy) {
         if (queue.length === 0) {
           return { queue, run: action.draft };
         }
-        return {
-          queue: [],
-          run: joinQueued([
-            ...queue,
-            {
-              id: action.id,
-              text: action.draft.text,
-              commandIds: [...action.draft.commandIds],
-            },
-          ]),
-        };
+        return flushSameSpeaker([
+          ...queue,
+          queuedFrom(action.id, action.draft),
+        ]);
       }
       return {
-        queue: [
-          ...queue,
-          {
-            id: action.id,
-            text: action.draft.text,
-            commandIds: [...action.draft.commandIds],
-          },
-        ],
+        queue: [...queue, queuedFrom(action.id, action.draft)],
         run: null,
       };
     }
@@ -124,7 +124,7 @@ export function reduceQueue(
       if (queue.length === 0) {
         return { queue, run: null };
       }
-      return { queue: [], run: joinQueued(queue) };
+      return flushSameSpeaker(queue);
     }
 
     case "remove": {
@@ -137,8 +137,32 @@ export function reduceQueue(
   }
 }
 
+function queuedFrom(id: string, draft: ComposerDraft): QueuedMessage {
+  return {
+    id,
+    text: draft.text,
+    commandIds: [...draft.commandIds],
+    agentId: draft.agentId,
+  };
+}
+
 /**
- * Everything waiting, as the one turn it is about to become.
+ * The leading run of parked drafts that agree on a speaker, as one turn, and whatever follows.
+ */
+function flushSameSpeaker(queue: readonly QueuedMessage[]): QueueTransition {
+  const speakerId = queue[0]?.agentId;
+  let end = 1;
+  while (end < queue.length && queue[end]?.agentId === speakerId) {
+    end += 1;
+  }
+  return {
+    queue: queue.slice(end),
+    run: joinQueued(queue.slice(0, end)),
+  };
+}
+
+/**
+ * Everything waiting for one speaker, as the one turn it is about to become.
  *
  * Newlines rather than spaces. What the person typed were separate messages, and running them
  * together into a paragraph invents a sentence nobody wrote; keeping the line breaks keeps them as
@@ -150,12 +174,7 @@ export function reduceQueue(
 function joinQueued(queue: readonly QueuedMessage[]): ComposerDraft {
   return {
     text: queue.map((message) => message.text).join("\n"),
-    /*
-     * Nothing routes on a mention here. A queued message lands in a conversation already pinned to
-     * one coworker for the life of its thread, so there is nothing an `@` could change; the text of
-     * the mention stays in the words, where it was typed and where it still reads as addressed.
-     */
-    agentId: null,
+    agentId: queue[0]?.agentId ?? null,
     // The same skill queued twice is still one instruction. Sending it twice would put the same
     // paragraph in front of the Bot two times and say nothing new by doing it.
     commandIds: [...new Set(queue.flatMap((message) => message.commandIds))],

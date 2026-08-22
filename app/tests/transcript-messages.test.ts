@@ -41,7 +41,10 @@ describe("seedMessage", () => {
 describe("the first-message stash", () => {
   test("hands the message to the channel that was just created", () => {
     stashFirstMessage("channel_a", "hello");
-    expect(takeFirstMessage("channel_a")).toBe("hello");
+    expect(takeFirstMessage("channel_a")).toEqual({
+      text: "hello",
+      agentId: null,
+    });
   });
 
   test("gives it up only once", () => {
@@ -58,7 +61,21 @@ describe("the first-message stash", () => {
   test("keeps two channels' messages apart", () => {
     stashFirstMessage("channel_c", "for c");
     stashFirstMessage("channel_d", "for d");
-    expect(takeFirstMessage("channel_d")).toBe("for d");
-    expect(takeFirstMessage("channel_c")).toBe("for c");
+    expect(takeFirstMessage("channel_d")).toEqual({
+      text: "for d",
+      agentId: null,
+    });
+    expect(takeFirstMessage("channel_c")).toEqual({
+      text: "for c",
+      agentId: null,
+    });
+  });
+
+  test("remembers who the first message asked to answer", () => {
+    stashFirstMessage("channel_e", "@Risk hello", "risk-analyst");
+    expect(takeFirstMessage("channel_e")).toEqual({
+      text: "@Risk hello",
+      agentId: "risk-analyst",
+    });
   });
 });

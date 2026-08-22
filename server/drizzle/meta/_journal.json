@@ -64,6 +64,13 @@
       "when": 1787357476235,
       "tag": "0008_action_policy_browser_enabled",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1787362000000,
+      "tag": "0009_channel_agents_position",
+      "breakpoints": true
     }
   ]
 }

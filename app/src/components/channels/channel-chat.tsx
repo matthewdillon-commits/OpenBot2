@@ -6,9 +6,12 @@ import {
 } from "@copilotkit/react-core/v2";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { readThreadMessages } from "@/lib/copilot/thread-messages";
-import { toAgentOptions } from "@/components/channels/composer";
+import {
+  type ComposerDraft,
+  toAgentOptions,
+} from "@/components/channels/composer";
 import { ConversationView } from "@/components/channels/conversation-view";
+import { resolveSpeaker } from "@/components/channels/speaker";
 import {
   seedMessage,
   takeFirstMessage,
@@ -21,6 +24,7 @@ import { useActiveBot } from "@/lib/copilot/active-bot";
 import { ConversationProvider } from "@/lib/copilot/conversation";
 import { repairUnansweredToolCalls } from "@/lib/copilot/repair-history";
 import { stoppedReason } from "@/lib/copilot/stopped-turn";
+import { readThreadMessages } from "@/lib/copilot/thread-messages";
 import { useSkillCommands } from "@/lib/plugins/skill-commands";
 import { newId } from "../../lib/new-id";
 
@@ -29,26 +33,67 @@ import { newId } from "../../lib/new-id";
  */
 const SEND_WITHOUT_JOIN_AFTER_MS = 1500;
 
+type PendingSend = {
+  text: string;
+  skills: string[];
+  speakerId: string;
+  resolve: () => void;
+  reject: (error: unknown) => void;
+};
+
 /**
- * One channel's conversation with one coworker.
+ * One channel's conversation. Several coworkers share the thread; one of them speaks per turn.
  *
  * The local agent id is channel-scoped so two channels with the same coworker keep separate
- * durable threads.
+ * durable threads. The runtime agent is whoever is speaking this turn.
  */
 export function ChannelChat({
   channel,
-  runtimeAgentId,
+  focusAgentId,
+  onSpeakerChange,
 }: {
   channel: AgentChannel;
-  runtimeAgentId: string;
+  /** Switch the speaker to this member (needs-you / computer activity). */
+  focusAgentId?: string;
+  onSpeakerChange?: (agentId: string) => void;
 }) {
   // The core attaches the frontend tool registry; direct agent runs do not.
   const { copilotkit } = useCopilotKit();
-  // Mentions are scoped to the channel's permitted agents.
   const { data: agentProfiles } = useQuery(agentListQueryOptions());
+  /**
+   * First-message seed from the compose screen. It is taken once per mount and retained until the
+   * agent has its own messages because joining a fresh thread can temporarily empty the agent.
+   *
+   * Who should answer is taken here too, so the first `useAgent` is already bound to that coworker
+   * rather than the lead and a later switch.
+   */
+  const [seed] = useState<{
+    message: Message | null;
+    speakerId: string | null;
+  }>(() => {
+    const pending = takeFirstMessage(channel.id);
+    if (!pending) return { message: null, speakerId: null };
+    return {
+      message: seedMessage(pending.text, newId()),
+      speakerId: pending.agentId,
+    };
+  });
+
+  const leadId = channel.agentIds[0] ?? "";
+  const [speaker, setSpeaker] = useState(
+    () => resolveSpeaker(channel.agentIds, seed.speakerId) ?? leadId,
+  );
+  const [composerDraft, setComposerDraft] = useState<ComposerDraft | null>(
+    null,
+  );
+
+  useEffect(() => {
+    onSpeakerChange?.(speaker);
+  }, [onSpeakerChange, speaker]);
+
   const { agent, isReady } = useAgent({
     agentId: `channel:${channel.id}`,
-    runtimeAgentId,
+    runtimeAgentId: speaker,
     threadId: channel.threadId,
     updates: [
       UseAgentUpdate.OnMessagesChanged,
@@ -56,18 +101,23 @@ export function ChannelChat({
     ],
   });
 
-  /**
-   * First-message seed from the compose screen. It is taken once per mount and retained until the
-   * agent has its own messages because joining a fresh thread can temporarily empty the agent.
-   */
-  const [seed] = useState<Message | null>(() => {
-    const pending = takeFirstMessage(channel.id);
-    return pending ? seedMessage(pending, newId()) : null;
-  });
-
   /** Cleared by the send-on-mount effect without restarting it. */
-  const seedRef = useRef(seed);
-  seedRef.current = seed;
+  const seedRef = useRef(seed.message);
+  seedRef.current = seed.message;
+
+  /**
+   * Messages from the previous speaker binding. `useAgent` re-joins when the speaker changes; if
+   * CopilotKit treats that as a new empty agent, this is what puts the thread back.
+   */
+  const snapshotRef = useRef<Message[] | null>(null);
+  const pendingSendRef = useRef<PendingSend | null>(null);
+  const joinedOnceRef = useRef(false);
+
+  const snapshotMessages = () => {
+    snapshotRef.current = agent.messages.map((message) => ({ ...message }));
+  };
+  const messagesRef = useRef(agent.messages);
+  messagesRef.current = agent.messages;
 
   /** Promise gate for ordering the first message after the thread join when possible. */
   const openJoinGate = useRef<() => void>(() => {});
@@ -94,7 +144,15 @@ export function ChannelChat({
     if (isReady) openReadyGate.current();
   }, [isReady]);
 
-  // Join the gateway socket, restore durable history, then release the first-message gate.
+  // Restore a snapshot synchronously if the hook comes back empty after a speaker switch.
+  useEffect(() => {
+    if (!speaker) return;
+    if (agent.messages.length === 0 && snapshotRef.current?.length) {
+      agent.setMessages(snapshotRef.current);
+    }
+  }, [agent, speaker]);
+
+  // Join the gateway socket, restore durable history once, then release the first-message gate.
   useEffect(() => {
     if (!isReady) return;
     let current = true;
@@ -107,15 +165,18 @@ export function ChannelChat({
       }
 
       try {
-        const stored = await readThreadMessages(
-          channel.threadId,
-          runtimeAgentId,
-        );
-        // Never overwrite local messages that arrived while history was loading.
-        if (current && stored.length > 0 && agent.messages.length === 0) {
-          agent.setMessages(stored);
+        if (agent.messages.length === 0 && snapshotRef.current?.length) {
+          agent.setMessages(snapshotRef.current);
+        } else if (!joinedOnceRef.current) {
+          // History always reads as the lead so a speaker switch does not fetch a different thread.
+          const stored = await readThreadMessages(channel.threadId, leadId);
+          // Never overwrite local messages that arrived while history was loading.
+          if (current && stored.length > 0 && agent.messages.length === 0) {
+            agent.setMessages(stored);
+          }
         }
       } finally {
+        joinedOnceRef.current = true;
         // Release even on join/restore failure; the gate orders messages, not withholds them.
         openJoinGate.current();
       }
@@ -124,12 +185,34 @@ export function ChannelChat({
     return () => {
       current = false;
     };
-  }, [copilotkit, agent, isReady, channel.threadId, runtimeAgentId]);
+  }, [copilotkit, agent, isReady, channel.threadId, leadId]);
 
-  // Tool calls from this conversation act on this coworker's own computer.
-  useActiveBot(runtimeAgentId);
+  // Tool calls from this conversation act on the speaker's own computer.
+  useActiveBot(speaker);
 
-  const skillCommands = useSkillCommands(runtimeAgentId);
+  const menuSpeaker =
+    resolveSpeaker(channel.agentIds, composerDraft?.agentId, speaker) ??
+    speaker;
+  const skillCommands = useSkillCommands(menuSpeaker);
+  const speakerName = agentProfiles?.find(
+    (profile) => profile.id === speaker,
+  )?.name;
+  const speakerNameRef = useRef(speakerName);
+  speakerNameRef.current = speakerName;
+  const speakerRef = useRef(speaker);
+  speakerRef.current = speaker;
+
+  // Only when the parent names a new member — a later `@` send must not be yanked back.
+  useEffect(() => {
+    if (!focusAgentId || !channel.agentIds.includes(focusAgentId)) return;
+    setSpeaker((current) => {
+      if (current === focusAgentId) return current;
+      snapshotRef.current = messagesRef.current.map((message) => ({
+        ...message,
+      }));
+      return focusAgentId;
+    });
+  }, [focusAgentId, channel.agentIds]);
 
   // Run failures arrive as events and are reported only for turns started in this mount.
   const [runError, setRunError] = useState<string | null>(null);
@@ -274,19 +357,41 @@ export function ChannelChat({
         awaitingReply.current = false;
         if (!wasOurs) return;
 
-        const reply = [...agent.messages]
-          .reverse()
-          .find((message) => message.role === "assistant");
+        const messages = agent.messages;
+        let replyIndex = -1;
+        for (let index = messages.length - 1; index >= 0; index -= 1) {
+          if (messages[index]?.role === "assistant") {
+            replyIndex = index;
+            break;
+          }
+        }
+        const reply = replyIndex >= 0 ? messages[replyIndex] : undefined;
+        const name = speakerNameRef.current;
+        if (reply?.role === "assistant" && name) {
+          const next = messages.slice();
+          next[replyIndex] = { ...reply, name };
+          agent.setMessages(next);
+        }
         const content = typeof reply?.content === "string" ? reply.content : "";
-        if (content) reportRef.current(content, runtimeAgentId);
+        if (content) reportRef.current(content, speakerRef.current);
       },
     });
     return () => subscription?.unsubscribe();
-  }, [agent, runtimeAgentId]);
+  }, [agent]);
 
   /** Stable reference for effects and component callbacks. */
   const sayRef = useRef(say);
   sayRef.current = say;
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: must also re-run when useAgent returns a new instance for the speaker
+  useEffect(() => {
+    const pending = pendingSendRef.current;
+    if (!pending || pending.speakerId !== speaker) return;
+    pendingSendRef.current = null;
+    void sayRef
+      .current(pending.text, pending.skills)
+      .then(pending.resolve, pending.reject);
+  }, [agent, speaker]);
 
   /**
    * Component buttons speak as user turns without forcing every transcript card to re-render.
@@ -321,25 +426,25 @@ export function ChannelChat({
   return (
     <ConversationProvider ask={askFromComponent}>
       <ConversationView
-        agents={toAgentOptions(agentProfiles, channel.agentIds)}
+        agents={toAgentOptions(agentProfiles)}
         busy={agent.isRunning}
-        // The `/` menu exposes only skills granted to this Bot.
+        // The `/` menu follows who will speak — a mentioned member, else the current speaker.
         commands={skillCommands}
         // Readiness is handled by `say`; deletion is the only disabled-chat state.
         disabled={!channel.active}
-        messages={transcriptMessages(agent.messages, seed)}
+        messages={transcriptMessages(agent.messages, seed.message)}
         notice={
           channel.active ? null : (
             <p className="pb-2 text-sm text-muted-foreground" role="status">
-              This coworker has been deleted. The conversation stays readable,
-              but it can no longer reply.
+              A coworker in this channel has been deleted. The conversation
+              stays readable, but it can no longer reply.
             </p>
           )
         }
+        onDraftChange={setComposerDraft}
         onSubmit={async (draft) => {
-          // `draft.agentId` carries the @mentioned coworker, but nothing routes on it yet: this
-          // channel is pinned to one `runtimeAgentId` for the life of its thread, so honouring a
-          // per-message mention is a change to that binding, not to the composer.
+          // Honour a member `@` as the speaker for this send only. A stranger stays in the text;
+          // inviting them is a later phase.
           //
           // `commandIds` are the `/` chips that survived into the send, in the order they were
           // typed. Resolved against the same list the menu was built from, so a chip left over from
@@ -353,6 +458,24 @@ export function ChannelChat({
             .filter((instruction): instruction is string =>
               Boolean(instruction),
             );
+
+          const nextSpeaker =
+            resolveSpeaker(channel.agentIds, draft.agentId, speaker) ?? speaker;
+
+          if (nextSpeaker !== speaker) {
+            snapshotMessages();
+            await new Promise<void>((resolve, reject) => {
+              pendingSendRef.current = {
+                text: draft.text,
+                skills: skillInstructions,
+                speakerId: nextSpeaker,
+                resolve,
+                reject,
+              };
+              setSpeaker(nextSpeaker);
+            });
+            return;
+          }
 
           await say(draft.text, skillInstructions);
         }}
@@ -395,6 +518,7 @@ export function ChannelChat({
          * run before closing it; see server/src/channels/stall-guard.ts.
          */
         stopped={runError ?? undefined}
+        {...(speakerName ? { thinkingName: speakerName } : {})}
       />
     </ConversationProvider>
   );
