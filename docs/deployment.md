@@ -109,6 +109,34 @@ The page snapshot a Bot resolves element references against lives in Postgres, s
 can answer a click the first one snapshotted. Run more than one if the platform wants it. The
 supervisor is still not in this image, so every replica shares the one browser inside it.
 
+## Schedules
+
+Standing jobs (cron, inbound webhook, and inbound email) are durable rows in Postgres. An in-process
+poller on this API server claims due cron jobs about every fifteen seconds and wakes the named
+coworker the same way a message wake does: asynchronously, without holding an HTTP request open.
+A second poller lists the IMAP inbox about every thirty seconds when an email-kind job exists and
+an IMAP credential is stored. There is no second always-on worker container.
+
+**One replica is the supported shape**, as with the rest of this image. In-process dispatch has the
+same cross-replica limit as message wakes: a second server will not run a job this one already
+accepted. `FOR UPDATE SKIP LOCKED` means two replicas will not claim the same cron occurrence, but
+the wake itself stays in the process that claimed it.
+
+**A restart still sees due work.** The next run time is a column, not a timer. Jobs whose
+`next_run_at` is in the past are claimed on the next tick. A run left `queued` or `running` when
+the process died is re-enqueued at boot rather than lost. Pause is a status on the row; a paused
+job is not claimed.
+
+`DEPLOYMENT_TIMEZONE` is the IANA zone cron is evaluated in when a job does not name its own.
+Default UTC. Weekday-bounded (Monday–Friday) unless the job record says otherwise.
+
+An inbound event is `POST /api/triggers/:id` with the job secret (`Authorization: Bearer` or
+`X-OpenBot-Trigger-Secret`). The route returns 202 once the run is recorded. That HTTP route always
+requires the secret. Inbound email is the same gateway (`fireInbound({ trigger: "email", trusted:
+true })`) called from the in-process poller, not from the HTTP route. The last-seen IMAP UID lives
+in Postgres so a restart does not re-fire old mail. Two replicas would both list; one replica is
+the supported shape.
+
 ## Platform notes
 
 **Google Cloud Run.** Set memory to at least 2 GB and max instances to 1. Cloud Run runs every

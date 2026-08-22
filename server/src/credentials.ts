@@ -12,7 +12,7 @@ type CredentialEnvelope = {
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-export type CredentialKind = "model" | "connector" | "agent" | "mcp";
+export type CredentialKind = "model" | "connector" | "agent" | "mcp" | "email";
 
 export type CredentialStatus = {
   id: string;
@@ -55,6 +55,22 @@ export type ModelCredentialSecretReader = {
     provider: "openai";
     keyId: string;
   }) => Promise<{ encryptedValue: string } | null>;
+};
+
+export type EmailCredentialSecretReader = {
+  /**
+   * Newest active mailbox for one protocol.
+   *
+   * `provider` is `smtp` or `imap`. There is one outbound mailbox and one inbox per deployment:
+   * the newest active row of that kind wins, the way a model key does. Metadata (host, port, user)
+   * travels with the secret so a caller can open the mailbox without a second lookup; the password
+   * is still only the encrypted blob.
+   */
+  readEmailSecret: (input: { provider: "smtp" | "imap" }) => Promise<{
+    encryptedValue: string;
+    keyId: string;
+    metadata: Record<string, unknown>;
+  } | null>;
 };
 
 type CredentialService = {
@@ -155,7 +171,8 @@ export function createCredentialStore(
 ): CredentialStore &
   CredentialSecretReader &
   CredentialStatusReader &
-  ModelCredentialSecretReader {
+  ModelCredentialSecretReader &
+  EmailCredentialSecretReader {
   return {
     create: async (value) => {
       const [credential] = await database
@@ -212,6 +229,32 @@ export function createCredentialStore(
         .limit(1);
 
       return credential ?? null;
+    },
+    readEmailSecret: async ({ provider }) => {
+      const [credential] = await database
+        .select({
+          encryptedValue: credentials.encryptedValue,
+          keyId: credentials.keyId,
+          metadata: credentials.metadata,
+        })
+        .from(credentials)
+        .where(
+          and(
+            eq(credentials.kind, "email"),
+            eq(credentials.provider, provider),
+            isNull(credentials.revokedAt),
+          ),
+        )
+        .orderBy(desc(credentials.createdAt), desc(credentials.id))
+        .limit(1);
+
+      return credential
+        ? {
+            encryptedValue: credential.encryptedValue,
+            keyId: credential.keyId,
+            metadata: credential.metadata as Record<string, unknown>,
+          }
+        : null;
     },
     list: async () => {
       const records = await database

@@ -76,6 +76,14 @@ import {
   loadTenantPackage,
   synchronizeTenantPackage,
 } from "./tenant-package";
+import { createInboxCursorStore } from "./email/cursor";
+import { startInboxPoller } from "./email/poller";
+import { resolveEmailMailboxes } from "./email/resolve";
+import { createEmailTransport } from "./email/transport";
+import { emailTools } from "./email/tools";
+import { createScheduleGateway } from "./jobs/gateway";
+import { startSchedulePoller } from "./jobs/poller";
+import { createScheduledJobStore } from "./jobs/store";
 import { tavilySearch } from "./web-search/tavily";
 import { webSearchTool } from "./web-search/tool";
 
@@ -389,6 +397,7 @@ const stallGuard = createStallGuard({
 const webSearch = config.tavilyApiKey
   ? tavilySearch(config.tavilyApiKey)
   : undefined;
+const emailTransport = createEmailTransport();
 
 /**
  * Recipients run after the sender's tool call has already returned.
@@ -443,12 +452,43 @@ subagentRunner.current = createSubagentRunner({
 });
 
 /**
+ * Standing jobs. Durable in Postgres; dispatched in-process on this replica,
+ * the same limit message wakes have. See jobs/poller.ts.
+ */
+const scheduleGateway = createScheduleGateway({
+  jobs: createScheduledJobStore(database),
+  profiles: agentProfileStore,
+  channels: channelStore,
+  messages: channelMessageStore,
+  auditStore: bootAuditStore,
+  policy: () => policyStore.get(),
+  deploymentTimezone: config.deploymentTimezone,
+  wake: async (job) => {
+    if (!wakeRunner.current) return null;
+    return wakeRunner.current(job);
+  },
+});
+const schedulePoller = startSchedulePoller(scheduleGateway);
+const resolveMailbox = () =>
+  resolveEmailMailboxes({
+    encryptionKey: config.keyEncryptionKey,
+    reader: credentialStore,
+  });
+const inboxPoller = startInboxPoller({
+  resolve: resolveMailbox,
+  transport: emailTransport,
+  cursors: createInboxCursorStore(database),
+  gateway: scheduleGateway,
+});
+
+/**
  * What one Bot may call, for the person asking, rebuilt each request.
  *
- * MCP grants still go through the plugin store. Company knowledge, web search, agent messaging
- * and sub-agents sit beside them rather than inside it: they are this deployment's own tools,
- * offered when there is something to search or a coworker to reach, not when an administrator
- * ticked a grant. A framework Bot calls the same list back through `/api/agent-tools/call`.
+ * MCP grants still go through the plugin store. Company knowledge, web search, agent messaging,
+ * sub-agents and email sit beside them rather than inside it: they are this deployment's own
+ * tools, offered when there is something to search, a coworker to reach, or a mailbox stored,
+ * not when an administrator ticked a grant. A framework Bot calls the same list back through
+ * `/api/agent-tools/call`.
  *
  * A child run (`subagentId`) is not offered messaging or spawn: it reports to the parent and
  * does not talk to the person. It is offered this coworker's computer through the same
@@ -520,6 +560,17 @@ const loadToolsForActor =
         }),
       );
     }
+    extra.push(
+      ...(await emailTools({
+        resolve: resolveMailbox,
+        transport: emailTransport,
+        auditStore: bootAuditStore,
+        policy: () => policyStore.get(),
+        botId,
+        actorId,
+        actorUserId: actorId,
+      })),
+    );
     return extra.length === 0 ? granted : [...granted, ...extra];
   };
 
@@ -620,6 +671,7 @@ const app = createApp(
     return tool ? tool.execute(args) : null;
   },
   channelMessageStore,
+  scheduleGateway,
 );
 
 /**
@@ -785,6 +837,8 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
       channelActivityListener.stop(),
       policyListener.stop(),
       Promise.resolve(auditRetention.stop()),
+      Promise.resolve(schedulePoller.stop()),
+      Promise.resolve(inboxPoller.stop()),
     ]).finally(() => process.exit(0));
   });
 }

@@ -37,7 +37,7 @@ const FILTERS = [
     label: "Blocked",
     // Include every refusal family, not only browser policy refusals.
     search:
-      "?eventType=computer.action_refused,mcp.call_rejected,component.refused,component.function_refused,web.search_refused,channel.message_refused,subagent.refused",
+      "?eventType=computer.action_refused,mcp.call_rejected,component.refused,component.function_refused,web.search_refused,channel.message_refused,subagent.refused,email.send_refused,email.read_refused,schedule.refused,schedule.fire_refused",
   },
   {
     label: "Did not happen",
@@ -143,7 +143,11 @@ function Row({
     event.eventType === "mcp.call_rejected" ||
     event.eventType === "web.search_refused" ||
     event.eventType === "channel.message_refused" ||
-    event.eventType === "subagent.refused";
+    event.eventType === "subagent.refused" ||
+    event.eventType === "email.send_refused" ||
+    event.eventType === "email.read_refused" ||
+    event.eventType === "schedule.refused" ||
+    event.eventType === "schedule.fire_refused";
   const urls = Array.isArray(payload.urls)
     ? payload.urls.filter((url): url is string => typeof url === "string")
     : [];
@@ -178,7 +182,18 @@ function Row({
                 ? typeof payload.tool === "string"
                   ? payload.tool
                   : "sub-agent"
-                : event.eventType}
+                : event.eventType === "email.sent" ||
+                    event.eventType === "email.send_refused" ||
+                    event.eventType === "email.read" ||
+                    event.eventType === "email.read_refused"
+                  ? typeof payload.tool === "string"
+                    ? payload.tool
+                    : "email"
+                  : event.eventType.startsWith("schedule.")
+                    ? typeof payload.tool === "string"
+                      ? payload.tool
+                      : "schedule"
+                    : event.eventType}
       </td>
       <td className="px-4 py-2">
         {/* Named targets and file paths are the audit subject before page elements. */}
@@ -200,6 +215,8 @@ function Row({
         ) : typeof payload.query === "string" && payload.query ? (
           // A search is about the query, the way a shell row is about the command.
           <span className="font-mono text-xs">{payload.query}</span>
+        ) : typeof payload.subject === "string" && payload.subject ? (
+          <span>{payload.subject}</span>
         ) : typeof element === "object" && element?.name ? (
           <span>
             {element.name}
@@ -216,6 +233,7 @@ function Row({
         {typeof payload.file !== "string" &&
         typeof payload.command !== "string" &&
         typeof payload.query !== "string" &&
+        typeof payload.subject !== "string" &&
         typeof payload.page === "string" &&
         payload.page ? (
           <div className="text-xs text-muted-foreground">
@@ -224,6 +242,14 @@ function Row({
         ) : firstUrl ? (
           <div className="text-xs text-muted-foreground">
             {hostOf(firstUrl)}
+          </div>
+        ) : Array.isArray(payload.to) && payload.to.length > 0 ? (
+          <div className="text-xs text-muted-foreground">
+            {payload.to
+              .filter(
+                (address): address is string => typeof address === "string",
+              )
+              .join(", ")}
           </div>
         ) : null}
       </td>
@@ -306,6 +332,7 @@ const NAMED_TARGETS = new Set([
   "credential",
   "channel",
   "subagent",
+  "schedule",
 ]);
 
 const DECISIONS: Record<string, string> = {
@@ -349,6 +376,19 @@ const DECISIONS: Record<string, string> = {
   "subagent.started": "Started a sub-agent",
   "subagent.refused": "Blocked",
   "subagent.reported": "Sub-agent reported",
+
+  "email.sent": "Sent mail",
+  "email.send_refused": "Blocked",
+  "email.read": "Read mail",
+  "email.read_refused": "Blocked",
+
+  "schedule.created": "Schedule created",
+  "schedule.refused": "Blocked",
+  "schedule.fired": "Schedule fired",
+  "schedule.fire_refused": "Blocked",
+  "schedule.paused": "Schedule paused",
+  "schedule.resumed": "Schedule resumed",
+  "schedule.deleted": "Schedule deleted",
 
   "configuration.changed": "Configuration changed",
   "credential.created": "Credential saved",

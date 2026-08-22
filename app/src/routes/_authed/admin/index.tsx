@@ -1,5 +1,6 @@
 import {
   IconBuildingBank,
+  IconCalendarTime,
   IconChevronRight,
   IconCode,
   IconDeviceDesktop,
@@ -87,6 +88,13 @@ const SECTIONS: {
     title: "What Bots can do",
     description: "Capabilities and interface pieces available across Bots.",
     items: [
+      {
+        title: "Schedules",
+        description:
+          "Cron and inbound triggers that start a coworker without a chat turn.",
+        icon: IconCalendarTime,
+        linkOptions: { to: "/admin/schedules" },
+      },
       {
         title: "Plugins",
         description: "Skills and tools installed for the whole workspace.",

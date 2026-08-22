@@ -30,6 +30,9 @@ const sensitiveKeys = new Set([
   "tokens",
   "tool_arguments",
   "tool_result",
+  // A mailbox body is the same class of thing as `content`: useful to the Bot, not to the trail.
+  "body",
+  "plaintext",
 ]);
 
 export const auditEventTypes = [
@@ -241,6 +244,32 @@ export const auditEventTypes = [
   "subagent.started",
   "subagent.refused",
   "subagent.reported",
+  /**
+   * A Bot sent or read mail through this deployment's mailbox, or the boundary stopped it.
+   *
+   * Destination and subject, never the body and never the credential. `email.send_refused` /
+   * `email.read_refused` are the attempt the policy stopped before SMTP or IMAP was reached, so a
+   * trail can tell "it was not allowed" from "it was never sent".
+   */
+  "email.sent",
+  "email.send_refused",
+  "email.read",
+  "email.read_refused",
+  /**
+   * A standing job was created or fired, or the boundary stopped it.
+   *
+   * Creating and firing both go through the gateway (`intent == "schedule"`).
+   * Pause, resume and delete are administrator actions on the same target and
+   * land here so a trail can say who changed unattended work. An inbound email
+   * fire records from, subject and id — never the body and never the password.
+   */
+  "schedule.created",
+  "schedule.refused",
+  "schedule.fired",
+  "schedule.fire_refused",
+  "schedule.paused",
+  "schedule.resumed",
+  "schedule.deleted",
 ] as const;
 
 export type AuditEventType = (typeof auditEventTypes)[number];

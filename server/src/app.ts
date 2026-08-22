@@ -37,12 +37,15 @@ import { createComputerRoutes } from "./computer/routes";
 import { configuredAuthProviders, type DeploymentConfig } from "./config";
 import type { ConnectorAdminService } from "./connectors";
 import type { CredentialAdminService, CredentialInput } from "./credentials";
+import { isEmailProvider, parseEmailMailboxSettings } from "./email/mailbox";
 import { createIntelligenceClient } from "./intelligence-client";
 import type { PeopleStore } from "./people/store";
 import { createPluginRoutes } from "./plugins/routes";
 import type { PluginStore } from "./plugins/store";
 import { REFUSAL_MARKER } from "./plugins/tools";
 import type { PackageStatusReader } from "./tenant-package";
+import type { ScheduleGateway } from "./jobs/gateway";
+import { createScheduleRoutes, createTriggerRoutes } from "./jobs/routes";
 
 /**
  * One row for something an administrator did to somebody's access.
@@ -165,6 +168,14 @@ export function createApp(
   }) => Promise<string | null>,
   /** Bot-posted channel messages. Absent leaves GET /:id/messages unregistered. */
   channelMessages?: ChannelMessageStore,
+  /**
+   * Standing jobs: cron schedules and inbound webhook triggers.
+   *
+   * Absent leaves the admin list answering 503 rather than an empty list, which
+   * is the honest degraded behaviour: "none are configured" and "this process
+   * cannot tell you" are different answers.
+   */
+  scheduleGateway?: ScheduleGateway,
 ) {
   const app = new Hono<{ Variables: AppVariables }>();
 
@@ -850,6 +861,25 @@ export function createApp(
     );
   }
 
+  if (scheduleGateway) {
+    app.route(
+      "/api/admin/schedules",
+      createScheduleRoutes(scheduleGateway, requireUser),
+    );
+    /*
+     * Inbound events, authenticated by the job secret rather than a session.
+     * The IMAP poller fires email-kind jobs in-process with trusted: true;
+     * this HTTP route never does.
+     */
+    app.route("/api/triggers", createTriggerRoutes(scheduleGateway));
+  } else {
+    app.get("/api/admin/schedules", requireUser, async (context) => {
+      const denied = requireAdmin(context);
+      if (denied) return denied;
+      return context.json({ error: "Schedules are not available." }, 503);
+    });
+  }
+
   /*
    * The built app, served by the API that serves it.
    *
@@ -925,7 +955,8 @@ function credentialInput(
   if (
     (body.kind !== "model" &&
       body.kind !== "connector" &&
-      body.kind !== "mcp") ||
+      body.kind !== "mcp" &&
+      body.kind !== "email") ||
     typeof body.provider !== "string" ||
     typeof body.keyId !== "string" ||
     typeof body.plaintext !== "string" ||
@@ -937,11 +968,17 @@ function credentialInput(
     return null;
   }
 
+  const metadata = body.metadata as Record<string, unknown>;
+  if (body.kind === "email") {
+    if (!isEmailProvider(body.provider)) return null;
+    if (!parseEmailMailboxSettings(metadata, body.provider)) return null;
+  }
+
   return {
     kind: body.kind,
     provider: body.provider,
     keyId: body.keyId,
-    metadata: body.metadata as Record<string, unknown>,
+    metadata,
     plaintext: body.plaintext,
     actorUserId,
   };

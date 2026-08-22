@@ -19,8 +19,15 @@ import {
   credentials,
   documentAcls,
   documents,
+  emailInboxCursors,
   intelligenceChannelMappings,
   sessions,
+  jobRuns,
+  jobRunStatus,
+  jobRunTrigger,
+  scheduledJobKind,
+  scheduledJobs,
+  scheduledJobStatus,
   subagentRuns,
   subagentStatus,
   syncRuns,
@@ -380,6 +387,46 @@ describe("OpenBot database schema", () => {
       "created_at",
       "updated_at",
       "completed_at",
+    ]);
+  });
+
+  test("defines standing jobs and their runs", () => {
+    expect([scheduledJobs, jobRuns].map(getTableName)).toEqual([
+      "scheduled_jobs",
+      "job_runs",
+    ]);
+    expect(scheduledJobKind.enumValues).toEqual(["cron", "webhook", "email"]);
+    expect(scheduledJobStatus.enumValues).toEqual(["active", "paused"]);
+    expect(jobRunStatus.enumValues).toEqual([
+      "queued",
+      "running",
+      "succeeded",
+      "failed",
+    ]);
+    expect(jobRunTrigger.enumValues).toEqual(["cron", "webhook", "email"]);
+    expect(getTableName(emailInboxCursors)).toBe("email_inbox_cursors");
+
+    const jobConfig = getTableConfig(scheduledJobs);
+    expect(jobConfig.columns.map((column) => column.name)).toEqual([
+      "id",
+      "name",
+      "agent_id",
+      "kind",
+      "cron_expr",
+      "weekday_bounded",
+      "timezone",
+      "brief",
+      "status",
+      "last_run_at",
+      "next_run_at",
+      "webhook_secret_hash",
+      "channel_id",
+      "created_by_user_id",
+      "match_from",
+      "match_to",
+      "match_subject",
+      "created_at",
+      "updated_at",
     ]);
   });
 });

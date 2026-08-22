@@ -171,6 +171,13 @@ export type DeploymentConfig = {
    * capability that is not configured should be missing, not broken.
    */
   tavilyApiKey?: string;
+  /**
+   * IANA timezone cron schedules are evaluated in when a job does not name its own.
+   *
+   * Default UTC. Refused rather than coerced: a typo that silently became UTC would
+   * fire weekday jobs on the wrong days of the operator's week.
+   */
+  deploymentTimezone: string;
 };
 
 type Environment = Record<string, string | undefined>;
@@ -567,6 +574,18 @@ function auditRetentionDays(environment: Environment): number | undefined {
   return days;
 }
 
+function deploymentTimezone(environment: Environment): string {
+  const raw = optional(environment, "DEPLOYMENT_TIMEZONE") ?? "UTC";
+  try {
+    Intl.DateTimeFormat("en-US", { timeZone: raw });
+  } catch {
+    throw new Error(
+      "DEPLOYMENT_TIMEZONE must be an IANA timezone name such as UTC or America/Toronto.",
+    );
+  }
+  return raw;
+}
+
 function agentStallTimeoutMs(environment: Environment): number {
   const raw = optional(environment, "AGENT_STALL_TIMEOUT_MS");
   if (!raw) {
@@ -616,5 +635,6 @@ export function loadConfig(
     ...(optional(environment, "TAVILY_API_KEY")
       ? { tavilyApiKey: optional(environment, "TAVILY_API_KEY") as string }
       : {}),
+    deploymentTimezone: deploymentTimezone(environment),
   };
 }

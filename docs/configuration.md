@@ -42,6 +42,7 @@ at `agent-langgraph` on a laptop.
 | `NODE_ENV`           | unset                              | `production` refuses the example `KEY_ENCRYPTION_KEY`. It does not decide whether sign-in is required; see `OPENBOT_SINGLE_USER`. |
 | `TENANT_PACKAGE_DIR` | `../examples/fintech`              | Tenant package directory, resolved from `server/`.                  |
 | `DEPLOYMENT_ID`      | the tenant package's id            | Names this deployment inside a shared Intelligence project.          |
+| `DEPLOYMENT_TIMEZONE` | `UTC`                             | IANA timezone cron schedules use when a job does not name its own. A typo refuses to start. |
 | `OPENAI_API_KEY`     | unset                              | Default model key for built-in agents and both shipped Bots.        |
 | `OPENAI_BASE_URL`    | unset                              | OpenAI-compatible endpoint that key is spent against. See below.    |
 | `BOT_PROVIDER`       | `openai`                           | Provider for `agent-langgraph`: `openai`, `anthropic`, or `google`. |
@@ -347,6 +348,20 @@ sources:
 ```
 
 Supported source types are `google-drive` and `microsoft-onedrive`.
+
+## Email mailbox
+
+Bots send and read mail through a write-only credential stored under Admin → Credentials, kind
+`email`. Provider is `smtp` (outbound) or `imap` (inbox). Host, port, username and From live in
+metadata; the password is the secret and is never shown again. `send_email` is offered only when
+SMTP is stored, `read_email` only when IMAP is stored. There is no environment variable for this —
+absent credential, the tools are not registered.
+
+An inbound email trigger (Admin → Schedules, kind: inbound email) also needs the IMAP credential.
+When a new inbox message arrives, the in-process poller wakes the named coworker with the job brief
+plus from, subject, id, and enough of the body to act. Optional from / to / subject filters are
+case-insensitive substrings. The HTTP webhook still requires its secret; only the poller may fire
+an email job as trusted.
 
 ## Change workflow
 
