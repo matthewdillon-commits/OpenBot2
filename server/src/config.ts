@@ -374,6 +374,22 @@ function authConfig(
   if (!baseUrl) {
     throw new Error("Sign-in requires BETTER_AUTH_URL");
   }
+  /*
+   * Better Auth sends Google (and every other provider) back to this URL. Port 3000 is
+   * Better Auth's own default, not this app: the API is 3001 and the Vite app is 3010.
+   * A leftover BETTER_AUTH_URL=http://localhost:3000 is how sign-in "works" and then
+   * dumps somebody on a port nothing here is listening on.
+   */
+  const authOrigin = new URL(baseUrl);
+  if (
+    (authOrigin.hostname === "localhost" ||
+      authOrigin.hostname === "127.0.0.1") &&
+    authOrigin.port === "3000"
+  ) {
+    throw new Error(
+      "BETTER_AUTH_URL is port 3000. This app's API is 3001 and the Vite app is 3010. Use http://localhost:3001 so Google returns to the API, then TRUSTED_ORIGINS (http://localhost:3010) for the app",
+    );
+  }
 
   /*
    * Somebody has to be an administrator, and only this says who.
@@ -398,7 +414,7 @@ function authConfig(
     secret,
     trustedOrigins: commaSeparated(environment, "TRUSTED_ORIGINS").length
       ? commaSeparated(environment, "TRUSTED_ORIGINS")
-      : ["http://localhost:3000"],
+      : ["http://localhost:3010"],
     initialAdminEmails,
     emailPassword,
     ...(google ? { google } : {}),

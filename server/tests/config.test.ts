@@ -193,7 +193,7 @@ describe("deployment configuration", () => {
         clientId: "google-client-id",
         clientSecret: "google-client-secret",
       },
-      trustedOrigins: ["http://localhost:3000"],
+      trustedOrigins: ["http://localhost:3010"],
       initialAdminEmails: ["admin@openbot.test", "owner@openbot.test"],
       emailPassword: false,
     });
@@ -391,7 +391,7 @@ describe("deployment configuration", () => {
     expect(config.auth).toEqual({
       baseUrl: "http://localhost:3001",
       secret: "a-long-enough-local-development-auth-secret",
-      trustedOrigins: ["http://localhost:3000"],
+      trustedOrigins: ["http://localhost:3010"],
       initialAdminEmails: ["admin@openbot.test"],
       emailPassword: true,
     });
@@ -420,6 +420,15 @@ describe("deployment configuration", () => {
         BETTER_AUTH_URL: "http://localhost:3001",
       }),
     ).toThrow("Sign-in requires BETTER_AUTH_SECRET");
+  });
+
+  test("refuses Better Auth's default port 3000, which is not this app", () => {
+    expect(() =>
+      loadConfig({
+        ...baseEnvironment,
+        BETTER_AUTH_URL: "http://localhost:3000",
+      }),
+    ).toThrow("port 3000");
   });
 
   // A turn that is ended is a turn somebody loses, so an unset variable leaves every stream alone
