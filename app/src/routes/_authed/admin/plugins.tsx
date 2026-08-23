@@ -479,7 +479,7 @@ function Yours({
                 {server.url}
               </div>
               {server.lastError ? (
-                <div className="mt-1 text-xs text-destructive">
+                <div className="mt-1 text-xs text-destructive" role="alert">
                   {server.lastError}
                 </div>
               ) : null}

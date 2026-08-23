@@ -195,24 +195,14 @@ function SignScreen() {
               transition={SPRING_NO_BOUNCE}
             >
               <div className="min-w-0" ref={measureRef}>
-                <AnimatePresence initial={false}>
-                  <motion.div
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    initial={{ opacity: 0 }}
-                    key={mode}
-                    transition={SPRING_NO_BOUNCE}
-                  >
-                    <h1 className="text-[28px] font-semibold leading-[1.15] tracking-[-0.03em] text-balance text-[#111] sm:text-[34px]">
-                      {mode === "up" ? "Create Your Account" : "Welcome back"}
-                    </h1>
-                    <p className="mt-2.5 text-[15px] leading-relaxed text-[#555] text-pretty">
-                      {mode === "up"
-                        ? "Welcome to LimitlessAI. Put agents to work in your workspace."
-                        : "Sign in to LimitlessAI and pick up where you left off."}
-                    </p>
-                  </motion.div>
-                </AnimatePresence>
+                <h1 className="text-[28px] font-semibold leading-[1.15] tracking-[-0.03em] text-balance text-[#111] sm:text-[34px]">
+                  {mode === "up" ? "Create Your Account" : "Welcome back"}
+                </h1>
+                <p className="mt-2.5 text-[15px] leading-relaxed text-[#555] text-pretty">
+                  {mode === "up"
+                    ? "Welcome to LimitlessAI. Put agents to work in your workspace."
+                    : "Sign in to LimitlessAI and pick up where you left off."}
+                </p>
 
                 {emailPassword ? (
                   <form
@@ -222,9 +212,9 @@ function SignScreen() {
                     <AnimatePresence initial={false}>
                       {mode === "up" ? (
                         <motion.div
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -6 }}
-                          initial={{ opacity: 0, y: -6 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          initial={{ opacity: 0 }}
                           key="full-name"
                           transition={SPRING_NO_BOUNCE}
                         >
