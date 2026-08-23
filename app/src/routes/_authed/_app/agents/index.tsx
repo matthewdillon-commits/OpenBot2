@@ -52,7 +52,9 @@ function AgentsScreen() {
       <div className="max-w-2xl px-4 w-full mx-auto">
         <div className="mt-12 w-full max-w-2xl">
           <div className="flex flex-row w-full items-center justify-between">
-            <h2 className="font-bold text-lg">Your agents</h2>
+            <h2 className="font-bold text-lg tracking-tight text-balance">
+              Your agents
+            </h2>
             <Button
               variant="ghost"
               size="sm"
@@ -70,7 +72,11 @@ function AgentsScreen() {
                 {mine.map((agent, index) => {
                   return (
                     <StaggerItem index={index} key={agent.id}>
-                      <Link to="/agents" search={{ agent: agent.id }}>
+                      <Link
+                        className="rounded-2xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                        search={{ agent: agent.id }}
+                        to="/agents"
+                      >
                         <AgentCard agent={agent} />
                       </Link>
                     </StaggerItem>
@@ -90,13 +96,19 @@ function AgentsScreen() {
           </div>
         </div>
         <div className="mt-8 w-full max-w-2xl">
-          <h2 className="font-bold text-lg">Explore agents</h2>
+          <h2 className="font-bold text-lg tracking-tight text-balance">
+            Explore agents
+          </h2>
           <div className="grid grid-cols-4 gap-4 mt-4">
             {!!explore?.length &&
               explore.map((agent, index) => {
                 return (
                   <StaggerItem index={index} key={agent.id}>
-                    <Link to="/agents" search={{ agent: agent.id }}>
+                    <Link
+                      className="rounded-2xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                      search={{ agent: agent.id }}
+                      to="/agents"
+                    >
                       <AgentCard agent={agent} />
                     </Link>
                   </StaggerItem>

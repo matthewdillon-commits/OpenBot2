@@ -19,8 +19,10 @@ export function NewSkill() {
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-6 p-8">
       <header>
-        <h1 className="text-2xl font-semibold">New skill</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <h1 className="text-2xl font-semibold tracking-tight text-balance">
+          New skill
+        </h1>
+        <p className="mt-1 text-pretty text-sm text-muted-foreground">
           A named instruction you invoke with <code>/</code>. It goes on the
           Bots you own, and nobody else sees it.
         </p>

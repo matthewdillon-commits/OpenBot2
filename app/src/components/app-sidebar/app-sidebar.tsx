@@ -190,6 +190,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               )}
             />
             <Button
+              aria-label="New channel"
               size="icon"
               variant="ghost"
               render={(props) => (
@@ -202,7 +203,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 />
               )}
             >
-              <IconPlus />
+              <IconPlus aria-hidden="true" />
             </Button>
           </SidebarMenuItem>
         </SidebarMenu>
@@ -287,7 +288,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               <div className="size-[28px] flex items-center justify-center">
                 <IconBox />
               </div>
-              <span className="text-sm trackint-tight">Skills</span>
+              <span className="text-sm tracking-tight">Skills</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
@@ -306,7 +307,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               <div className="size-[28px] flex items-center justify-center">
                 <IconBolt />
               </div>
-              <span className="text-sm trackint-tight">Agents</span>
+              <span className="text-sm tracking-tight">Agents</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
@@ -317,7 +318,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 }
               >
                 <UserAvatar />
-                <span className="text-sm trackint-tight">
+                <span className="text-sm tracking-tight">
                   {currentUser?.name || currentUser?.email}
                 </span>
               </DropdownMenuTrigger>

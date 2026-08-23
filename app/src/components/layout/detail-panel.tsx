@@ -58,8 +58,13 @@ export function DetailPanel({
               <div className="flex min-w-0 w-full items-center gap-1.5">
                 {title}
               </div>
-              <Button onClick={onClose} size="icon" variant="ghost">
-                <IconX className="size-4.5" />
+              <Button
+                aria-label="Close"
+                onClick={onClose}
+                size="icon"
+                variant="ghost"
+              >
+                <IconX aria-hidden="true" className="size-4.5" />
               </Button>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto">{detail}</div>
@@ -92,8 +97,13 @@ export function DetailPanel({
               {title}
             </div>
             <div className="flex flex-row gap-1.5">
-              <Button onClick={onClose} variant="ghost" size="icon">
-                <IconX className="size-4.5" />
+              <Button
+                aria-label="Close"
+                onClick={onClose}
+                size="icon"
+                variant="ghost"
+              >
+                <IconX aria-hidden="true" className="size-4.5" />
               </Button>
             </div>
           </div>

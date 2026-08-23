@@ -32,7 +32,10 @@ function RouteComponent() {
       }
     >
       <AdminSidebar />
-      <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <main
+        className="flex min-h-0 flex-1 flex-col overflow-hidden"
+        id="main"
+      >
         <MobileChrome title="Admin" />
         <div className="min-h-0 flex-1 overflow-y-auto">
           <Outlet />

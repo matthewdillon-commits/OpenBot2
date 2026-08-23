@@ -71,16 +71,19 @@ function RouteComponent() {
         ) : null}
       </div>
       <div className="mt-10 w-full max-w-2xl">
-        <h2 className="font-bold text-lg">Explore agents</h2>
+        <h2 className="font-bold text-lg tracking-tight text-balance">
+          Explore agents
+        </h2>
         <div className="-mx-1 flex flex-row gap-4 overflow-x-auto px-1 pb-2">
           {!!explore?.length &&
             explore.map((agent) => (
               <Link
+                className="rounded-2xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
                 key={agent.id}
-                to="/channel/new"
                 search={{
                   agent: agent.id,
                 }}
+                to="/channel/new"
               >
                 <AgentCard agent={agent} />
               </Link>

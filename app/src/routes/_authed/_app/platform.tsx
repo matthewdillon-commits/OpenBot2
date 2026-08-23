@@ -68,19 +68,32 @@ function PlatformPage() {
           }}
         >
           <Input
-            value={name}
+            aria-describedby={
+              createOrg.error ? "platform-org-error" : undefined
+            }
+            aria-invalid={createOrg.error ? true : undefined}
+            aria-label="Company name"
             onChange={(event) => setName(event.target.value)}
             placeholder="Company name"
-            aria-label="Company name"
+            value={name}
           />
           <Button
             type="submit"
             size="sm"
             disabled={createOrg.isPending || !name.trim()}
           >
-            <IconPlus />
+            <IconPlus aria-hidden="true" />
             {createOrg.isPending ? "Creating…" : "Create organization"}
           </Button>
+          {createOrg.error ? (
+            <p
+              className="text-destructive text-sm"
+              id="platform-org-error"
+              role="alert"
+            >
+              {createOrg.error.message}
+            </p>
+          ) : null}
         </form>
       </PageSection>
       <PageSection title="Invite an owner">
@@ -99,17 +112,21 @@ function PlatformPage() {
           }}
         >
           <Input
-            value={inviteOrgId}
+            aria-describedby={invite.error ? "platform-invite-error" : undefined}
+            aria-invalid={invite.error ? true : undefined}
+            aria-label="Organization id"
             onChange={(event) => setInviteOrgId(event.target.value)}
             placeholder="Organization id"
-            aria-label="Organization id"
+            value={inviteOrgId}
           />
           <Input
-            type="email"
-            value={email}
+            aria-describedby={invite.error ? "platform-invite-error" : undefined}
+            aria-invalid={invite.error ? true : undefined}
+            aria-label="Owner email"
             onChange={(event) => setEmail(event.target.value)}
             placeholder="owner@company.com"
-            aria-label="Owner email"
+            type="email"
+            value={email}
           />
           <Button
             type="submit"
@@ -118,6 +135,15 @@ function PlatformPage() {
           >
             {invite.isPending ? "Inviting…" : "Create invite"}
           </Button>
+          {invite.error ? (
+            <p
+              className="text-destructive text-sm"
+              id="platform-invite-error"
+              role="alert"
+            >
+              {invite.error.message}
+            </p>
+          ) : null}
         </form>
         {token ? (
           <p className="mt-3 text-sm">

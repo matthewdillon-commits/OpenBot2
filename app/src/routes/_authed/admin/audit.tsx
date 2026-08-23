@@ -155,7 +155,7 @@ function Row({
 
   return (
     <tr className="border-border border-t align-top">
-      <td className="whitespace-nowrap px-4 py-2 text-muted-foreground">
+      <td className="whitespace-nowrap px-4 py-2 text-muted-foreground tabular-nums">
         {new Date(event.createdAt).toLocaleTimeString()}
       </td>
       <td className="px-4 py-2 font-medium">

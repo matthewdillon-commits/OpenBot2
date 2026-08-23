@@ -251,7 +251,7 @@ function RefusalList({
               {row.bot ? (
                 <span className="text-xs text-muted-foreground">{row.bot}</span>
               ) : null}
-              <span className="ml-auto text-xs text-muted-foreground">
+              <span className="ml-auto text-xs text-muted-foreground tabular-nums">
                 {new Date(row.at).toLocaleString()}
               </span>
             </div>

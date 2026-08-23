@@ -23,6 +23,7 @@ import {
 import {
   Field,
   FieldError,
+  fieldErrorId,
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field";
@@ -121,6 +122,7 @@ function CredentialsPage() {
                   {(field) => {
                     const isInvalid =
                       field.state.meta.isTouched && !field.state.meta.isValid;
+                    const errorId = fieldErrorId(field.name);
                     return (
                       <Field data-invalid={isInvalid}>
                         <FieldLabel htmlFor={field.name}>Type</FieldLabel>
@@ -131,6 +133,7 @@ function CredentialsPage() {
                           value={field.state.value}
                         >
                           <SelectTrigger
+                            aria-describedby={isInvalid ? errorId : undefined}
                             aria-invalid={isInvalid}
                             id={field.name}
                           >
@@ -146,7 +149,10 @@ function CredentialsPage() {
                           </SelectContent>
                         </Select>
                         {isInvalid ? (
-                          <FieldError errors={field.state.meta.errors} />
+                          <FieldError
+                            errors={field.state.meta.errors}
+                            id={errorId}
+                          />
                         ) : null}
                       </Field>
                     );
@@ -156,10 +162,12 @@ function CredentialsPage() {
                   {(field) => {
                     const isInvalid =
                       field.state.meta.isTouched && !field.state.meta.isValid;
+                    const errorId = fieldErrorId(field.name);
                     return (
                       <Field data-invalid={isInvalid}>
                         <FieldLabel htmlFor={field.name}>Provider</FieldLabel>
                         <Input
+                          aria-describedby={isInvalid ? errorId : undefined}
                           aria-invalid={isInvalid}
                           id={field.name}
                           name={field.name}
@@ -171,7 +179,10 @@ function CredentialsPage() {
                           value={field.state.value}
                         />
                         {isInvalid ? (
-                          <FieldError errors={field.state.meta.errors} />
+                          <FieldError
+                            errors={field.state.meta.errors}
+                            id={errorId}
+                          />
                         ) : null}
                       </Field>
                     );
@@ -181,10 +192,12 @@ function CredentialsPage() {
                   {(field) => {
                     const isInvalid =
                       field.state.meta.isTouched && !field.state.meta.isValid;
+                    const errorId = fieldErrorId(field.name);
                     return (
                       <Field data-invalid={isInvalid}>
                         <FieldLabel htmlFor={field.name}>Key ID</FieldLabel>
                         <Input
+                          aria-describedby={isInvalid ? errorId : undefined}
                           aria-invalid={isInvalid}
                           id={field.name}
                           name={field.name}
@@ -196,7 +209,10 @@ function CredentialsPage() {
                           value={field.state.value}
                         />
                         {isInvalid ? (
-                          <FieldError errors={field.state.meta.errors} />
+                          <FieldError
+                            errors={field.state.meta.errors}
+                            id={errorId}
+                          />
                         ) : null}
                       </Field>
                     );
@@ -206,10 +222,12 @@ function CredentialsPage() {
                   {(field) => {
                     const isInvalid =
                       field.state.meta.isTouched && !field.state.meta.isValid;
+                    const errorId = fieldErrorId(field.name);
                     return (
                       <Field data-invalid={isInvalid}>
                         <FieldLabel htmlFor={field.name}>Secret</FieldLabel>
                         <Input
+                          aria-describedby={isInvalid ? errorId : undefined}
                           aria-invalid={isInvalid}
                           autoComplete="off"
                           id={field.name}
@@ -222,7 +240,10 @@ function CredentialsPage() {
                           value={field.state.value}
                         />
                         {isInvalid ? (
-                          <FieldError errors={field.state.meta.errors} />
+                          <FieldError
+                            errors={field.state.meta.errors}
+                            id={errorId}
+                          />
                         ) : null}
                       </Field>
                     );

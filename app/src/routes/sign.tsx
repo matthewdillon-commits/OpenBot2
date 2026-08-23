@@ -36,10 +36,12 @@ const fieldChrome =
   "flex h-[52px] items-center gap-3 rounded-[12px] border border-[#e6e6e6] bg-white px-3.5 transition-[border-color,box-shadow] focus-within:border-[#111] focus-within:shadow-[0_0_0_3px_rgba(0,0,0,0.04)]";
 const fieldInput =
   "w-full bg-transparent text-[15px] text-[#111] outline-none placeholder:text-[#b0b0b0]";
+const focusRing =
+  "outline-none focus-visible:ring-2 focus-visible:ring-[#111] focus-visible:ring-offset-2";
 const socialButton =
-  "relative z-10 flex h-12 min-h-12 w-full touch-manipulation items-center justify-center gap-2.5 rounded-[12px] border border-[#e6e6e6] bg-white text-[14px] font-medium text-[#222] transition-[color,background-color,transform] duration-200 ease-out hover:bg-[#fafafa] motion-safe:active:scale-[0.97] disabled:opacity-50";
+  `relative z-10 flex h-12 min-h-12 w-full touch-manipulation items-center justify-center gap-2.5 rounded-[12px] border border-[#e6e6e6] bg-white text-[14px] font-medium text-[#222] transition-[color,background-color,transform] duration-200 ease-out hover:bg-[#fafafa] motion-safe:active:scale-[0.97] disabled:opacity-50 ${focusRing}`;
 const primaryButton =
-  "mt-2 flex h-[52px] w-full items-center justify-center gap-2 rounded-[12px] bg-[#111] text-[15px] font-medium text-white transition-[opacity,transform] duration-200 ease-out enabled:hover:opacity-90 motion-safe:enabled:active:scale-[0.97] disabled:bg-[#d4d4d4] disabled:text-white";
+  `mt-2 flex h-[52px] w-full items-center justify-center gap-2 rounded-[12px] bg-[#111] text-[15px] font-medium text-white transition-[opacity,transform] duration-200 ease-out enabled:hover:opacity-90 motion-safe:enabled:active:scale-[0.97] disabled:bg-[#d4d4d4] disabled:text-white ${focusRing}`;
 
 /**
  * Copied from os.limitlessai.ca/login: split form and aerial hero, Inter Tight,
@@ -163,12 +165,15 @@ function SignScreen() {
 
   return (
     <div className="sign-screen flex min-h-dvh w-full bg-white">
-      <div className="relative flex w-full min-w-0 flex-col px-4 py-6 sm:px-10 lg:w-[46%] lg:px-12 xl:px-16">
+      <div
+        className="relative flex w-full min-w-0 flex-col px-4 py-6 sm:px-10 lg:w-[46%] lg:px-12 xl:px-16"
+        id="main"
+      >
         <div className="mx-auto flex w-full min-w-0 max-w-[420px] flex-1 flex-col">
           <div className="flex items-center">
             <div className="flex min-w-0 items-center gap-2.5">
               <img
-                alt="LimitlessAI"
+                alt=""
                 className="ui-logo block shrink-0 object-contain !rounded-none"
                 decoding="async"
                 draggable={false}
@@ -190,7 +195,7 @@ function SignScreen() {
               transition={SPRING_NO_BOUNCE}
             >
               <div className="min-w-0" ref={measureRef}>
-                <AnimatePresence initial={false} mode="popLayout">
+                <AnimatePresence initial={false}>
                   <motion.div
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
@@ -261,7 +266,7 @@ function SignScreen() {
                       extra={
                         mode === "in" ? (
                           <button
-                            className="relative font-normal text-[#555] underline-offset-2 hover:underline after:absolute after:-inset-2 after:content-['']"
+                            className={`relative font-normal text-[#555] underline-offset-2 hover:underline after:absolute after:-inset-2 after:content-[''] ${focusRing} rounded-sm`}
                             data-testid="link-forgot-password"
                             onClick={() =>
                               setError(
@@ -299,7 +304,7 @@ function SignScreen() {
                         aria-label={
                           showPassword ? "Hide password" : "Show password"
                         }
-                        className="relative shrink-0 p-1 -mr-1 text-[#666] hover:text-[#222] after:absolute after:-inset-2 after:content-['']"
+                        className={`relative shrink-0 rounded-sm p-1 -mr-1 text-[#666] hover:text-[#222] after:absolute after:-inset-2 after:content-[''] ${focusRing}`}
                         onClick={() => setShowPassword((value) => !value)}
                         type="button"
                       >
@@ -356,7 +361,7 @@ function SignScreen() {
                         : "Continue with Google"}
                   </button>
                   <button
-                    className="relative flex h-[48px] items-center justify-center gap-2.5 rounded-[12px] border border-[#e6e6e6] bg-white text-[14px] font-medium text-[#222] transition-colors hover:bg-[#fafafa] disabled:opacity-50"
+                    className={socialButton}
                     disabled
                     type="button"
                   >
@@ -393,11 +398,12 @@ function SignScreen() {
                     className="mt-4 space-y-4"
                     onSubmit={handleDomainSignIn}
                   >
-                    <Field label="Work email">
+                    <Field htmlFor="sign-sso-email" label="Work email">
                       <MailMark />
                       <input
                         autoComplete="email"
                         className={fieldInput}
+                        id="sign-sso-email"
                         onChange={(event) => setEmail(event.target.value)}
                         placeholder="alex@company.com"
                         required
@@ -423,7 +429,7 @@ function SignScreen() {
                       <>
                         Already have an account?{" "}
                         <button
-                          className="font-semibold text-[#111] underline-offset-2 hover:underline"
+                          className={`rounded-sm font-semibold text-[#111] underline-offset-2 hover:underline ${focusRing}`}
                           onClick={() => {
                             setMode("in");
                             setError(null);
@@ -437,7 +443,7 @@ function SignScreen() {
                       <>
                         Need an account?{" "}
                         <button
-                          className="font-semibold text-[#111] underline-offset-2 hover:underline"
+                          className={`rounded-sm font-semibold text-[#111] underline-offset-2 hover:underline ${focusRing}`}
                           onClick={() => {
                             setMode("up");
                             setError(null);
@@ -457,7 +463,7 @@ function SignScreen() {
           <div className="flex flex-wrap items-center justify-between gap-2 pb-[max(0.25rem,env(safe-area-inset-bottom))] text-[12px] text-[#666]">
             <span>© {year} LimitlessAI</span>
             <a
-              className="text-[#555] transition-colors hover:text-[#111]"
+              className={`rounded-sm text-[#555] transition-colors hover:text-[#111] ${focusRing}`}
               href="mailto:support@limitlessai.ca"
             >
               Need help? Contact Support
@@ -494,7 +500,7 @@ function SignScreen() {
           <div className="mt-8 flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-full bg-white/15 ring-1 ring-white/30 backdrop-blur-sm">
               <img
-                alt="LimitlessAI"
+                alt=""
                 className="ui-logo block shrink-0 object-contain"
                 decoding="async"
                 draggable={false}

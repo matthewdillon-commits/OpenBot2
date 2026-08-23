@@ -176,8 +176,12 @@ function SkillsPage() {
                       <DropdownMenu>
                         <DropdownMenuTrigger
                           render={
-                            <Button variant="ghost" size="icon-sm">
-                              <IconDots />
+                            <Button
+                              aria-label={`Actions for ${skill.title}`}
+                              size="icon"
+                              variant="ghost"
+                            >
+                              <IconDots aria-hidden="true" />
                             </Button>
                           }
                         ></DropdownMenuTrigger>

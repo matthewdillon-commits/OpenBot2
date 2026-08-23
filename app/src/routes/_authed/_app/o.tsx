@@ -107,6 +107,10 @@ function OrganizationsPage() {
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="new-organization-name">Company name</Label>
             <Input
+              aria-describedby={
+                createOrg.error ? "new-organization-error" : undefined
+              }
+              aria-invalid={createOrg.error ? true : undefined}
               id="new-organization-name"
               onChange={(event) => setName(event.target.value)}
               placeholder="Company name"
@@ -121,7 +125,11 @@ function OrganizationsPage() {
             {createOrg.isPending ? "Creating…" : "Create organization"}
           </Button>
           {createOrg.error ? (
-            <p className="text-destructive text-sm" role="alert">
+            <p
+              className="text-destructive text-sm"
+              id="new-organization-error"
+              role="alert"
+            >
               {createOrg.error.message}
             </p>
           ) : null}

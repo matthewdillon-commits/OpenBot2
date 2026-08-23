@@ -171,6 +171,11 @@ function FieldSeparator({
   );
 }
 
+/** Stable id so a control can point at its error with `aria-describedby`. */
+function fieldErrorId(name: string) {
+  return `${name}-error`;
+}
+
 function FieldError({
   className,
   children,
@@ -227,6 +232,7 @@ export {
   FieldLabel,
   FieldDescription,
   FieldError,
+  fieldErrorId,
   FieldGroup,
   FieldLegend,
   FieldSeparator,

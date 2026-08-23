@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import {
   Field,
   FieldError,
+  fieldErrorId,
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field";
@@ -65,10 +66,12 @@ export function SkillFields({
           {(field) => {
             const isInvalid =
               field.state.meta.isTouched && !field.state.meta.isValid;
+            const errorId = fieldErrorId(field.name);
             return (
               <Field data-invalid={isInvalid}>
                 <FieldLabel htmlFor={field.name}>Command</FieldLabel>
                 <Input
+                  aria-describedby={isInvalid ? errorId : undefined}
                   aria-invalid={isInvalid}
                   disabled={slugLocked}
                   id={field.name}
@@ -86,7 +89,10 @@ export function SkillFields({
                   value={field.state.value}
                 />
                 {isInvalid ? (
-                  <FieldError errors={field.state.meta.errors} />
+                  <FieldError
+                    errors={field.state.meta.errors}
+                    id={errorId}
+                  />
                 ) : (
                   <p className="text-muted-foreground text-xs">
                     {slugLocked ? (
@@ -110,10 +116,12 @@ export function SkillFields({
           {(field) => {
             const isInvalid =
               field.state.meta.isTouched && !field.state.meta.isValid;
+            const errorId = fieldErrorId(field.name);
             return (
               <Field data-invalid={isInvalid}>
                 <FieldLabel htmlFor={field.name}>Title</FieldLabel>
                 <Input
+                  aria-describedby={isInvalid ? errorId : undefined}
                   aria-invalid={isInvalid}
                   id={field.name}
                   name={field.name}
@@ -123,7 +131,10 @@ export function SkillFields({
                   value={field.state.value}
                 />
                 {isInvalid ? (
-                  <FieldError errors={field.state.meta.errors} />
+                  <FieldError
+                    errors={field.state.meta.errors}
+                    id={errorId}
+                  />
                 ) : null}
               </Field>
             );
@@ -134,10 +145,12 @@ export function SkillFields({
           {(field) => {
             const isInvalid =
               field.state.meta.isTouched && !field.state.meta.isValid;
+            const errorId = fieldErrorId(field.name);
             return (
               <Field data-invalid={isInvalid}>
                 <FieldLabel htmlFor={field.name}>One-liner</FieldLabel>
                 <Input
+                  aria-describedby={isInvalid ? errorId : undefined}
                   aria-invalid={isInvalid}
                   id={field.name}
                   name={field.name}
@@ -147,7 +160,10 @@ export function SkillFields({
                   value={field.state.value}
                 />
                 {isInvalid ? (
-                  <FieldError errors={field.state.meta.errors} />
+                  <FieldError
+                    errors={field.state.meta.errors}
+                    id={errorId}
+                  />
                 ) : (
                   <p className="text-muted-foreground text-xs">
                     Shown beside the command in this list and in the{" "}
@@ -163,10 +179,12 @@ export function SkillFields({
           {(field) => {
             const isInvalid =
               field.state.meta.isTouched && !field.state.meta.isValid;
+            const errorId = fieldErrorId(field.name);
             return (
               <Field data-invalid={isInvalid}>
                 <FieldLabel htmlFor={field.name}>Instructions</FieldLabel>
                 <Textarea
+                  aria-describedby={isInvalid ? errorId : undefined}
                   aria-invalid={isInvalid}
                   className="min-h-40"
                   id={field.name}
@@ -177,7 +195,10 @@ export function SkillFields({
                   value={field.state.value}
                 />
                 {isInvalid ? (
-                  <FieldError errors={field.state.meta.errors} />
+                  <FieldError
+                    errors={field.state.meta.errors}
+                    id={errorId}
+                  />
                 ) : (
                   <p className="text-muted-foreground text-xs">
                     Added to the run when the command is used. Write it as

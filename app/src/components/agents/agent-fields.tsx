@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import {
   Field,
   FieldError,
+  fieldErrorId,
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field";
@@ -74,10 +75,12 @@ export function AgentFields({
           {(field) => {
             const isInvalid =
               field.state.meta.isTouched && !field.state.meta.isValid;
+            const errorId = fieldErrorId(field.name);
             return (
               <Field data-invalid={isInvalid}>
                 <FieldLabel htmlFor={field.name}>Name</FieldLabel>
                 <Input
+                  aria-describedby={isInvalid ? errorId : undefined}
                   aria-invalid={isInvalid}
                   id={field.name}
                   name={field.name}
@@ -87,7 +90,10 @@ export function AgentFields({
                   value={field.state.value}
                 />
                 {isInvalid ? (
-                  <FieldError errors={field.state.meta.errors} />
+                  <FieldError
+                    errors={field.state.meta.errors}
+                    id={errorId}
+                  />
                 ) : null}
               </Field>
             );
@@ -97,10 +103,12 @@ export function AgentFields({
           {(field) => {
             const isInvalid =
               field.state.meta.isTouched && !field.state.meta.isValid;
+            const errorId = fieldErrorId(field.name);
             return (
               <Field data-invalid={isInvalid}>
                 <FieldLabel htmlFor={field.name}>Title</FieldLabel>
                 <Input
+                  aria-describedby={isInvalid ? errorId : undefined}
                   aria-invalid={isInvalid}
                   id={field.name}
                   name={field.name}
@@ -110,7 +118,10 @@ export function AgentFields({
                   value={field.state.value}
                 />
                 {isInvalid ? (
-                  <FieldError errors={field.state.meta.errors} />
+                  <FieldError
+                    errors={field.state.meta.errors}
+                    id={errorId}
+                  />
                 ) : null}
               </Field>
             );
@@ -120,10 +131,12 @@ export function AgentFields({
           {(field) => {
             const isInvalid =
               field.state.meta.isTouched && !field.state.meta.isValid;
+            const errorId = fieldErrorId(field.name);
             return (
               <Field data-invalid={isInvalid}>
                 <FieldLabel htmlFor={field.name}>Role</FieldLabel>
                 <Textarea
+                  aria-describedby={isInvalid ? errorId : undefined}
                   aria-invalid={isInvalid}
                   id={field.name}
                   name={field.name}
@@ -134,7 +147,10 @@ export function AgentFields({
                   value={field.state.value}
                 />
                 {isInvalid ? (
-                  <FieldError errors={field.state.meta.errors} />
+                  <FieldError
+                    errors={field.state.meta.errors}
+                    id={errorId}
+                  />
                 ) : null}
               </Field>
             );
@@ -171,6 +187,7 @@ export function AgentFields({
           {(field) => {
             const isInvalid =
               field.state.meta.isTouched && !field.state.meta.isValid;
+            const errorId = fieldErrorId(field.name);
             return (
               <Field data-invalid={isInvalid}>
                 <FieldLabel htmlFor={field.name}>
@@ -178,6 +195,7 @@ export function AgentFields({
                 </FieldLabel>
                 <div className="flex gap-2">
                   <Input
+                    aria-describedby={isInvalid ? errorId : undefined}
                     aria-invalid={isInvalid}
                     id={field.name}
                     name={field.name}
@@ -204,7 +222,10 @@ export function AgentFields({
                   </Button>
                 </div>
                 {isInvalid ? (
-                  <FieldError errors={field.state.meta.errors} />
+                  <FieldError
+                    errors={field.state.meta.errors}
+                    id={errorId}
+                  />
                 ) : null}
                 {connection ? (
                   <p

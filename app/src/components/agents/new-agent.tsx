@@ -12,8 +12,10 @@ export function NewAgent() {
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-6 p-8">
       <header>
-        <h1 className="text-2xl font-semibold">New coworker</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <h1 className="text-2xl font-semibold tracking-tight text-balance">
+          New coworker
+        </h1>
+        <p className="mt-1 text-pretty text-sm text-muted-foreground">
           The role you write here applies in every channel this coworker works
           in.
         </p>

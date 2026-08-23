@@ -347,7 +347,7 @@ export function Composer({
             {canStop ? (
               <Button
                 aria-label="Stop the Bot"
-                className="size-7 rounded-full bg-primary p-0"
+                className="size-8 rounded-full bg-primary p-0"
                 data-testid="composer-stop"
                 onClick={onStop}
                 type="button"
@@ -357,7 +357,7 @@ export function Composer({
             ) : (
               <Button
                 aria-label={sendLabel}
-                className="size-7 rounded-full bg-primary p-0 disabled:cursor-not-allowed disabled:opacity-50"
+                className="size-8 rounded-full bg-primary p-0 disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={!canSend}
                 type="submit"
               >

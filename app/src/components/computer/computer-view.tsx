@@ -262,20 +262,24 @@ export function ComputerView({
             </label>
             <div className="mt-1.5 flex gap-2">
               <input
-                id="openbot-secret"
-                type="password"
-                value={secret}
-                onChange={(event) => setSecret(event.target.value)}
+                aria-describedby={
+                  secretProblem ? "computer-secret-error" : undefined
+                }
+                aria-invalid={secretProblem ? true : undefined}
                 autoComplete="off"
                 autoCorrect="off"
-                spellCheck={false}
+                className="min-w-0 flex-1 rounded-md border bg-background px-2 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                id="openbot-secret"
+                onChange={(event) => setSecret(event.target.value)}
                 placeholder="Typed here, never shown to the assistant"
-                className="min-w-0 flex-1 rounded-md border bg-background px-2 py-1 text-sm"
+                spellCheck={false}
+                type="password"
+                value={secret}
               />
               <button
-                type="submit"
+                className="shrink-0 rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50"
                 disabled={!secret || sendingSecret}
-                className="shrink-0 rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground disabled:opacity-50"
+                type="submit"
               >
                 {sendingSecret ? "Sending…" : "Send to the page"}
               </button>
@@ -285,7 +289,13 @@ export function ComputerView({
               conversation and the assistant never receives it.
             </p>
             {secretProblem ? (
-              <p className="mt-1 text-xs text-destructive">{secretProblem}</p>
+              <p
+                className="mt-1 text-xs text-destructive"
+                id="computer-secret-error"
+                role="alert"
+              >
+                {secretProblem}
+              </p>
             ) : null}
           </form>
         ) : null}
@@ -295,16 +305,16 @@ export function ComputerView({
             <span>You have control of this browser.</span>
             <span className="flex shrink-0 gap-2">
               <button
-                type="button"
+                className="rounded-md border px-3 py-1 text-xs font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
                 onClick={() => setExpanded(true)}
-                className="rounded-md border px-3 py-1 text-xs font-medium"
+                type="button"
               >
                 Open full size
               </button>
               <button
-                type="button"
+                className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
                 onClick={() => void handBack()}
-                className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground"
+                type="button"
               >
                 Hand back
               </button>

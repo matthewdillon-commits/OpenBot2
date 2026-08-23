@@ -128,7 +128,9 @@ function PlaygroundPage() {
     <div className="flex h-screen flex-col">
       <header className="flex flex-wrap items-start justify-between gap-4 border-border border-b px-6 py-4">
         <div>
-          <h1 className="font-bold text-2xl">Playground</h1>
+          <h1 className="font-bold text-2xl tracking-tight text-balance">
+            Playground
+          </h1>
           <p className="mt-1 max-w-prose text-pretty text-muted-foreground text-sm leading-relaxed">
             Write a component here and publish it without a deployment. What you
             edit is a draft; a conversation only ever draws what is published.
@@ -383,10 +385,13 @@ function CodeField({
       <FieldLabel htmlFor={id}>
         {label}
         {invalid ? (
-          <span className="ml-2 text-destructive">not valid JSON</span>
+          <span className="ml-2 text-destructive" id={`${id}-error`}>
+            not valid JSON
+          </span>
         ) : null}
       </FieldLabel>
       <Textarea
+        aria-describedby={invalid ? `${id}-error` : undefined}
         aria-invalid={invalid}
         className="h-32 font-mono text-xs"
         id={id}

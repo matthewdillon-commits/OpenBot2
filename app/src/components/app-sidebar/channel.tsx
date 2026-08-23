@@ -24,7 +24,7 @@ export const Channel = memo(function Channel({
       to="/channel/$channelId"
       params={{ channelId }}
       type="button"
-      className="flex flex-row py-2 px-2 gap-2 items-center w-full hover:bg-foreground/5 rounded-lg [contain-intrinsic-size:auto_3.25rem] [content-visibility:auto]"
+      className="flex flex-row py-2 px-2 gap-2 items-center w-full rounded-lg outline-none hover:bg-foreground/5 focus-visible:ring-3 focus-visible:ring-ring/50 [contain-intrinsic-size:auto_3.25rem] [content-visibility:auto]"
       activeProps={{
         className: "bg-foreground/5",
       }}
@@ -35,7 +35,7 @@ export const Channel = memo(function Channel({
       <div className="flex-col min-w-0 flex-1">
         <div className="flex flex-row items-center justify-between gap-2">
           <span className="text-[14px] tracking-[-1%] truncate">{name}</span>
-          <div className="text-[12px] text-muted-foreground/70">
+          <div className="text-[12px] text-muted-foreground/70 tabular-nums">
             {lastMessageAt}
           </div>
         </div>

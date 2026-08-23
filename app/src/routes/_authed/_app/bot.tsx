@@ -40,7 +40,9 @@ function RouteComponent() {
     <div className="flex h-screen flex-col">
       <header className="border-b px-6 py-3">
         <div className="flex items-baseline justify-between">
-          <h1 className="text-lg font-semibold">Browser Bot</h1>
+          <h1 className="text-lg font-semibold tracking-tight text-balance">
+            Browser Bot
+          </h1>
           {/*
            * Labelled rather than the bare icon button the sidebar uses for its own "start
            * something new" control: that one opens an empty screen, but this one throws away

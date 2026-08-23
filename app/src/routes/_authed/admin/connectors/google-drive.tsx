@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import {
   Field,
   FieldError,
+  fieldErrorId,
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field";
@@ -68,50 +69,62 @@ function GoogleDriveConnectorPage() {
       >
         <FieldGroup>
           <form.Field name="serviceAccountJson">
-            {(field) => (
-              <Field
-                data-invalid={
-                  field.state.meta.isTouched && !field.state.meta.isValid
-                }
-              >
-                <FieldLabel htmlFor={field.name}>
-                  Service account JSON key
-                </FieldLabel>
-                <Textarea
-                  className="min-h-40 font-mono text-xs"
-                  id={field.name}
-                  onBlur={field.handleBlur}
-                  onChange={(event) => field.handleChange(event.target.value)}
-                  value={field.state.value}
-                />
-                {field.state.meta.isTouched && !field.state.meta.isValid ? (
-                  <FieldError errors={field.state.meta.errors} />
-                ) : null}
-              </Field>
-            )}
+            {(field) => {
+              const isInvalid =
+                field.state.meta.isTouched && !field.state.meta.isValid;
+              const errorId = fieldErrorId(field.name);
+              return (
+                <Field data-invalid={isInvalid}>
+                  <FieldLabel htmlFor={field.name}>
+                    Service account JSON key
+                  </FieldLabel>
+                  <Textarea
+                    aria-describedby={isInvalid ? errorId : undefined}
+                    aria-invalid={isInvalid}
+                    className="min-h-40 font-mono text-xs"
+                    id={field.name}
+                    onBlur={field.handleBlur}
+                    onChange={(event) => field.handleChange(event.target.value)}
+                    value={field.state.value}
+                  />
+                  {isInvalid ? (
+                    <FieldError
+                      errors={field.state.meta.errors}
+                      id={errorId}
+                    />
+                  ) : null}
+                </Field>
+              );
+            }}
           </form.Field>
           <form.Field name="impersonationSubject">
-            {(field) => (
-              <Field
-                data-invalid={
-                  field.state.meta.isTouched && !field.state.meta.isValid
-                }
-              >
-                <FieldLabel htmlFor={field.name}>
-                  Impersonation subject
-                </FieldLabel>
-                <Input
-                  id={field.name}
-                  onBlur={field.handleBlur}
-                  onChange={(event) => field.handleChange(event.target.value)}
-                  placeholder="admin@company.com"
-                  value={field.state.value}
-                />
-                {field.state.meta.isTouched && !field.state.meta.isValid ? (
-                  <FieldError errors={field.state.meta.errors} />
-                ) : null}
-              </Field>
-            )}
+            {(field) => {
+              const isInvalid =
+                field.state.meta.isTouched && !field.state.meta.isValid;
+              const errorId = fieldErrorId(field.name);
+              return (
+                <Field data-invalid={isInvalid}>
+                  <FieldLabel htmlFor={field.name}>
+                    Impersonation subject
+                  </FieldLabel>
+                  <Input
+                    aria-describedby={isInvalid ? errorId : undefined}
+                    aria-invalid={isInvalid}
+                    id={field.name}
+                    onBlur={field.handleBlur}
+                    onChange={(event) => field.handleChange(event.target.value)}
+                    placeholder="admin@company.com"
+                    value={field.state.value}
+                  />
+                  {isInvalid ? (
+                    <FieldError
+                      errors={field.state.meta.errors}
+                      id={errorId}
+                    />
+                  ) : null}
+                </Field>
+              );
+            }}
           </form.Field>
         </FieldGroup>
         {setup.error ? (

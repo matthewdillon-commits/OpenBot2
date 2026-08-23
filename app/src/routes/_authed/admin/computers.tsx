@@ -109,9 +109,18 @@ function ComputersPage() {
                       {nameFor(computer.botId)}
                     </ItemTitle>
                     <ItemDescription>
-                      {computer.running
-                        ? `Browser running since ${new Date(computer.startedAt ?? "").toLocaleTimeString()}`
-                        : "No browser running. It starts when the Bot next needs it."}
+                      {computer.running ? (
+                        <>
+                          Browser running since{" "}
+                          <span className="tabular-nums">
+                            {new Date(
+                              computer.startedAt ?? "",
+                            ).toLocaleTimeString()}
+                          </span>
+                        </>
+                      ) : (
+                        "No browser running. It starts when the Bot next needs it."
+                      )}
                       {" · "}
                       {computer.egress === undefined
                         ? "Egress not reported"

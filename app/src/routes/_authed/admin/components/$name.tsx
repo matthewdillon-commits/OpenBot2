@@ -405,7 +405,9 @@ function ComponentDetail({
           </FactRow>
           <Separator />
           <FactRow icon={<IconClock />} label="Last changed">
-            {new Date(component.updatedAt).toLocaleString()}
+            <span className="tabular-nums">
+              {new Date(component.updatedAt).toLocaleString()}
+            </span>
             {component.updatedBy ? ` by ${component.updatedBy}` : null}
           </FactRow>
         </PageRows>

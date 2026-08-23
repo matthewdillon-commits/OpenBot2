@@ -115,7 +115,10 @@ function PeoplePage() {
           }}
         >
           <Input
+            aria-describedby={invite.error ? "invite-email-error" : undefined}
+            aria-invalid={invite.error ? true : undefined}
             aria-label="Invite email"
+            id="invite-email"
             onChange={(event) => setInviteEmail(event.target.value)}
             placeholder="colleague@company.com"
             type="email"
@@ -131,7 +134,11 @@ function PeoplePage() {
           </Button>
         </form>
         {invite.error ? (
-          <p className="mt-3 text-destructive text-sm" role="alert">
+          <p
+            className="mt-3 text-destructive text-sm"
+            id="invite-email-error"
+            role="alert"
+          >
             {invite.error.message}
           </p>
         ) : null}
