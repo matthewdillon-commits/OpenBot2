@@ -173,3 +173,38 @@ export function createCrmSendMutationOptions(queryClient: QueryClient) {
     onSuccess: () => invalidateCrm(queryClient),
   });
 }
+
+export function updateCrmCampaignMutationOptions(queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: (variables: {
+      id: string;
+      input: Partial<CrmCampaignInput>;
+    }): Promise<CrmCampaign> =>
+      client(`/api/crm/campaigns/${variables.id}`, "campaign", {
+        method: "PATCH",
+        body: variables.input,
+        fallback: FALLBACK,
+      }),
+    onSuccess: () => invalidateCrm(queryClient),
+  });
+}
+
+/** Look up a company by exact name, or write one, so New contact can take a name. */
+export async function findOrCreateCrmCompany(name: string): Promise<CrmCompany> {
+  const trimmed = name.trim();
+  const body = (await (
+    await client(
+      `/api/crm/companies?search=${encodeURIComponent(trimmed)}&limit=50`,
+      { fallback: FALLBACK },
+    )
+  ).json()) as { companies: CrmCompany[] };
+  const match = (body.companies || []).find(
+    (company) => company.name.toLowerCase() === trimmed.toLowerCase(),
+  );
+  if (match) return match;
+  return client("/api/crm/companies", "company", {
+    method: "POST",
+    body: { name: trimmed },
+    fallback: FALLBACK,
+  });
+}

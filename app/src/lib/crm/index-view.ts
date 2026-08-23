@@ -77,3 +77,20 @@ export function activeSegmentCount(
 ): number {
   return segments.find((segment) => segment.key === stageFilter)?.count ?? 0;
 }
+
+export function createdPlacement(view: {
+  stageFilter: string;
+  campaignId?: string | null;
+  listId?: string | null;
+  search?: string | null;
+}): { scoped: boolean; inView: (contactStage?: string | null) => boolean } {
+  const scoped = Boolean(
+    view.campaignId || view.listId || (view.search || "").trim(),
+  );
+  return {
+    scoped,
+    inView: (contactStage) =>
+      !scoped &&
+      (view.stageFilter === ALL_SEGMENT || contactStage === view.stageFilter),
+  };
+}

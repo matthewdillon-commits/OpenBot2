@@ -157,8 +157,9 @@ export const crmKeys = {
   conversations: (search = "") => ["crm", "conversations", { search }] as const,
   threads: (search = "") => ["crm", "threads", { search }] as const,
   stages: ["crm", "stages"] as const,
-  sends: (search = "", kind = "") =>
-    ["crm", "sends", { search, kind }] as const,
+  person: (id: string) => ["crm", "person", id] as const,
+  sends: (search = "", kind = "", personId = "", campaignId = "") =>
+    ["crm", "sends", { search, kind, personId, campaignId }] as const,
 };
 
 function listParams(search: string, extra?: Record<string, string>) {
@@ -179,7 +180,10 @@ export function crmPeopleQueryOptions(search = "", stage = "") {
     queryFn: async (): Promise<CrmPage<CrmPerson>> => {
       const body = (await (
         await client(
-          `/api/crm/people${listParams(search, stage ? { stage } : undefined)}`,
+          `/api/crm/people${listParams(search, {
+            limit: "200",
+            ...(stage ? { stage } : {}),
+          })}`,
           {
             fallback: "Could not load people",
           },
@@ -207,7 +211,7 @@ export function crmCompaniesQueryOptions(search = "") {
     queryKey: crmKeys.companies(search),
     queryFn: async (): Promise<CrmPage<CrmCompany>> => {
       const body = (await (
-        await client(`/api/crm/companies${listParams(search)}`, {
+        await client(`/api/crm/companies${listParams(search, { limit: "200" })}`, {
           fallback: "Could not load companies",
         })
       ).json()) as {
@@ -254,7 +258,7 @@ export function crmCampaignsQueryOptions(search = "") {
     queryKey: crmKeys.campaigns(search),
     queryFn: async (): Promise<CrmPage<CrmCampaign>> => {
       const body = (await (
-        await client(`/api/crm/campaigns${listParams(search)}`, {
+        await client(`/api/crm/campaigns${listParams(search, { limit: "200" })}`, {
           fallback: "Could not load campaigns",
         })
       ).json()) as {
@@ -276,7 +280,7 @@ export function crmThreadsQueryOptions(search = "") {
     queryKey: crmKeys.threads(search),
     queryFn: async (): Promise<CrmPage<CrmThread>> => {
       const body = (await (
-        await client(`/api/crm/threads${listParams(search)}`, {
+        await client(`/api/crm/threads${listParams(search, { limit: "200" })}`, {
           fallback: "Could not load conversations",
         })
       ).json()) as {
@@ -329,13 +333,34 @@ export function crmConversationsQueryOptions(search = "") {
   });
 }
 
-export function crmSendsQueryOptions(search = "", kind = "") {
+export function crmPersonQueryOptions(id: string) {
   return queryOptions({
-    queryKey: crmKeys.sends(search, kind),
+    queryKey: crmKeys.person(id),
+    enabled: Boolean(id),
+    queryFn: (): Promise<CrmPerson> =>
+      client(`/api/crm/people/${id}`, "person", {
+        fallback: "Could not load person",
+      }),
+  });
+}
+
+export function crmSendsQueryOptions(
+  search = "",
+  kind = "",
+  personId = "",
+  campaignId = "",
+) {
+  return queryOptions({
+    queryKey: crmKeys.sends(search, kind, personId, campaignId),
     queryFn: async (): Promise<CrmPage<CrmSend>> => {
       const body = (await (
         await client(
-          `/api/crm/sends${listParams(search, kind ? { kind } : undefined)}`,
+          `/api/crm/sends${listParams(search, {
+            limit: "200",
+            ...(kind ? { kind } : {}),
+            ...(personId ? { personId } : {}),
+            ...(campaignId ? { campaignId } : {}),
+          })}`,
           { fallback: "Could not load sends" },
         )
       ).json()) as {
