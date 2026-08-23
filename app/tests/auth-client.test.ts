@@ -41,13 +41,16 @@ describe("signInWith", () => {
 
   test("sends the browser back where it started", async () => {
     let callbackURL = "";
+    let errorCallbackURL = "";
 
     await signInWith("google", async (input) => {
       callbackURL = input.callbackURL;
+      errorCallbackURL = input.errorCallbackURL;
       return {};
     });
 
     expect(callbackURL).toBe("http://localhost:3010");
+    expect(errorCallbackURL).toBe("http://localhost:3010/sign");
   });
 
   test("throws what the client said when it refuses", async () => {

@@ -203,6 +203,15 @@ export function createAuth(
       accountLinking: {
         enabled: true,
         trustedProviders: ["google", "microsoft", "okta"],
+        /*
+         * Better Auth 1.7 defaults this to true: it will not attach Google to an
+         * existing password user unless that row already has emailVerified.
+         * This deployment has no verification mailer, so every email/password
+         * account is unverified. Leaving the default on is how Continue with
+         * Google becomes `account_not_linked` for the same person. Google is
+         * already a trusted provider; the address is the identity.
+         */
+        requireLocalEmailVerified: false,
       },
     },
     plugins,

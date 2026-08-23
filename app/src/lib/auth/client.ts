@@ -34,12 +34,14 @@ export async function signInWith(
   start: (input: {
     provider: string;
     callbackURL: string;
+    errorCallbackURL: string;
   }) => Promise<SocialResult> = (input) =>
     authClient.signIn.social(input as never) as Promise<SocialResult>,
 ) {
   const result = await start({
     provider,
     callbackURL: window.location.origin,
+    errorCallbackURL: `${window.location.origin}/sign`,
   });
 
   if (result.error) {
@@ -119,6 +121,7 @@ export async function signInWithEmailDomain(
   start: (input: {
     email: string;
     callbackURL: string;
+    errorCallbackURL: string;
   }) => Promise<SocialResult> = (input) =>
     (
       authClient as unknown as {
@@ -126,7 +129,11 @@ export async function signInWithEmailDomain(
       }
     ).signIn.sso(input),
 ) {
-  const result = await start({ email, callbackURL: window.location.origin });
+  const result = await start({
+    email,
+    callbackURL: window.location.origin,
+    errorCallbackURL: `${window.location.origin}/sign`,
+  });
 
   if (result.error) {
     throw new Error(

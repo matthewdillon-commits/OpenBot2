@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { useState, type ReactNode } from "react";
+import { z } from "zod";
 import {
   providerName,
   signInWith,
@@ -19,7 +20,12 @@ import { SPRING_NO_BOUNCE } from "@/lib/motion";
 import { useMeasure } from "@/lib/use-measure";
 import { queryClient } from "@/query-client";
 
+const signSearchSchema = z.object({
+  error: z.string().optional(),
+});
+
 export const Route = createFileRoute("/sign")({
+  validateSearch: signSearchSchema,
   beforeLoad: async ({ context }) => {
     const user = await context.queryClient.ensureQueryData(
       currentUserQueryOptions(),
@@ -49,12 +55,23 @@ const primaryButton =
  *
  * This screen is a deliberate exception to PageShell — it is the unauthenticated entrance.
  */
+function oauthErrorMessage(code: string | undefined) {
+  if (!code) return null;
+  if (code === "account_not_linked") {
+    return "This email already has an account. Sign in with your password — Google will stay with that address.";
+  }
+  return "Could not finish sign-in. Try again.";
+}
+
 function SignScreen() {
+  const { error: oauthError } = Route.useSearch();
   const [opening, setOpening] = useState<
     AuthProviderId | "sso" | "email" | null
   >(null);
   const [mode, setMode] = useState<"in" | "up">("in");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(() =>
+    oauthErrorMessage(oauthError),
+  );
   const [showPassword, setShowPassword] = useState(false);
   const { data: options } = useQuery(authProvidersQueryOptions());
   const providers = options?.providers ?? [];
