@@ -490,6 +490,28 @@ describe("describing a refusal", () => {
     expect(decision.reason).not.toContain(" on  ");
   });
 
+  test("a refused CRM action names the tool, not an empty host", () => {
+    const decision = evaluateActionPolicy(
+      { mode: "enforce", deny: ['intent == "crm"'], allow: ["true"] },
+      {
+        tool: { name: "crm_create" },
+        bot: { id: "risk-analyst" },
+        actor: { id: "dev-local-user" },
+        page: { url: "", host: "" },
+        element: { ref: "", role: "", name: "", type: "" },
+        key: "",
+        file: { path: "", name: "", extension: "" },
+        command: "",
+        intent: "crm",
+      },
+    );
+
+    expect(decision.allowed).toBe(false);
+    expect(decision.reason).toContain("crm_create");
+    expect(decision.reason).toContain('intent == "crm"');
+    expect(decision.reason).not.toContain(" on  ");
+  });
+
   test("a refused tool call names the tool and the server it was aimed at", () => {
     const decision = evaluateActionPolicy(
       { mode: "enforce", deny: ['mcp.server == "notes"'], allow: ["true"] },

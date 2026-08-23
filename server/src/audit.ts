@@ -220,6 +220,16 @@ export const auditEventTypes = [
   "bot.deleted",
   "bot.callback_token_issued",
   "bot.callback_token_revoked",
+  /**
+   * A Bot read or wrote a CRM record, or the policy stopped it.
+   *
+   * `crm.record_refused` is the attempt the policy stopped, so a trail can tell "it was
+   * not there" from "it was not allowed". Payloads name the kind and the tool, never the
+   * email body or a tracking token.
+   */
+  "crm.record_read",
+  "crm.record_written",
+  "crm.record_refused",
 ] as const;
 
 export type AuditEventType = (typeof auditEventTypes)[number];

@@ -116,7 +116,14 @@ export type PolicyContext = {
     // editJiraIssue, transitionJiraIssue, addCommentToJiraIssue and the six others".
     | "read_tool"
     | "write_tool"
-    | "run_command";
+    | "run_command"
+    /**
+     * A customer record a Bot is about to read or write.
+     *
+     * Its own intent because a CRM row is neither a computer action nor an MCP write.
+     * A rule can name `tool.name == "crm_create"` or `intent == "crm"`.
+     */
+    | "crm";
   /**
    * The file a `computer_read_file` or `computer_write_file` call is aimed at.
    *
@@ -338,7 +345,11 @@ function describeRefusal(context: PolicyContext, expression: string): string {
   }
   // A first-party tool call has no page, no file and no MCP server. Falling through would produce
   // "a search_web action on " with an empty host.
-  if (context.intent === "read_tool" || context.intent === "write_tool") {
+  if (
+    context.intent === "read_tool" ||
+    context.intent === "write_tool" ||
+    context.intent === "crm"
+  ) {
     return (
       `This deployment's policy does not allow that: ${context.tool.name} ` +
       `is blocked by the rule \`${expression}\`.`

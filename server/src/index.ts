@@ -45,6 +45,9 @@ import {
   createCredentialStore,
   resolveModelApiKey,
 } from "./credentials";
+import { createCrmGateway } from "./crm/gateway";
+import { createCrmStore } from "./crm/store";
+import { crmTools } from "./crm/tools";
 import { createDatabase } from "./db/client";
 import { askerFor, createKnowledgeSearch } from "./knowledge/search";
 import { knowledgeSearchTool } from "./knowledge/tool";
@@ -207,6 +210,7 @@ const peopleStore = createPeopleStore(
   config.auth?.initialAdminEmails ?? [],
 );
 const identityProviderStore = createIdentityProviderStore(database);
+const crmStore = createCrmStore(database);
 /*
  * Built before `auth` for the same reason the people store is: sign-in writes to the trail, and the
  * store that receives those rows has to exist before anything can sign in.
@@ -258,6 +262,12 @@ const policyListener = await startPolicyListener(
  * unavailable, and the row is a note for a reader rather than something the server depends on.
  */
 const bootAuditStore = createAuditStore(database);
+const crmGateway = createCrmGateway({
+  store: crmStore,
+  database,
+  auditStore: bootAuditStore,
+  policy: (orgId) => policyStore.get(orgId),
+});
 /*
  * Old audit rows removed on a schedule, when a deployment has asked for that.
  *
@@ -440,6 +450,14 @@ const loadToolsForActor =
         }),
       );
     }
+    extra.push(
+      ...crmTools({
+        crm: crmGateway,
+        botId,
+        actor: { id: actorId, role: "user", orgId: scoped },
+        publicOrigin: config.auth?.baseUrl,
+      }),
+    );
     return extra.length === 0 ? granted : [...granted, ...extra];
   };
 
@@ -558,6 +576,7 @@ const app = createApp(
       return organization;
     },
   },
+  crmStore,
 );
 
 /**

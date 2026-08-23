@@ -24,6 +24,13 @@ import {
   userRoles,
   users,
   verifications,
+  crmCampaigns,
+  crmCompanies,
+  crmConversations,
+  crmOpportunities,
+  crmPeople,
+  crmSendEvents,
+  crmSends,
 } from "../src/db/schema";
 
 describe("OpenBot database schema", () => {
@@ -325,6 +332,55 @@ describe("OpenBot database schema", () => {
    * says so, because the alternative failure is silent: the code reads a column the deployment
    * does not have.
    */
+  test("defines the CRM records, scoped to an organization", () => {
+    expect(
+      [
+        crmCompanies,
+        crmPeople,
+        crmOpportunities,
+        crmCampaigns,
+        crmConversations,
+        crmSends,
+        crmSendEvents,
+      ].map(getTableName),
+    ).toEqual([
+      "crm_companies",
+      "crm_people",
+      "crm_opportunities",
+      "crm_campaigns",
+      "crm_conversations",
+      "crm_sends",
+      "crm_send_events",
+    ]);
+    expect(Object.keys(crmPeople)).toEqual(
+      expect.arrayContaining(["orgId", "name", "emails", "phones", "companyId"]),
+    );
+    expect(Object.keys(crmSends)).toEqual(
+      expect.arrayContaining([
+        "orgId",
+        "kind",
+        "toAddress",
+        "trackingToken",
+        "status",
+      ]),
+    );
+  });
+
+  test("adds the CRM tables in their own migration", async () => {
+    const migration = await readFile(
+      new URL("../drizzle/0011_crm.sql", import.meta.url),
+      "utf8",
+    );
+    expect(migration).toContain(`CREATE TABLE "crm_people"`);
+    expect(migration).toContain(`CREATE TABLE "crm_companies"`);
+    expect(migration).toContain(`CREATE TABLE "crm_sends"`);
+    expect(migration).toContain(`"org_id" text DEFAULT 'org_local' NOT NULL`);
+    expect(migration).toContain(`"tracking_token" text NOT NULL`);
+    expect(migration).toContain(
+      `CREATE UNIQUE INDEX "crm_sends_tracking_token_key"`,
+    );
+  });
+
   test("adds the callback token columns in their own migration", async () => {
     const migration = await readFile(
       new URL("../drizzle/0001_swift_morph.sql", import.meta.url),

@@ -40,6 +40,8 @@ import type { CredentialAdminService, CredentialInput } from "./credentials";
 import { LOCAL_ORGANIZATION_ID, orgIdOf } from "./orgs/constants";
 import { createOrganizationRoutes } from "./orgs/routes";
 import type { OrganizationStore } from "./orgs/store";
+import { createCrmRoutes } from "./crm/routes";
+import type { CrmStore } from "./crm/store";
 import type { PeopleStore } from "./people/store";
 import { REFUSAL_MARKER } from "./plugins/refusal";
 import type { PackageStatusReader } from "./tenant-package";
@@ -173,6 +175,11 @@ export function createApp(
     orgId?: string;
   }) => Promise<string | null>,
   organizationStore?: OrganizationStore,
+  /**
+   * This organization's CRM. Absent leaves /api/crm answering 404 rather than an empty list:
+   * "nothing here" and "this deployment cannot tell you" are different answers.
+   */
+  crmStore?: CrmStore,
 ) {
   const app = new Hono<{ Variables: AppVariables }>();
 
@@ -808,6 +815,10 @@ export function createApp(
       "/api/components",
       createComponentRoutes(componentStore, requireUser, auditStore, canUseBot),
     );
+  }
+
+  if (crmStore) {
+    app.route("/api/crm", createCrmRoutes(crmStore, requireUser));
   }
 
   if (pluginStore) {

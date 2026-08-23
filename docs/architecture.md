@@ -14,12 +14,12 @@ Regenerate it with `bun run diagram` after changing anything it shows.
 | Component                | Port                       | Responsibility                                                                                                                              |
 | ------------------------ | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | `app`                    | 3010                       | React/Vite interface for channels, Bot chat, live screen, settings, and admin pages.                                                        |
-| `server`                 | 3001                       | API, CopilotKit runtime, auth, roles, tenant package, coworkers, channels, policy, audit, credentials, plugins, components, and connectors. |
+| `server`                 | 3001                       | API, CopilotKit runtime, auth, roles, tenant package, coworkers, channels, CRM, policy, audit, credentials, plugins, components, and connectors. |
 | `agent-computer`         | 4100                       | Chromium, `/workspace`, browser profile, screenshots, snapshots, and file tools.                                                            |
 | `agent-bot`              | 4200                       | Proof-of-concept AG-UI Bot.                                                                                                                     |
 | `agent-langgraph`        | 4201                       | LangGraph AG-UI Bot.                                                                                                                        |
 | `supervisor`             | 4500 host / 4300 container | Creates, stops, resets, and lists per-Bot computer containers.                                                                              |
-| PostgreSQL with pgvector | 5432                       | Product data, audit rows, credentials, policy, grants, channels, components, connector state, and knowledge records.                        |
+| PostgreSQL with pgvector | 5432                       | Product data, audit rows, credentials, policy, grants, channels, CRM records, components, connector state, and knowledge records.           |
 | CopilotKit Intelligence  | external                   | Durable threads, memory, and realtime gateway.                                                                                              |
 
 `scripts/start.sh` starts PostgreSQL, `agent-computer`, `agent-bot`, `agent-langgraph`, and the supervisor through Docker Compose, then starts `server` and `app` on the host.
@@ -56,6 +56,7 @@ Policy rules can inspect:
 - `key`
 - `file.path`, `file.name`, `file.extension`
 - `mcp.server`, `mcp.tool`, `mcp.effect`
+- `intent == "crm"` or `tool.name` for CRM reads, writes, and sends
 
 Rules use CEL expressions plus case-insensitive `contains()` and `matches()`.
 Deny rules are evaluated before allow rules. The policy engine fails closed: a
@@ -110,6 +111,16 @@ any sign-in path, so a group-based rule has nothing to evaluate. Treat it as a d
 on group membership from the identity provider, not as a control that is running.
 
 See [coworkers.md](coworkers.md).
+
+## CRM
+
+The organization's CRM is the book of people, companies, opportunities, campaigns, conversations, and sends. It is not `/admin/people`, which is who may sign in.
+
+Rows live in `crm_people`, `crm_companies`, `crm_opportunities`, `crm_campaigns`, `crm_conversations`, `crm_sends`, and `crm_send_events`, each scoped by `org_id`. Created-by is stored as a kind (`user`, `bot`, or `system`) plus the id and the display name at write time.
+
+Sends are email, SMS, or call. SMTP and Twilio deliver when configured; otherwise the row is `logged` rather than pretending a message left. Email opens and clicks use a tracking token that is write-only on the list: a 1×1 pixel and an http(s) click redirect.
+
+Bots are offered `crm_search`, `crm_get`, `crm_create`, `crm_update`, and `crm_send`. Every call goes through the gateway: resolve the kind and fields, decide against the live policy (`intent == "crm"` or the tool name), write an audit row (`crm.record_read`, `crm.record_written`, or `crm.record_refused`), and only then act. A deny leaves the tables alone.
 
 ## Components
 

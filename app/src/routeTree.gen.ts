@@ -16,6 +16,7 @@ import { Route as AuthedAdminRouteRouteImport } from './routes/_authed/admin/rou
 import { Route as AuthedSettingsRouteRouteImport } from './routes/_authed/settings/route'
 import { Route as AuthedAppIndexRouteImport } from './routes/_authed/_app/index'
 import { Route as AuthedAppBotRouteImport } from './routes/_authed/_app/bot'
+import { Route as AuthedAppCrmRouteImport } from './routes/_authed/_app/crm'
 import { Route as AuthedAppORouteImport } from './routes/_authed/_app/o'
 import { Route as AuthedAppPlatformRouteImport } from './routes/_authed/_app/platform'
 import { Route as AuthedAppSkillsRouteImport } from './routes/_authed/_app/skills'
@@ -72,6 +73,11 @@ const AuthedAppIndexRoute = AuthedAppIndexRouteImport.update({
 const AuthedAppBotRoute = AuthedAppBotRouteImport.update({
   id: '/bot',
   path: '/bot',
+  getParentRoute: () => AuthedAppRoute,
+} as any)
+const AuthedAppCrmRoute = AuthedAppCrmRouteImport.update({
+  id: '/crm',
+  path: '/crm',
   getParentRoute: () => AuthedAppRoute,
 } as any)
 const AuthedAppORoute = AuthedAppORouteImport.update({
@@ -208,6 +214,7 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AuthedAdminRouteRouteWithChildren
   '/settings': typeof AuthedSettingsRouteRouteWithChildren
   '/bot': typeof AuthedAppBotRoute
+  '/crm': typeof AuthedAppCrmRoute
   '/o': typeof AuthedAppORouteWithChildren
   '/platform': typeof AuthedAppPlatformRoute
   '/skills': typeof AuthedAppSkillsRoute
@@ -237,6 +244,7 @@ export interface FileRoutesByTo {
   '/': typeof AuthedAppIndexRoute
   '/sign': typeof SignRoute
   '/bot': typeof AuthedAppBotRoute
+  '/crm': typeof AuthedAppCrmRoute
   '/o': typeof AuthedAppORouteWithChildren
   '/platform': typeof AuthedAppPlatformRoute
   '/skills': typeof AuthedAppSkillsRoute
@@ -270,6 +278,7 @@ export interface FileRoutesById {
   '/_authed/settings': typeof AuthedSettingsRouteRouteWithChildren
   '/_authed/_app': typeof AuthedAppRouteWithChildren
   '/_authed/_app/bot': typeof AuthedAppBotRoute
+  '/_authed/_app/crm': typeof AuthedAppCrmRoute
   '/_authed/_app/o': typeof AuthedAppORouteWithChildren
   '/_authed/_app/platform': typeof AuthedAppPlatformRoute
   '/_authed/_app/skills': typeof AuthedAppSkillsRoute
@@ -304,6 +313,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/settings'
     | '/bot'
+    | '/crm'
     | '/o'
     | '/platform'
     | '/skills'
@@ -333,6 +343,7 @@ export interface FileRouteTypes {
     | '/'
     | '/sign'
     | '/bot'
+    | '/crm'
     | '/o'
     | '/platform'
     | '/skills'
@@ -365,6 +376,7 @@ export interface FileRouteTypes {
     | '/_authed/settings'
     | '/_authed/_app'
     | '/_authed/_app/bot'
+    | '/_authed/_app/crm'
     | '/_authed/_app/o'
     | '/_authed/_app/platform'
     | '/_authed/_app/skills'
@@ -446,6 +458,13 @@ declare module '@tanstack/react-router' {
       path: '/bot'
       fullPath: '/bot'
       preLoaderRoute: typeof AuthedAppBotRouteImport
+      parentRoute: typeof AuthedAppRoute
+    }
+    '/_authed/_app/crm': {
+      id: '/_authed/_app/crm'
+      path: '/crm'
+      fullPath: '/crm'
+      preLoaderRoute: typeof AuthedAppCrmRouteImport
       parentRoute: typeof AuthedAppRoute
     }
     '/_authed/_app/o': {
@@ -696,6 +715,7 @@ const AuthedAppORouteWithChildren = AuthedAppORoute._addFileChildren(
 
 interface AuthedAppRouteChildren {
   AuthedAppBotRoute: typeof AuthedAppBotRoute
+  AuthedAppCrmRoute: typeof AuthedAppCrmRoute
   AuthedAppORoute: typeof AuthedAppORouteWithChildren
   AuthedAppPlatformRoute: typeof AuthedAppPlatformRoute
   AuthedAppSkillsRoute: typeof AuthedAppSkillsRoute
@@ -708,6 +728,7 @@ interface AuthedAppRouteChildren {
 
 const AuthedAppRouteChildren: AuthedAppRouteChildren = {
   AuthedAppBotRoute: AuthedAppBotRoute,
+  AuthedAppCrmRoute: AuthedAppCrmRoute,
   AuthedAppORoute: AuthedAppORouteWithChildren,
   AuthedAppPlatformRoute: AuthedAppPlatformRoute,
   AuthedAppSkillsRoute: AuthedAppSkillsRoute,
