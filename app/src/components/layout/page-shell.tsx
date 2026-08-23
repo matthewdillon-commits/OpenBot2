@@ -80,7 +80,9 @@ export function PageShell({
       >
         <header className="flex flex-col gap-2">
           <div className="flex flex-row items-center justify-between gap-4">
-            <h1 className="font-bold text-2xl">{title}</h1>
+            <h1 className="font-bold text-2xl tracking-tight text-balance">
+              {title}
+            </h1>
             {action}
           </div>
           {description ? (
@@ -119,7 +121,9 @@ export function PageSection({
     <section className={cn("mt-12", className)}>
       {title ? (
         <div className="flex min-h-8 flex-row items-center justify-between gap-4">
-          <h2 className="font-bold text-lg">{title}</h2>
+          <h2 className="font-bold text-lg tracking-tight text-balance">
+            {title}
+          </h2>
           {action}
         </div>
       ) : null}

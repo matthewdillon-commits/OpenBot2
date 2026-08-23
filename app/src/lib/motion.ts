@@ -16,3 +16,13 @@ export const EASE_OUT = [0.23, 1, 0.32, 1] as const;
  * as the interface thinking rather than responding.
  */
 export const ENTRANCE_SECONDS = 0.2;
+
+/**
+ * Height and shared-layout changes. Zero bounce so the thing arrives and stays;
+ * 300ms so it is felt without becoming a wait.
+ */
+export const SPRING_NO_BOUNCE = {
+  type: "spring",
+  bounce: 0,
+  duration: 0.3,
+} as const;

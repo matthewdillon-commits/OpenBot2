@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
+import { AnimatePresence, motion } from "motion/react";
 import { useState, type ReactNode } from "react";
 import {
   providerName,
@@ -14,6 +15,8 @@ import {
   authProvidersQueryOptions,
   currentUserQueryOptions,
 } from "@/lib/auth/queries";
+import { SPRING_NO_BOUNCE } from "@/lib/motion";
+import { useMeasure } from "@/lib/use-measure";
 import { queryClient } from "@/query-client";
 
 export const Route = createFileRoute("/sign")({
@@ -34,7 +37,9 @@ const fieldChrome =
 const fieldInput =
   "w-full bg-transparent text-[15px] text-[#111] outline-none placeholder:text-[#b0b0b0]";
 const socialButton =
-  "relative z-10 flex h-12 min-h-12 w-full touch-manipulation items-center justify-center gap-2.5 rounded-[12px] border border-[#e6e6e6] bg-white text-[14px] font-medium text-[#222] transition-colors hover:bg-[#fafafa] disabled:opacity-50";
+  "relative z-10 flex h-12 min-h-12 w-full touch-manipulation items-center justify-center gap-2.5 rounded-[12px] border border-[#e6e6e6] bg-white text-[14px] font-medium text-[#222] transition-[color,background-color,transform] duration-200 ease-out hover:bg-[#fafafa] motion-safe:active:scale-[0.97] disabled:opacity-50";
+const primaryButton =
+  "mt-2 flex h-[52px] w-full items-center justify-center gap-2 rounded-[12px] bg-[#111] text-[15px] font-medium text-white transition-[opacity,transform] duration-200 ease-out enabled:hover:opacity-90 motion-safe:enabled:active:scale-[0.97] disabled:bg-[#d4d4d4] disabled:text-white";
 
 /**
  * Copied from os.limitlessai.ca/login: split form and aerial hero, Inter Tight,
@@ -60,6 +65,8 @@ function SignScreen() {
   const navigate = useNavigate();
   const busy = opening !== null;
   const year = new Date().getFullYear();
+  const [measureRef, bounds] = useMeasure<HTMLDivElement>({ offsetSize: true });
+  const errorId = "sign-form-error";
 
   async function handleDomainSignIn(submission: React.FormEvent) {
     submission.preventDefault();
@@ -177,234 +184,280 @@ function SignScreen() {
           </div>
 
           <div className="flex min-w-0 flex-1 flex-col justify-center py-8 sm:py-10">
-            <div className="min-w-0">
-              <h1 className="text-[28px] font-semibold leading-[1.15] tracking-[-0.03em] text-[#111] sm:text-[34px]">
-                {mode === "up" ? "Create Your Account" : "Welcome back"}
-              </h1>
-              <p className="mt-2.5 text-[15px] leading-relaxed text-[#6b6b6b] text-pretty">
-                {mode === "up"
-                  ? "Welcome to LimitlessAI. Put agents to work in your workspace."
-                  : "Sign in to LimitlessAI and pick up where you left off."}
-              </p>
+            <motion.div
+              animate={{ height: bounds.height || "auto" }}
+              className="overflow-hidden"
+              transition={SPRING_NO_BOUNCE}
+            >
+              <div className="min-w-0" ref={measureRef}>
+                <AnimatePresence initial={false} mode="popLayout">
+                  <motion.div
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    initial={{ opacity: 0 }}
+                    key={mode}
+                    transition={SPRING_NO_BOUNCE}
+                  >
+                    <h1 className="text-[28px] font-semibold leading-[1.15] tracking-[-0.03em] text-balance text-[#111] sm:text-[34px]">
+                      {mode === "up" ? "Create Your Account" : "Welcome back"}
+                    </h1>
+                    <p className="mt-2.5 text-[15px] leading-relaxed text-[#555] text-pretty">
+                      {mode === "up"
+                        ? "Welcome to LimitlessAI. Put agents to work in your workspace."
+                        : "Sign in to LimitlessAI and pick up where you left off."}
+                    </p>
+                  </motion.div>
+                </AnimatePresence>
 
-              {emailPassword ? (
-                <form className="mt-8 min-w-0 space-y-4" onSubmit={handleEmailAuth}>
-                  {mode === "up" ? (
-                    <Field label="Full Name">
-                      <UserMark />
+                {emailPassword ? (
+                  <form
+                    className="mt-8 min-w-0 space-y-4"
+                    onSubmit={handleEmailAuth}
+                  >
+                    <AnimatePresence initial={false}>
+                      {mode === "up" ? (
+                        <motion.div
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -6 }}
+                          initial={{ opacity: 0, y: -6 }}
+                          key="full-name"
+                          transition={SPRING_NO_BOUNCE}
+                        >
+                          <Field htmlFor="sign-name" label="Full Name">
+                            <UserMark />
+                            <input
+                              autoComplete="name"
+                              autoFocus
+                              className={fieldInput}
+                              id="sign-name"
+                              name="name"
+                              onChange={(event) => setName(event.target.value)}
+                              placeholder="Alex Morgan"
+                              value={name}
+                            />
+                          </Field>
+                        </motion.div>
+                      ) : null}
+                    </AnimatePresence>
+                    <Field htmlFor="sign-email" label="Email Address">
+                      <MailMark />
                       <input
-                        autoComplete="name"
+                        aria-describedby={error ? errorId : undefined}
+                        aria-invalid={error ? true : undefined}
+                        autoComplete="email"
+                        autoFocus={mode === "in"}
                         className={fieldInput}
-                        name="name"
-                        onChange={(event) => setName(event.target.value)}
-                        placeholder="Alex Morgan"
-                        value={name}
+                        data-testid="input-login-email"
+                        id="sign-email"
+                        name="email"
+                        onChange={(event) => setEmail(event.target.value)}
+                        placeholder="alex@company.com"
+                        required
+                        type="email"
+                        value={email}
                       />
                     </Field>
-                  ) : null}
-                  <Field label="Email Address">
-                    <MailMark />
-                    <input
-                      autoComplete="email"
-                      className={fieldInput}
-                      data-testid="input-login-email"
-                      name="email"
-                      onChange={(event) => setEmail(event.target.value)}
-                      placeholder="alex@company.com"
-                      required
-                      type="email"
-                      value={email}
-                    />
-                  </Field>
-                  <Field
-                    extra={
-                      mode === "in" ? (
-                        <button
-                          className="font-normal text-[#6b6b6b] underline-offset-2 hover:underline"
-                          data-testid="link-forgot-password"
-                          onClick={() =>
-                            setError(
-                              "Password reset is not available on this deployment yet.",
-                            )
-                          }
-                          type="button"
-                        >
-                          Forgot password?
-                        </button>
-                      ) : null
-                    }
-                    label="Password"
-                  >
-                    <LockMark />
-                    <input
-                      autoComplete={
-                        mode === "up" ? "new-password" : "current-password"
+                    <Field
+                      extra={
+                        mode === "in" ? (
+                          <button
+                            className="relative font-normal text-[#555] underline-offset-2 hover:underline after:absolute after:-inset-2 after:content-['']"
+                            data-testid="link-forgot-password"
+                            onClick={() =>
+                              setError(
+                                "Password reset is not available on this deployment yet.",
+                              )
+                            }
+                            type="button"
+                          >
+                            Forgot password?
+                          </button>
+                        ) : null
                       }
-                      className={fieldInput}
-                      data-testid="input-login-password"
-                      minLength={8}
-                      name="password"
-                      onChange={(event) => setPassword(event.target.value)}
-                      placeholder="At least 8 characters"
-                      required
-                      type={showPassword ? "text" : "password"}
-                      value={password}
-                    />
-                    <button
-                      aria-label={
-                        showPassword ? "Hide password" : "Show password"
-                      }
-                      className="shrink-0 text-[#9a9a9a] hover:text-[#444]"
-                      onClick={() => setShowPassword((value) => !value)}
-                      type="button"
+                      htmlFor="sign-password"
+                      label="Password"
                     >
-                      {showPassword ? <EyeOffMark /> : <EyeMark />}
-                    </button>
-                  </Field>
-                  {error ? (
-                    <p className="text-sm text-[#c00]" role="alert">
-                      {error}
-                    </p>
-                  ) : null}
-                  <button
-                    className="mt-2 flex h-[52px] w-full items-center justify-center gap-2 rounded-[12px] bg-[#111] text-[15px] font-medium text-white transition-opacity enabled:hover:opacity-90 disabled:bg-[#d4d4d4] disabled:text-white"
-                    data-testid="button-client-login"
-                    disabled={busy}
-                    type="submit"
-                  >
-                    {opening === "email"
-                      ? mode === "up"
-                        ? "Creating account…"
-                        : "Signing in…"
-                      : mode === "up"
-                        ? "Create Account"
-                        : "Sign In"}
-                  </button>
-                </form>
-              ) : null}
-
-              <div className="my-6 flex items-center gap-3">
-                <div className="h-px flex-1 bg-[#e8e8e8]" />
-                <span className="text-[13px] text-[#9a9a9a]">Or</span>
-                <div className="h-px flex-1 bg-[#e8e8e8]" />
-              </div>
-
-              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                <button
-                  className={socialButton}
-                  data-testid="button-login-google"
-                  disabled={busy}
-                  onClick={handleGoogle}
-                  type="button"
-                >
-                  <span className="inline-flex h-[18px] w-[18px] items-center justify-center">
-                    <GoogleMark />
-                  </span>
-                  {opening === "google"
-                    ? "Opening Google…"
-                    : mode === "up"
-                      ? "Sign up with Google"
-                      : "Continue with Google"}
-                </button>
-                <button
-                  className="relative flex h-[48px] items-center justify-center gap-2.5 rounded-[12px] border border-[#e6e6e6] bg-white text-[14px] font-medium text-[#222] transition-colors hover:bg-[#fafafa] disabled:opacity-50"
-                  disabled
-                  type="button"
-                >
-                  <span className="inline-flex h-[18px] w-[18px] items-center justify-center text-[#111]">
-                    <AppleMark />
-                  </span>
-                  Continue with Apple
-                  <span className="absolute -top-2 right-2 rounded-full bg-[#111] px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-[0.04em] text-white">
-                    Soon
-                  </span>
-                </button>
-              </div>
-
-              {otherProviders.length > 0 ? (
-                <div className="mt-2.5 space-y-2.5">
-                  {otherProviders.map((provider) => (
+                      <LockMark />
+                      <input
+                        aria-describedby={error ? errorId : undefined}
+                        aria-invalid={error ? true : undefined}
+                        autoComplete={
+                          mode === "up" ? "new-password" : "current-password"
+                        }
+                        className={fieldInput}
+                        data-testid="input-login-password"
+                        id="sign-password"
+                        minLength={8}
+                        name="password"
+                        onChange={(event) => setPassword(event.target.value)}
+                        placeholder="At least 8 characters"
+                        required
+                        type={showPassword ? "text" : "password"}
+                        value={password}
+                      />
+                      <button
+                        aria-label={
+                          showPassword ? "Hide password" : "Show password"
+                        }
+                        className="relative shrink-0 p-1 -mr-1 text-[#666] hover:text-[#222] after:absolute after:-inset-2 after:content-['']"
+                        onClick={() => setShowPassword((value) => !value)}
+                        type="button"
+                      >
+                        {showPassword ? <EyeOffMark /> : <EyeMark />}
+                      </button>
+                    </Field>
+                    {error ? (
+                      <p
+                        className="text-sm text-[#b42318]"
+                        id={errorId}
+                        role="alert"
+                      >
+                        {error}
+                      </p>
+                    ) : null}
                     <button
-                      className={socialButton}
+                      className={primaryButton}
+                      data-testid="button-client-login"
                       disabled={busy}
-                      key={provider}
-                      onClick={() => handleSignIn(provider)}
-                      type="button"
+                      type="submit"
                     >
-                      {opening === provider
-                        ? `Opening ${providerName(provider)}…`
-                        : `Continue with ${providerName(provider)}`}
+                      {opening === "email"
+                        ? mode === "up"
+                          ? "Creating account…"
+                          : "Signing in…"
+                        : mode === "up"
+                          ? "Create Account"
+                          : "Sign In"}
                     </button>
-                  ))}
-                </div>
-              ) : null}
+                  </form>
+                ) : null}
 
-              {options?.sso ? (
-                <form className="mt-4 space-y-4" onSubmit={handleDomainSignIn}>
-                  <Field label="Work email">
-                    <MailMark />
-                    <input
-                      autoComplete="email"
-                      className={fieldInput}
-                      onChange={(event) => setEmail(event.target.value)}
-                      placeholder="alex@company.com"
-                      required
-                      type="email"
-                      value={email}
-                    />
-                  </Field>
+                <div className="my-6 flex items-center gap-3">
+                  <div className="h-px flex-1 bg-[#e8e8e8]" />
+                  <span className="text-[13px] text-[#9a9a9a]">Or</span>
+                  <div className="h-px flex-1 bg-[#e8e8e8]" />
+                </div>
+
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                   <button
                     className={socialButton}
-                    disabled={busy || email.trim().length === 0}
-                    type="submit"
+                    data-testid="button-login-google"
+                    disabled={busy}
+                    onClick={handleGoogle}
+                    type="button"
                   >
-                    {opening === "sso"
-                      ? "Opening…"
-                      : "Continue with your company account"}
+                    <span className="inline-flex h-[18px] w-[18px] items-center justify-center">
+                      <GoogleMark />
+                    </span>
+                    {opening === "google"
+                      ? "Opening Google…"
+                      : mode === "up"
+                        ? "Sign up with Google"
+                        : "Continue with Google"}
                   </button>
-                </form>
-              ) : null}
+                  <button
+                    className="relative flex h-[48px] items-center justify-center gap-2.5 rounded-[12px] border border-[#e6e6e6] bg-white text-[14px] font-medium text-[#222] transition-colors hover:bg-[#fafafa] disabled:opacity-50"
+                    disabled
+                    type="button"
+                  >
+                    <span className="inline-flex h-[18px] w-[18px] items-center justify-center text-[#111]">
+                      <AppleMark />
+                    </span>
+                    Continue with Apple
+                    <span className="absolute -top-2 right-2 rounded-full bg-[#111] px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-[0.04em] text-white">
+                      Soon
+                    </span>
+                  </button>
+                </div>
 
-              {emailPassword ? (
-                <p className="mt-6 text-center text-[14px] text-[#6b6b6b]">
-                  {mode === "up" ? (
-                    <>
-                      Already have an account?{" "}
+                {otherProviders.length > 0 ? (
+                  <div className="mt-2.5 space-y-2.5">
+                    {otherProviders.map((provider) => (
                       <button
-                        className="font-semibold text-[#111] underline-offset-2 hover:underline"
-                        onClick={() => {
-                          setMode("in");
-                          setError(null);
-                        }}
+                        className={socialButton}
+                        disabled={busy}
+                        key={provider}
+                        onClick={() => handleSignIn(provider)}
                         type="button"
                       >
-                        Sign In
+                        {opening === provider
+                          ? `Opening ${providerName(provider)}…`
+                          : `Continue with ${providerName(provider)}`}
                       </button>
-                    </>
-                  ) : (
-                    <>
-                      Need an account?{" "}
-                      <button
-                        className="font-semibold text-[#111] underline-offset-2 hover:underline"
-                        onClick={() => {
-                          setMode("up");
-                          setError(null);
-                        }}
-                        type="button"
-                      >
-                        Create Account
-                      </button>
-                    </>
-                  )}
-                </p>
-              ) : null}
-            </div>
+                    ))}
+                  </div>
+                ) : null}
+
+                {options?.sso ? (
+                  <form
+                    className="mt-4 space-y-4"
+                    onSubmit={handleDomainSignIn}
+                  >
+                    <Field label="Work email">
+                      <MailMark />
+                      <input
+                        autoComplete="email"
+                        className={fieldInput}
+                        onChange={(event) => setEmail(event.target.value)}
+                        placeholder="alex@company.com"
+                        required
+                        type="email"
+                        value={email}
+                      />
+                    </Field>
+                    <button
+                      className={socialButton}
+                      disabled={busy || email.trim().length === 0}
+                      type="submit"
+                    >
+                      {opening === "sso"
+                        ? "Opening…"
+                        : "Continue with your company account"}
+                    </button>
+                  </form>
+                ) : null}
+
+                {emailPassword ? (
+                  <p className="mt-6 text-center text-[14px] text-[#555]">
+                    {mode === "up" ? (
+                      <>
+                        Already have an account?{" "}
+                        <button
+                          className="font-semibold text-[#111] underline-offset-2 hover:underline"
+                          onClick={() => {
+                            setMode("in");
+                            setError(null);
+                          }}
+                          type="button"
+                        >
+                          Sign In
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        Need an account?{" "}
+                        <button
+                          className="font-semibold text-[#111] underline-offset-2 hover:underline"
+                          onClick={() => {
+                            setMode("up");
+                            setError(null);
+                          }}
+                          type="button"
+                        >
+                          Create Account
+                        </button>
+                      </>
+                    )}
+                  </p>
+                ) : null}
+              </div>
+            </motion.div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-2 pb-[max(0.25rem,env(safe-area-inset-bottom))] text-[12px] text-[#9a9a9a]">
+          <div className="flex flex-wrap items-center justify-between gap-2 pb-[max(0.25rem,env(safe-area-inset-bottom))] text-[12px] text-[#666]">
             <span>© {year} LimitlessAI</span>
             <a
-              className="text-[#666] transition-colors hover:text-[#111]"
+              className="text-[#555] transition-colors hover:text-[#111]"
               href="mailto:support@limitlessai.ca"
             >
               Need help? Contact Support
@@ -413,8 +466,11 @@ function SignScreen() {
         </div>
       </div>
 
-      <div className="auth-hero relative hidden overflow-hidden lg:block lg:w-[54%]">
-        <div className="auth-hero-bg absolute inset-0 scale-[1.02] blur-[2px]" />
+      <div
+        aria-hidden="true"
+        className="auth-hero relative hidden overflow-hidden lg:block lg:w-[54%]"
+      >
+        <div className="auth-hero-bg absolute inset-0 scale-[1.02] blur-[2px] outline outline-black/10 -outline-offset-1" />
         <div className="absolute inset-0 bg-black/20" />
         <div
           className="pointer-events-none absolute inset-0 opacity-[0.35] mix-blend-overlay"
@@ -465,15 +521,17 @@ function SignScreen() {
 
 function Field({
   extra,
+  htmlFor,
   label,
   children,
 }: {
   extra?: ReactNode;
+  htmlFor?: string;
   label: string;
   children: ReactNode;
 }) {
   return (
-    <label className="block">
+    <label className="block" htmlFor={htmlFor}>
       <span
         className={
           extra
