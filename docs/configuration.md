@@ -102,8 +102,8 @@ Two things are worth knowing before pointing a deployment at any gateway. Not ev
 | Variable                     | Meaning                                                                                |
 | ---------------------------- | -------------------------------------------------------------------------------------- |
 | `OPENBOT_SINGLE_USER`        | One fixed administrator and no sign-in. **Required** when no identity provider is configured, or the deployment refuses to start. Ignored when one is. |
-| `GOOGLE_OAUTH_CLIENT_ID`     | Google OAuth client id.                                                                |
-| `GOOGLE_OAUTH_CLIENT_SECRET` | Google OAuth client secret.                                                            |
+| `GOOGLE_OAUTH_CLIENT_ID`     | Google OAuth client id. `GOOGLE_CLIENT_ID` is accepted as the same value.               |
+| `GOOGLE_OAUTH_CLIENT_SECRET` | Google OAuth client secret. `GOOGLE_CLIENT_SECRET` is accepted as the same value.       |
 | `MICROSOFT_OAUTH_CLIENT_ID`  | Microsoft Entra ID application id.                                                     |
 | `MICROSOFT_OAUTH_CLIENT_SECRET` | Microsoft Entra ID client secret.                                                   |
 | `MICROSOFT_OAUTH_TENANT_ID`  | Directory to admit. `common` by default, which admits personal accounts too; a GUID admits one directory. |

@@ -113,7 +113,18 @@ describe("deployment configuration", () => {
         GOOGLE_OAUTH_CLIENT_SECRET: "",
       }),
     ).toThrow(
-      "GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET must be set together",
+      "GOOGLE_OAUTH_CLIENT_ID (or GOOGLE_CLIENT_ID) and GOOGLE_OAUTH_CLIENT_SECRET (or GOOGLE_CLIENT_SECRET) must be set together",
+    );
+  });
+
+  test("rejects a LimitlessAI-2 Google client id with no secret", () => {
+    expect(() =>
+      loadConfig({
+        ...withoutSignIn,
+        GOOGLE_CLIENT_ID: "google-client-id",
+      }),
+    ).toThrow(
+      "GOOGLE_OAUTH_CLIENT_ID (or GOOGLE_CLIENT_ID) and GOOGLE_OAUTH_CLIENT_SECRET (or GOOGLE_CLIENT_SECRET) must be set together",
     );
   });
 
@@ -185,6 +196,40 @@ describe("deployment configuration", () => {
       trustedOrigins: ["http://localhost:3000"],
       initialAdminEmails: ["admin@openbot.test", "owner@openbot.test"],
       emailPassword: false,
+    });
+  });
+
+  test("accepts LimitlessAI-2 GOOGLE_CLIENT_ID names for Google sign-in", () => {
+    const config = loadConfig({
+      ...withoutSignIn,
+      GOOGLE_CLIENT_ID: "alias-client-id",
+      GOOGLE_CLIENT_SECRET: "alias-client-secret",
+      BETTER_AUTH_SECRET: "a-long-enough-local-development-auth-secret",
+      BETTER_AUTH_URL: "http://localhost:3001",
+      INITIAL_ADMIN_EMAILS: "admin@openbot.test",
+    });
+
+    expect(config.auth?.google).toEqual({
+      clientId: "alias-client-id",
+      clientSecret: "alias-client-secret",
+    });
+  });
+
+  test("prefers GOOGLE_OAUTH_* when both Google name pairs are set", () => {
+    const config = loadConfig({
+      ...baseEnvironment,
+      GOOGLE_OAUTH_CLIENT_ID: "canonical-client-id",
+      GOOGLE_OAUTH_CLIENT_SECRET: "canonical-client-secret",
+      GOOGLE_CLIENT_ID: "alias-client-id",
+      GOOGLE_CLIENT_SECRET: "alias-client-secret",
+      BETTER_AUTH_SECRET: "a-long-enough-local-development-auth-secret",
+      BETTER_AUTH_URL: "http://localhost:3001",
+      INITIAL_ADMIN_EMAILS: "admin@openbot.test",
+    });
+
+    expect(config.auth?.google).toEqual({
+      clientId: "canonical-client-id",
+      clientSecret: "canonical-client-secret",
     });
   });
 

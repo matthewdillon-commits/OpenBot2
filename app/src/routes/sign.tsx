@@ -1,4 +1,3 @@
-import { IconLock } from "@tabler/icons-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
@@ -84,7 +83,7 @@ function SignScreen() {
 
     if (!googleConfigured) {
       setError(
-        "Google sign-in is not configured yet. Add GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET.",
+        "Google sign-in is not configured yet. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.",
       );
       setOpening(null);
       return;
@@ -209,6 +208,7 @@ function SignScreen() {
               <div className="flex justify-end -mt-1">
                 <button
                   className="text-xs text-muted-foreground hover:text-primary transition-colors"
+                  data-testid="link-forgot-password"
                   onClick={() =>
                     setError(
                       "Password reset is not available on this deployment yet.",
@@ -227,6 +227,7 @@ function SignScreen() {
             ) : null}
             <Button
               className="w-full h-11 rounded-xl shadow-lg shadow-primary/20"
+              data-testid="button-client-login"
               disabled={
                 busy ||
                 email.trim().length === 0 ||
@@ -243,7 +244,7 @@ function SignScreen() {
                 )
               ) : (
                 <>
-                  <IconLock className="mr-2 h-4 w-4" />
+                  <SignInMark />
                   {mode === "up" ? "Create account" : "Sign In"}
                 </>
               )}
@@ -260,6 +261,7 @@ function SignScreen() {
             </div>
             <Button
               className="w-full h-11 rounded-xl"
+              data-testid="button-login-google"
               disabled={busy}
               onClick={handleGoogle}
               type="button"
@@ -275,6 +277,7 @@ function SignScreen() {
           <div className="space-y-4">
             <Button
               className="w-full h-11 rounded-xl"
+              data-testid="button-login-google"
               disabled={busy}
               onClick={handleGoogle}
               type="button"
@@ -371,6 +374,26 @@ function SignScreen() {
         ) : null}
       </div>
     </div>
+  );
+}
+
+/** Lucide `log-in`, the icon LimitlessAI-2 puts on Sign In. */
+function SignInMark() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="mr-2 h-4 w-4"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+    >
+      <path d="m10 17 5-5-5-5" />
+      <path d="M15 12H3" />
+      <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+    </svg>
   );
 }
 

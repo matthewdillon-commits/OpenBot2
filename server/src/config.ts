@@ -300,14 +300,27 @@ function oauthClient(
   environment: Environment,
   provider: "GOOGLE" | "MICROSOFT" | "OKTA",
 ): OAuthClient | undefined {
-  const clientId = optional(environment, `${provider}_OAUTH_CLIENT_ID`);
-  const clientSecret = optional(environment, `${provider}_OAUTH_CLIENT_SECRET`);
+  const clientId =
+    optional(environment, `${provider}_OAUTH_CLIENT_ID`) ??
+    (provider === "GOOGLE"
+      ? optional(environment, "GOOGLE_CLIENT_ID")
+      : undefined);
+  const clientSecret =
+    optional(environment, `${provider}_OAUTH_CLIENT_SECRET`) ??
+    (provider === "GOOGLE"
+      ? optional(environment, "GOOGLE_CLIENT_SECRET")
+      : undefined);
 
   // Both or neither. One alone is a half-configured sign-in that fails at the first attempt rather
   // than at start-up, which is the worst moment to discover it.
+  //
+  // Google also accepts LimitlessAI-2's GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET names, so a
+  // deployment can paste that file without renaming the two login values.
   if (Boolean(clientId) !== Boolean(clientSecret)) {
     throw new Error(
-      `${provider}_OAUTH_CLIENT_ID and ${provider}_OAUTH_CLIENT_SECRET must be set together`,
+      provider === "GOOGLE"
+        ? "GOOGLE_OAUTH_CLIENT_ID (or GOOGLE_CLIENT_ID) and GOOGLE_OAUTH_CLIENT_SECRET (or GOOGLE_CLIENT_SECRET) must be set together"
+        : `${provider}_OAUTH_CLIENT_ID and ${provider}_OAUTH_CLIENT_SECRET must be set together`,
     );
   }
 

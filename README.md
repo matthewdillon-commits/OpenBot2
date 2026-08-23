@@ -249,6 +249,7 @@ Then the provider. Register the redirect URI shown beside it.
 
 ```sh
 # Google — http://localhost:3001/api/auth/callback/google
+# GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET are the same values (LimitlessAI-2 names).
 GOOGLE_OAUTH_CLIENT_ID=
 GOOGLE_OAUTH_CLIENT_SECRET=
 
