@@ -22,6 +22,8 @@ export type CrmPersonInput = {
   phones?: string[];
   jobTitle?: string | null;
   companyId?: string | null;
+  stageKey?: string | null;
+  doNotContact?: boolean;
   notes?: string | null;
 };
 
@@ -69,6 +71,36 @@ export type CrmSendInput = {
   companyId?: string | null;
   campaignId?: string | null;
 };
+
+export function updateCrmPersonMutationOptions(queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: (variables: {
+      id: string;
+      input: Partial<CrmPersonInput>;
+    }): Promise<CrmPerson> =>
+      client(`/api/crm/people/${variables.id}`, "person", {
+        method: "PATCH",
+        body: variables.input,
+        fallback: FALLBACK,
+      }),
+    onSuccess: () => invalidateCrm(queryClient),
+  });
+}
+
+export function updateCrmOpportunityMutationOptions(queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: (variables: {
+      id: string;
+      input: Partial<CrmOpportunityInput>;
+    }): Promise<CrmOpportunity> =>
+      client(`/api/crm/opportunities/${variables.id}`, "opportunity", {
+        method: "PATCH",
+        body: variables.input,
+        fallback: FALLBACK,
+      }),
+    onSuccess: () => invalidateCrm(queryClient),
+  });
+}
 
 export function createCrmPersonMutationOptions(queryClient: QueryClient) {
   return mutationOptions({

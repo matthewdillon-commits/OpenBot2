@@ -7,6 +7,10 @@ import {
 } from "../auth/guards";
 import { orgIdOf } from "../orgs/constants";
 import { deliverSend, trackingOrigin } from "./deliver";
+import {
+  CONTACT_STAGE_DEFS,
+  DEAL_STAGE_DEFS,
+} from "./stages";
 import type {
   CrmCampaignInput,
   CrmCompanyInput,
@@ -77,6 +81,29 @@ export function createCrmRoutes(
     return run(orgIdOf(context.var.actor));
   };
 
+  routes.get("/stages", requireUser, async (context) =>
+    withOrg(context, async () =>
+      context.json({
+        people: CONTACT_STAGE_DEFS,
+        opportunities: DEAL_STAGE_DEFS,
+      }),
+    ),
+  );
+
+  routes.get("/threads", requireUser, async (context) =>
+    withOrg(context, async (orgId) => {
+      const page = await store.listThreads({
+        ...listQuery(context.req.url),
+        orgId,
+      });
+      return context.json({
+        threads: page.items,
+        nextCursor: page.nextCursor,
+        total: page.total,
+      });
+    }),
+  );
+
   routes.get("/people", requireUser, async (context) =>
     withOrg(context, async (orgId) => {
       const page = await store.listPeople({
@@ -87,6 +114,8 @@ export function createCrmRoutes(
         people: page.items,
         nextCursor: page.nextCursor,
         total: page.total,
+        stageCounts: page.stageCounts ?? {},
+        totalAllStages: page.totalAllStages ?? page.total,
       });
     }),
   );
@@ -474,6 +503,9 @@ function listQuery(url: string): CrmListQuery {
       ? { personId: parsed.searchParams.get("personId") as string }
       : {}),
     ...(kind === "email" || kind === "sms" || kind === "call" ? { kind } : {}),
+    ...(parsed.searchParams.get("stage")
+      ? { stage: parsed.searchParams.get("stage") as string }
+      : {}),
     ...(Number.isFinite(limit) ? { limit } : {}),
   };
 }
@@ -512,6 +544,15 @@ function optionalString(
   return { ok: true, value };
 }
 
+function optionalBoolean(
+  value: unknown,
+): { ok: true; value: boolean | undefined } | { ok: false; error: string } {
+  if (value === undefined) return { ok: true, value: undefined };
+  if (typeof value !== "boolean")
+    return { ok: false, error: "Expected a boolean." };
+  return { ok: true, value };
+}
+
 function optionalStringList(
   value: unknown,
 ): { ok: true; value: string[] | undefined } | { ok: false; error: string } {
@@ -547,6 +588,11 @@ export function parsePersonInput(value: unknown): ParseResult<CrmPersonInput> {
   if (!companyId.ok) return { ok: false, error: "companyId must be a string." };
   const notes = optionalString(body.notes);
   if (!notes.ok) return { ok: false, error: "notes must be a string." };
+  const stageKey = optionalString(body.stageKey ?? body.stage);
+  if (!stageKey.ok) return { ok: false, error: "stageKey must be a string." };
+  const doNotContact = optionalBoolean(body.doNotContact);
+  if (!doNotContact.ok)
+    return { ok: false, error: "doNotContact must be a boolean." };
   return {
     ok: true,
     value: {
@@ -555,6 +601,10 @@ export function parsePersonInput(value: unknown): ParseResult<CrmPersonInput> {
       ...(phones.value ? { phones: phones.value } : {}),
       ...(jobTitle.value !== undefined ? { jobTitle: jobTitle.value } : {}),
       ...(companyId.value !== undefined ? { companyId: companyId.value } : {}),
+      ...(stageKey.value ? { stageKey: stageKey.value } : {}),
+      ...(doNotContact.value !== undefined
+        ? { doNotContact: doNotContact.value }
+        : {}),
       ...(notes.value !== undefined ? { notes: notes.value } : {}),
     },
   };
@@ -581,6 +631,11 @@ export function parsePersonPatch(
   if (!companyId.ok) return { ok: false, error: "companyId must be a string." };
   const notes = optionalString(body.notes);
   if (!notes.ok) return { ok: false, error: "notes must be a string." };
+  const stageKey = optionalString(body.stageKey ?? body.stage);
+  if (!stageKey.ok) return { ok: false, error: "stageKey must be a string." };
+  const doNotContact = optionalBoolean(body.doNotContact);
+  if (!doNotContact.ok)
+    return { ok: false, error: "doNotContact must be a boolean." };
   return {
     ok: true,
     value: {
@@ -589,6 +644,12 @@ export function parsePersonPatch(
       ...(phones.value ? { phones: phones.value } : {}),
       ...(jobTitle.value !== undefined ? { jobTitle: jobTitle.value } : {}),
       ...(companyId.value !== undefined ? { companyId: companyId.value } : {}),
+      ...(stageKey.value !== undefined && stageKey.value !== null
+        ? { stageKey: stageKey.value }
+        : {}),
+      ...(doNotContact.value !== undefined
+        ? { doNotContact: doNotContact.value }
+        : {}),
       ...(notes.value !== undefined ? { notes: notes.value } : {}),
     },
   };
@@ -669,6 +730,13 @@ export function parseOpportunityInput(
   }
   const stage = optionalString(body.stage);
   if (!stage.ok) return { ok: false, error: "stage must be a string." };
+  if (
+    body.position !== undefined &&
+    body.position !== null &&
+    (typeof body.position !== "number" || !Number.isFinite(body.position))
+  ) {
+    return { ok: false, error: "position must be a number." };
+  }
   const currency = optionalString(body.currency);
   if (!currency.ok) return { ok: false, error: "currency must be a string." };
   const companyId = optionalString(body.companyId);
@@ -685,6 +753,7 @@ export function parseOpportunityInput(
     value: {
       name: name.value,
       ...(stage.value ? { stage: stage.value } : {}),
+      ...(typeof body.position === "number" ? { position: body.position } : {}),
       ...(body.amountCents !== undefined
         ? { amountCents: body.amountCents as number | null }
         : {}),

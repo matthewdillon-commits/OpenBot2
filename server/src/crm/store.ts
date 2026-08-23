@@ -11,6 +11,7 @@ import {
   crmSends,
 } from "../db/schema";
 import { orgIdOf } from "../orgs/constants";
+import { normalizeContactStage, normalizeDealStage } from "./stages";
 
 /**
  * Who wrote a CRM row.
@@ -46,6 +47,8 @@ export type CrmPerson = {
   jobTitle: string | null;
   companyId: string | null;
   company: { id: string; name: string; domain: string | null } | null;
+  stageKey: string;
+  doNotContact: boolean;
   notes: string | null;
   createdBy: CrmCreatedBy;
   createdAt: string;
@@ -56,6 +59,7 @@ export type CrmOpportunity = {
   id: string;
   name: string;
   stage: string;
+  position: number;
   amountCents: number | null;
   currency: string;
   companyId: string | null;
@@ -160,12 +164,41 @@ export type CrmListQuery = {
   kind?: CrmSendKind;
   campaignId?: string;
   personId?: string;
+  /** People pipeline stage. Search still applies; this only narrows the page. */
+  stage?: string;
 };
 
 export type CrmPage<T> = {
   items: T[];
   nextCursor: string | null;
   total: number;
+  stageCounts?: Record<string, number>;
+  totalAllStages?: number;
+};
+
+export type CrmThreadStatus =
+  | "none"
+  | "draft"
+  | "queued"
+  | "logged"
+  | "sent"
+  | "opened"
+  | "clicked"
+  | "failed"
+  | "answered"
+  | "no_answer";
+
+/**
+ * One row per person: the last send and how it landed.
+ *
+ * LimitlessAI-2 Conversations is this read, not the notes table. `/api/crm/conversations`
+ * stays the notes book; `/api/crm/threads` is the outreach inbox.
+ */
+export type CrmThread = {
+  person: CrmPerson;
+  latestSend: CrmSend | null;
+  outboundCount: number;
+  status: CrmThreadStatus;
 };
 
 export type CrmCompanyInput = {
@@ -183,12 +216,15 @@ export type CrmPersonInput = {
   phones?: string[];
   jobTitle?: string | null;
   companyId?: string | null;
+  stageKey?: string | null;
+  doNotContact?: boolean;
   notes?: string | null;
 };
 
 export type CrmOpportunityInput = {
   name: string;
   stage?: string;
+  position?: number;
   amountCents?: number | null;
   currency?: string;
   companyId?: string | null;
@@ -229,6 +265,7 @@ export type CrmSendInput = {
 
 export type CrmStore = {
   listPeople: (query?: CrmListQuery) => Promise<CrmPage<CrmPerson>>;
+  listThreads: (query?: CrmListQuery) => Promise<CrmPage<CrmThread>>;
   getPerson: (orgId: string, id: string) => Promise<CrmPerson | undefined>;
   createPerson: (
     orgId: string,
@@ -438,6 +475,7 @@ export function createCrmStore(database: Database): CrmStore {
     const limit = clampLimit(query.limit);
     const cursor = decodeCursor(query.cursor);
     const search = query.search?.trim();
+    const stage = query.stage?.trim();
     const filters = [eq(crmPeople.orgId, orgId)];
     if (search) {
       const pattern = `%${escapeLike(search)}%`;
@@ -453,13 +491,33 @@ export function createCrmStore(database: Database): CrmStore {
       );
     }
     const searchFilters = filters.slice();
+    if (stage && stage !== "all") {
+      filters.push(eq(crmPeople.stageKey, stage));
+    }
+    const listFilters = filters.slice();
     if (cursor) {
       filters.push(keysetAfter(crmPeople.createdAt, crmPeople.id, cursor));
     }
     const [{ total: counted }] = await database
       .select({ total: sql<number>`cast(count(*) as int)` })
       .from(crmPeople)
+      .where(and(...listFilters));
+    const [{ total: totalAllStages }] = await database
+      .select({ total: sql<number>`cast(count(*) as int)` })
+      .from(crmPeople)
       .where(and(...searchFilters));
+    const stageRows = await database
+      .select({
+        stageKey: crmPeople.stageKey,
+        count: sql<number>`cast(count(*) as int)`,
+      })
+      .from(crmPeople)
+      .where(and(...searchFilters))
+      .groupBy(crmPeople.stageKey);
+    const stageCounts: Record<string, number> = {};
+    for (const row of stageRows) {
+      stageCounts[row.stageKey] = row.count;
+    }
 
     const rows = await database
       .select({
@@ -469,6 +527,8 @@ export function createCrmStore(database: Database): CrmStore {
         phones: crmPeople.phones,
         jobTitle: crmPeople.jobTitle,
         companyId: crmPeople.companyId,
+        stageKey: crmPeople.stageKey,
+        doNotContact: crmPeople.doNotContact,
         notes: crmPeople.notes,
         createdByKind: crmPeople.createdByKind,
         createdById: crmPeople.createdById,
@@ -496,6 +556,8 @@ export function createCrmStore(database: Database): CrmStore {
             })
           : null,
       total: counted,
+      stageCounts,
+      totalAllStages,
     };
   }
 
@@ -511,6 +573,8 @@ export function createCrmStore(database: Database): CrmStore {
         phones: crmPeople.phones,
         jobTitle: crmPeople.jobTitle,
         companyId: crmPeople.companyId,
+        stageKey: crmPeople.stageKey,
+        doNotContact: crmPeople.doNotContact,
         notes: crmPeople.notes,
         createdByKind: crmPeople.createdByKind,
         createdById: crmPeople.createdById,
@@ -535,6 +599,8 @@ export function createCrmStore(database: Database): CrmStore {
     const name = input.name.trim();
     if (!name) throw new Error("A person needs a name.");
     await assertCompany(orgId, input.companyId);
+    const stageKey = normalizeContactStage(input.stageKey);
+    const doNotContact = input.doNotContact ?? stageKey === "dnc";
     const [row] = await database
       .insert(crmPeople)
       .values({
@@ -544,6 +610,8 @@ export function createCrmStore(database: Database): CrmStore {
         phones: cleanList(input.phones),
         jobTitle: emptyToNull(input.jobTitle) ?? null,
         companyId: emptyToNull(input.companyId) ?? null,
+        stageKey,
+        doNotContact: doNotContact || stageKey === "dnc",
         notes: emptyToNull(input.notes) ?? null,
         ...createdByColumns(createdBy),
       })
@@ -573,6 +641,15 @@ export function createCrmStore(database: Database): CrmStore {
       patch.jobTitle = emptyToNull(input.jobTitle);
     if (input.companyId !== undefined)
       patch.companyId = emptyToNull(input.companyId);
+    if (input.stageKey !== undefined) {
+      const stageKey = normalizeContactStage(input.stageKey);
+      patch.stageKey = stageKey;
+      if (stageKey === "dnc") patch.doNotContact = true;
+    }
+    if (input.doNotContact !== undefined) {
+      patch.doNotContact = input.doNotContact;
+      if (input.doNotContact) patch.stageKey = "dnc";
+    }
     if (input.notes !== undefined) patch.notes = emptyToNull(input.notes);
     await database
       .update(crmPeople)
@@ -698,6 +775,7 @@ export function createCrmStore(database: Database): CrmStore {
     const limit = clampLimit(query.limit);
     const cursor = decodeCursor(query.cursor);
     const search = query.search?.trim();
+    const stage = query.stage?.trim();
     const filters = [eq(crmOpportunities.orgId, orgId)];
     if (search) {
       const pattern = `%${escapeLike(search)}%`;
@@ -707,6 +785,9 @@ export function createCrmStore(database: Database): CrmStore {
           or ${crmOpportunities.stage} ilike ${pattern} escape '\\'
         )`,
       );
+    }
+    if (stage && stage !== "all") {
+      filters.push(eq(crmOpportunities.stage, normalizeDealStage(stage)));
     }
     const searchFilters = filters.slice();
     if (cursor) {
@@ -723,6 +804,7 @@ export function createCrmStore(database: Database): CrmStore {
         id: crmOpportunities.id,
         name: crmOpportunities.name,
         stage: crmOpportunities.stage,
+        position: crmOpportunities.position,
         amountCents: crmOpportunities.amountCents,
         currency: crmOpportunities.currency,
         companyId: crmOpportunities.companyId,
@@ -767,6 +849,7 @@ export function createCrmStore(database: Database): CrmStore {
         id: crmOpportunities.id,
         name: crmOpportunities.name,
         stage: crmOpportunities.stage,
+        position: crmOpportunities.position,
         amountCents: crmOpportunities.amountCents,
         currency: crmOpportunities.currency,
         companyId: crmOpportunities.companyId,
@@ -805,7 +888,8 @@ export function createCrmStore(database: Database): CrmStore {
       .values({
         orgId,
         name,
-        stage: input.stage?.trim() || "new",
+        stage: normalizeDealStage(input.stage),
+        position: input.position ?? 0,
         amountCents: input.amountCents ?? null,
         currency: input.currency?.trim() || "USD",
         companyId: emptyToNull(input.companyId) ?? null,
@@ -837,7 +921,9 @@ export function createCrmStore(database: Database): CrmStore {
       if (!name) throw new Error("An opportunity needs a name.");
       patch.name = name;
     }
-    if (input.stage !== undefined) patch.stage = input.stage.trim() || "new";
+    if (input.stage !== undefined)
+      patch.stage = normalizeDealStage(input.stage);
+    if (input.position !== undefined) patch.position = input.position;
     if (input.amountCents !== undefined) patch.amountCents = input.amountCents;
     if (input.currency !== undefined)
       patch.currency = input.currency.trim() || "USD";
@@ -1258,6 +1344,14 @@ export function createCrmStore(database: Database): CrmStore {
     if (!toAddress) throw new Error("A send needs an address or number.");
     await assertCompany(orgId, input.companyId);
     await assertPerson(orgId, input.personId);
+    if (input.personId) {
+      const person = await getPerson(orgId, input.personId);
+      if (person && (person.doNotContact || person.stageKey === "dnc")) {
+        throw new Error(
+          `${person.name} is marked Do Not Contact — send blocked.`,
+        );
+      }
+    }
     await assertCampaign(orgId, input.campaignId);
     const [row] = await database
       .insert(crmSends)
@@ -1385,6 +1479,88 @@ export function createCrmStore(database: Database): CrmStore {
     return row?.trackingToken;
   }
 
+  async function listThreads(
+    query: CrmListQuery = {},
+  ): Promise<CrmPage<CrmThread>> {
+    const peoplePage = await listPeople({
+      ...query,
+      stage: undefined,
+    });
+    const orgId = scopedOrg(query);
+    const personIds = peoplePage.items.map((person) => person.id);
+    if (personIds.length === 0) {
+      return {
+        items: [],
+        nextCursor: peoplePage.nextCursor,
+        total: peoplePage.totalAllStages ?? peoplePage.total,
+      };
+    }
+
+    const sendRows = await database
+      .select({
+        id: crmSends.id,
+        kind: crmSends.kind,
+        status: crmSends.status,
+        subject: crmSends.subject,
+        body: crmSends.body,
+        toAddress: crmSends.toAddress,
+        personId: crmSends.personId,
+        companyId: crmSends.companyId,
+        campaignId: crmSends.campaignId,
+        provider: crmSends.provider,
+        sentAt: crmSends.sentAt,
+        createdByKind: crmSends.createdByKind,
+        createdById: crmSends.createdById,
+        createdByName: crmSends.createdByName,
+        createdAt: crmSends.createdAt,
+        updatedAt: crmSends.updatedAt,
+        campaignName: crmCampaigns.name,
+      })
+      .from(crmSends)
+      .leftJoin(crmCampaigns, eq(crmCampaigns.id, crmSends.campaignId))
+      .where(
+        and(eq(crmSends.orgId, orgId), inArray(crmSends.personId, personIds)),
+      )
+      .orderBy(desc(crmSends.createdAt), desc(crmSends.id));
+
+    const latest = new Map<string, (typeof sendRows)[number]>();
+    const outbound = new Map<string, number>();
+    for (const row of sendRows) {
+      if (!row.personId) continue;
+      outbound.set(row.personId, (outbound.get(row.personId) ?? 0) + 1);
+      if (!latest.has(row.personId)) latest.set(row.personId, row);
+    }
+
+    const tracking = await trackingFor(
+      orgId,
+      [...latest.values()].map((row) => row.id),
+    );
+
+    return {
+      items: peoplePage.items.map((person) => {
+        const row = latest.get(person.id);
+        const latestSend = row
+          ? mapSend(
+              {
+                ...row,
+                personName: person.name,
+                companyName: person.company?.name ?? null,
+              },
+              tracking.get(row.id),
+            )
+          : null;
+        return {
+          person,
+          latestSend,
+          outboundCount: outbound.get(person.id) ?? 0,
+          status: deriveThreadStatus(latestSend),
+        };
+      }),
+      nextCursor: peoplePage.nextCursor,
+      total: peoplePage.totalAllStages ?? peoplePage.total,
+    };
+  }
+
   async function assertCompany(
     orgId: string,
     companyId: string | null | undefined,
@@ -1479,6 +1655,7 @@ export function createCrmStore(database: Database): CrmStore {
 
   return {
     listPeople,
+    listThreads,
     getPerson,
     createPerson,
     updatePerson,
@@ -1516,6 +1693,8 @@ function mapPerson(row: {
   phones: string[];
   jobTitle: string | null;
   companyId: string | null;
+  stageKey: string;
+  doNotContact: boolean;
   notes: string | null;
   createdByKind: "user" | "bot" | "system";
   createdById: string;
@@ -1540,6 +1719,8 @@ function mapPerson(row: {
             domain: row.companyDomain,
           }
         : null,
+    stageKey: row.stageKey,
+    doNotContact: row.doNotContact,
     notes: row.notes,
     createdBy: createdByOf(row),
     createdAt: requiredIso(row.createdAt),
@@ -1579,6 +1760,7 @@ function mapOpportunity(row: {
   id: string;
   name: string;
   stage: string;
+  position: number;
   amountCents: number | null;
   currency: string;
   companyId: string | null;
@@ -1596,7 +1778,8 @@ function mapOpportunity(row: {
   return {
     id: row.id,
     name: row.name,
-    stage: row.stage,
+    stage: normalizeDealStage(row.stage),
+    position: row.position,
     amountCents: row.amountCents,
     currency: row.currency,
     companyId: row.companyId,
@@ -1750,6 +1933,21 @@ function mapSend(
     createdAt: requiredIso(row.createdAt),
     updatedAt: requiredIso(row.updatedAt),
   };
+}
+
+export function deriveThreadStatus(send: CrmSend | null): CrmThreadStatus {
+  if (!send) return "none";
+  if (send.status === "failed") return "failed";
+  if (send.status === "answered" || send.status === "no_answer")
+    return send.status;
+  if (send.tracking.uniqueClicks > 0 || send.status === "clicked")
+    return "clicked";
+  if (send.tracking.uniqueOpens > 0 || send.status === "opened")
+    return "opened";
+  if (send.status === "draft" || send.status === "queued") return send.status;
+  if (send.status === "logged") return "logged";
+  if (send.status === "sent" || send.status === "delivered") return "sent";
+  return "logged";
 }
 
 function nextStatus(

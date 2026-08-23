@@ -34,6 +34,8 @@ export type CrmPerson = {
   jobTitle: string | null;
   companyId: string | null;
   company: { id: string; name: string; domain: string | null } | null;
+  stageKey: string;
+  doNotContact: boolean;
   notes: string | null;
   createdBy: CrmCreatedBy;
   createdAt: string;
@@ -44,6 +46,7 @@ export type CrmOpportunity = {
   id: string;
   name: string;
   stage: string;
+  position: number;
   amountCents: number | null;
   currency: string;
   companyId: string | null;
@@ -116,15 +119,44 @@ export type CrmPage<T> = {
   items: T[];
   nextCursor: string | null;
   total: number;
+  stageCounts?: Record<string, number>;
+  totalAllStages?: number;
+};
+
+export type CrmThreadStatus =
+  | "none"
+  | "draft"
+  | "queued"
+  | "logged"
+  | "sent"
+  | "opened"
+  | "clicked"
+  | "failed"
+  | "answered"
+  | "no_answer";
+
+export type CrmThread = {
+  person: CrmPerson;
+  latestSend: CrmSend | null;
+  outboundCount: number;
+  status: CrmThreadStatus;
+};
+
+export type CrmStages = {
+  people: Array<{ key: string; label: string; position: number; playbook: string }>;
+  opportunities: Array<{ key: string; label: string; position: number }>;
 };
 
 export const crmKeys = {
   all: ["crm"] as const,
-  people: (search = "") => ["crm", "people", { search }] as const,
+  people: (search = "", stage = "") =>
+    ["crm", "people", { search, stage }] as const,
   companies: (search = "") => ["crm", "companies", { search }] as const,
   opportunities: (search = "") => ["crm", "opportunities", { search }] as const,
   campaigns: (search = "") => ["crm", "campaigns", { search }] as const,
   conversations: (search = "") => ["crm", "conversations", { search }] as const,
+  threads: (search = "") => ["crm", "threads", { search }] as const,
+  stages: ["crm", "stages"] as const,
   sends: (search = "", kind = "") =>
     ["crm", "sends", { search, kind }] as const,
 };
@@ -141,23 +173,30 @@ function listParams(search: string, extra?: Record<string, string>) {
   return query ? `?${query}` : "";
 }
 
-export function crmPeopleQueryOptions(search = "") {
+export function crmPeopleQueryOptions(search = "", stage = "") {
   return queryOptions({
-    queryKey: crmKeys.people(search),
+    queryKey: crmKeys.people(search, stage),
     queryFn: async (): Promise<CrmPage<CrmPerson>> => {
       const body = (await (
-        await client(`/api/crm/people${listParams(search)}`, {
-          fallback: "Could not load people",
-        })
+        await client(
+          `/api/crm/people${listParams(search, stage ? { stage } : undefined)}`,
+          {
+            fallback: "Could not load people",
+          },
+        )
       ).json()) as {
         people: CrmPerson[];
         nextCursor: string | null;
         total: number;
+        stageCounts?: Record<string, number>;
+        totalAllStages?: number;
       };
       return {
         items: body.people,
         nextCursor: body.nextCursor,
         total: body.total,
+        stageCounts: body.stageCounts ?? {},
+        totalAllStages: body.totalAllStages ?? body.total,
       };
     },
   });
@@ -190,9 +229,12 @@ export function crmOpportunitiesQueryOptions(search = "") {
     queryKey: crmKeys.opportunities(search),
     queryFn: async (): Promise<CrmPage<CrmOpportunity>> => {
       const body = (await (
-        await client(`/api/crm/opportunities${listParams(search)}`, {
-          fallback: "Could not load opportunities",
-        })
+        await client(
+          `/api/crm/opportunities${listParams(search, { limit: "200" })}`,
+          {
+            fallback: "Could not load opportunities",
+          },
+        )
       ).json()) as {
         opportunities: CrmOpportunity[];
         nextCursor: string | null;
@@ -225,6 +267,42 @@ export function crmCampaignsQueryOptions(search = "") {
         nextCursor: body.nextCursor,
         total: body.total,
       };
+    },
+  });
+}
+
+export function crmThreadsQueryOptions(search = "") {
+  return queryOptions({
+    queryKey: crmKeys.threads(search),
+    queryFn: async (): Promise<CrmPage<CrmThread>> => {
+      const body = (await (
+        await client(`/api/crm/threads${listParams(search)}`, {
+          fallback: "Could not load conversations",
+        })
+      ).json()) as {
+        threads: CrmThread[];
+        nextCursor: string | null;
+        total: number;
+      };
+      return {
+        items: body.threads,
+        nextCursor: body.nextCursor,
+        total: body.total,
+      };
+    },
+  });
+}
+
+export function crmStagesQueryOptions() {
+  return queryOptions({
+    queryKey: crmKeys.stages,
+    queryFn: async (): Promise<CrmStages> => {
+      const body = (await (
+        await client("/api/crm/stages", {
+          fallback: "Could not load stages",
+        })
+      ).json()) as CrmStages;
+      return body;
     },
   });
 }

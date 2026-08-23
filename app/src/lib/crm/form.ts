@@ -6,6 +6,7 @@ export const personFormSchema = z.object({
   phones: z.string(),
   jobTitle: z.string(),
   companyId: z.string(),
+  stageKey: z.string(),
   notes: z.string(),
 });
 

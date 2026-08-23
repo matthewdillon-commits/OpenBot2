@@ -353,7 +353,18 @@ describe("OpenBot database schema", () => {
       "crm_send_events",
     ]);
     expect(Object.keys(crmPeople)).toEqual(
-      expect.arrayContaining(["orgId", "name", "emails", "phones", "companyId"]),
+      expect.arrayContaining([
+        "orgId",
+        "name",
+        "emails",
+        "phones",
+        "companyId",
+        "stageKey",
+        "doNotContact",
+      ]),
+    );
+    expect(Object.keys(crmOpportunities)).toEqual(
+      expect.arrayContaining(["orgId", "name", "stage", "position"]),
     );
     expect(Object.keys(crmSends)).toEqual(
       expect.arrayContaining([
@@ -379,6 +390,17 @@ describe("OpenBot database schema", () => {
     expect(migration).toContain(
       `CREATE UNIQUE INDEX "crm_sends_tracking_token_key"`,
     );
+  });
+
+  test("adds LimitlessAI-2 stages in their own migration", async () => {
+    const migration = await readFile(
+      new URL("../drizzle/0012_crm_stages.sql", import.meta.url),
+      "utf8",
+    );
+    expect(migration).toContain(`"stage_key"`);
+    expect(migration).toContain(`"do_not_contact"`);
+    expect(migration).toContain(`"position"`);
+    expect(migration).toContain(`SET DEFAULT 'qualify'`);
   });
 
   test("adds the callback token columns in their own migration", async () => {

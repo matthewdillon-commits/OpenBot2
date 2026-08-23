@@ -6,6 +6,7 @@
  * contact a Bot wrote down. Sends are the email, SMS, and call records with open/click tracking.
  */
 import {
+  boolean,
   index,
   integer,
   pgEnum,
@@ -105,6 +106,11 @@ export const crmPeople = pgTable(
     companyId: uuid("company_id").references(() => crmCompanies.id, {
       onDelete: "set null",
     }),
+    /**
+     * LimitlessAI-2 outreach stage. Default New. DNC is both a stage and a hard flag.
+     */
+    stageKey: text("stage_key").notNull().default("new"),
+    doNotContact: boolean("do_not_contact").notNull().default(false),
     notes: text("notes"),
     ...createdByColumns(),
     createdAt: createdAt(),
@@ -113,6 +119,7 @@ export const crmPeople = pgTable(
   (table) => [
     index("crm_people_org_name_idx").on(table.orgId, table.name),
     index("crm_people_org_company_idx").on(table.orgId, table.companyId),
+    index("crm_people_org_stage_idx").on(table.orgId, table.stageKey),
     index("crm_people_org_created_at_idx").on(
       table.orgId,
       table.createdAt.desc(),
@@ -127,7 +134,10 @@ export const crmOpportunities = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     orgId: organizationIdColumn(),
     name: text("name").notNull(),
-    stage: text("stage").notNull().default("new"),
+    /** LimitlessAI-2 deal board: qualify, proposal, negotiation, won, lost. */
+    stage: text("stage").notNull().default("qualify"),
+    /** Order inside a board column. */
+    position: integer("position").notNull().default(0),
     amountCents: integer("amount_cents"),
     currency: text("currency").notNull().default("USD"),
     companyId: uuid("company_id").references(() => crmCompanies.id, {

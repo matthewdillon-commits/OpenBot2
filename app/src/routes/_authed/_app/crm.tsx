@@ -37,6 +37,7 @@ import {
   ItemTitle,
 } from "@/components/ui/item";
 import { Separator } from "@/components/ui/separator";
+import { indexSegments } from "@/lib/crm/index-view";
 import {
   campaignFormSchema,
   companyFormSchema,
@@ -53,32 +54,41 @@ import {
   createCrmOpportunityMutationOptions,
   createCrmPersonMutationOptions,
   createCrmSendMutationOptions,
+  updateCrmOpportunityMutationOptions,
+  updateCrmPersonMutationOptions,
 } from "@/lib/crm/mutations";
 import {
+  type CrmOpportunity,
+  type CrmThread,
   crmCampaignsQueryOptions,
   crmCompaniesQueryOptions,
-  crmConversationsQueryOptions,
   crmOpportunitiesQueryOptions,
   crmPeopleQueryOptions,
-  crmSendsQueryOptions,
+  crmThreadsQueryOptions,
 } from "@/lib/crm/queries";
+import {
+  CONTACT_STAGE_DEFS,
+  contactStageLabel,
+  DEAL_STAGE_DEFS,
+  DEFAULT_DEAL_STAGE,
+  normalizeDealStage,
+} from "@/lib/crm/stages";
 import { queryClient } from "@/query-client";
 
 /**
- * The organization's book of people, companies, opportunities, campaigns, and sends.
+ * The organization's book of people, companies, opportunities, campaigns, and conversations.
  *
- * This is not `/admin/people`. That screen is who may sign in. This one is who the organization
- * is talking to, including email, SMS, and calls with open/click tracking.
+ * This is not `/admin/people`. That screen is who may sign in. This one is LimitlessAI-2's CRM:
+ * a people pipeline, a five-column deal board, campaigns, and conversations derived from sends.
  *
- * Wide because a roster of contacts and sends is a table to scan, the same reason audit is wide.
+ * Wide because a roster and a deal board are tables to scan, the same reason audit is wide.
  */
 const tabs = [
   ["people", "People"],
   ["companies", "Companies"],
   ["opportunities", "Opportunities"],
   ["campaigns", "Campaigns"],
-  ["sends", "Sends"],
-  ["activity", "Activity"],
+  ["conversations", "Conversations"],
 ] as const;
 
 type Tab = (typeof tabs)[number][0];
@@ -94,7 +104,12 @@ type DialogKind =
   | null;
 
 const crmSearchSchema = z.object({
-  tab: z.enum(tabs.map(([key]) => key) as [Tab, ...Tab[]]).optional(),
+  tab: z.preprocess(
+    (value) =>
+      value === "sends" || value === "activity" ? "conversations" : value,
+    z.enum(tabs.map(([key]) => key) as [Tab, ...Tab[]]).optional(),
+  ),
+  stage: z.string().optional(),
 });
 
 export const Route = createFileRoute("/_authed/_app/crm")({
@@ -103,25 +118,31 @@ export const Route = createFileRoute("/_authed/_app/crm")({
 });
 
 function CrmPage() {
-  const { tab: tabParam } = Route.useSearch();
+  const { tab: tabParam, stage: stageParam } = Route.useSearch();
   const navigate = Route.useNavigate();
   const tab: Tab = tabParam ?? "people";
+  const stageFilter = stageParam?.trim() || "all";
   const [dialog, setDialog] = useState<DialogKind>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const people = useQuery(crmPeopleQueryOptions());
+  const people = useQuery(
+    crmPeopleQueryOptions("", stageFilter === "all" ? "" : stageFilter),
+  );
   const companies = useQuery(crmCompaniesQueryOptions());
   const opportunities = useQuery(crmOpportunitiesQueryOptions());
   const campaigns = useQuery(crmCampaignsQueryOptions());
-  const conversations = useQuery(crmConversationsQueryOptions());
-  const sends = useQuery(crmSendsQueryOptions());
+  const threads = useQuery(crmThreadsQueryOptions());
 
   const createPerson = useMutation(createCrmPersonMutationOptions(queryClient));
+  const updatePerson = useMutation(updateCrmPersonMutationOptions(queryClient));
   const createCompany = useMutation(
     createCrmCompanyMutationOptions(queryClient),
   );
   const createOpportunity = useMutation(
     createCrmOpportunityMutationOptions(queryClient),
+  );
+  const updateOpportunity = useMutation(
+    updateCrmOpportunityMutationOptions(queryClient),
   );
   const createCampaign = useMutation(
     createCrmCampaignMutationOptions(queryClient),
@@ -132,64 +153,75 @@ function CrmPage() {
   const createSend = useMutation(createCrmSendMutationOptions(queryClient));
 
   const primary = primaryAction(tab);
+  const peopleSegments = indexSegments(
+    CONTACT_STAGE_DEFS,
+    people.data?.stageCounts ?? {},
+    people.data?.totalAllStages ?? people.data?.total ?? 0,
+    "All People",
+    stageFilter,
+  );
 
   return (
     <PageShell
       width="wide"
       title="CRM"
-      description="People, companies, opportunities, and every email, SMS, or call this organization sent — with open and click tracking."
+      description="People by pipeline stage, companies, a deal board, campaigns, and conversations from every email, SMS, or call."
       action={
-        tab === "sends" ? (
-          <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2">
+          {tab !== "conversations" ? (
             <Button
               size="sm"
               type="button"
               onClick={() => {
                 setError(null);
-                setDialog("email");
+                setDialog(primary.kind);
               }}
             >
-              <IconMail />
-              Email
+              <IconPlus />
+              {primary.label}
             </Button>
-            <Button
-              size="sm"
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setError(null);
-                setDialog("sms");
-              }}
-            >
-              <IconMessage />
-              SMS
-            </Button>
-            <Button
-              size="sm"
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setError(null);
-                setDialog("call");
-              }}
-            >
-              <IconPhone />
-              Call
-            </Button>
-          </div>
-        ) : (
-          <Button
-            size="sm"
-            type="button"
-            onClick={() => {
-              setError(null);
-              setDialog(primary.kind);
-            }}
-          >
-            <IconPlus />
-            {primary.label}
-          </Button>
-        )
+          ) : null}
+          {tab === "people" || tab === "conversations" ? (
+            <>
+              <Button
+                size="sm"
+                type="button"
+                variant={tab === "conversations" ? "default" : "outline"}
+                onClick={() => {
+                  setError(null);
+                  setDialog("email");
+                }}
+              >
+                <IconMail />
+                Email
+              </Button>
+              <Button
+                size="sm"
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setError(null);
+                  setDialog("sms");
+                }}
+              >
+                <IconMessage />
+                SMS
+              </Button>
+              <Button
+                size="sm"
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setError(null);
+                  setDialog("call");
+                }}
+              >
+                <IconPhone />
+                Call
+              </Button>
+            </>
+          ) : null}
+        </div>
       }
     >
       <PageSection>
@@ -214,37 +246,73 @@ function CrmPage() {
       </PageSection>
 
       {tab === "people" ? (
-        <CrmList
-          pending={people.isPending}
-          error={people.error}
-          empty="No people yet."
-          items={people.data?.items ?? []}
-          render={(person, index, last) => (
-            <StaggerItem index={index} key={person.id}>
-              <Item size="sm">
-                <ItemContent>
-                  <ItemTitle>{person.name}</ItemTitle>
-                  <ItemDescription className="line-clamp-none">
-                    {[
-                      person.emails[0],
-                      person.phones[0],
-                      person.company?.name,
-                      person.jobTitle,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ") || "No contact details"}
-                  </ItemDescription>
-                </ItemContent>
-                <ItemActions>
-                  <span className="text-muted-foreground text-xs tabular-nums">
-                    {person.createdBy.name}
-                  </span>
-                </ItemActions>
-              </Item>
-              {!last ? <Separator /> : null}
-            </StaggerItem>
-          )}
-        />
+        <>
+          <div className="mb-4">
+            <label className="block">
+              <span className="sr-only">People view</span>
+              <select
+                className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                value={stageFilter}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  void navigate({
+                    search: {
+                      tab: "people",
+                      stage: next === "all" ? undefined : next,
+                    },
+                  });
+                }}
+              >
+                {peopleSegments.map((segment) => (
+                  <option key={segment.key} value={segment.key}>
+                    {segment.label} ({segment.count})
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <CrmList
+            pending={people.isPending}
+            error={people.error}
+            empty="No people in this view."
+            items={people.data?.items ?? []}
+            render={(person, index, last) => (
+              <StaggerItem index={index} key={person.id}>
+                <Item size="sm">
+                  <ItemContent>
+                    <ItemTitle>{person.name}</ItemTitle>
+                    <ItemDescription className="line-clamp-none">
+                      {[
+                        person.emails[0],
+                        person.phones[0],
+                        person.company?.name,
+                        person.jobTitle,
+                        person.doNotContact ? "DNC" : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ") || "No contact details"}
+                    </ItemDescription>
+                  </ItemContent>
+                  <ItemActions>
+                    <StageSelect
+                      value={person.stageKey}
+                      disabled={updatePerson.isPending}
+                      options={CONTACT_STAGE_DEFS}
+                      onChange={(stageKey) => {
+                        void updatePerson
+                          .mutateAsync({ id: person.id, input: { stageKey } })
+                          .catch((thrown) =>
+                            setError((thrown as Error).message),
+                          );
+                      }}
+                    />
+                  </ItemActions>
+                </Item>
+                {!last ? <Separator /> : null}
+              </StaggerItem>
+            )}
+          />
+        </>
       ) : null}
 
       {tab === "companies" ? (
@@ -277,34 +345,16 @@ function CrmPage() {
       ) : null}
 
       {tab === "opportunities" ? (
-        <CrmList
+        <DealBoard
           pending={opportunities.isPending}
           error={opportunities.error}
-          empty="No opportunities yet."
           items={opportunities.data?.items ?? []}
-          render={(opportunity, index, last) => (
-            <StaggerItem index={index} key={opportunity.id}>
-              <Item size="sm">
-                <ItemContent>
-                  <ItemTitle>{opportunity.name}</ItemTitle>
-                  <ItemDescription className="line-clamp-none">
-                    {[
-                      opportunity.stage,
-                      opportunity.company?.name,
-                      opportunity.person?.name,
-                      formatAmount(
-                        opportunity.amountCents,
-                        opportunity.currency,
-                      ),
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </ItemDescription>
-                </ItemContent>
-              </Item>
-              {!last ? <Separator /> : null}
-            </StaggerItem>
-          )}
+          busy={updateOpportunity.isPending}
+          onMove={(id, stage) => {
+            void updateOpportunity
+              .mutateAsync({ id, input: { stage } })
+              .catch((thrown) => setError((thrown as Error).message));
+          }}
         />
       ) : null}
 
@@ -332,79 +382,27 @@ function CrmPage() {
         />
       ) : null}
 
-      {tab === "sends" ? (
+      {tab === "conversations" ? (
         <CrmList
-          pending={sends.isPending}
-          error={sends.error}
-          empty="No emails, texts, or calls recorded yet."
-          items={sends.data?.items ?? []}
-          render={(send, index, last) => (
-            <StaggerItem index={index} key={send.id}>
+          pending={threads.isPending}
+          error={threads.error}
+          empty="No conversations yet. Send an email, SMS, or call to start one."
+          items={threads.data?.items ?? []}
+          render={(thread, index, last) => (
+            <StaggerItem index={index} key={thread.person.id}>
               <Item size="sm">
                 <ItemContent>
-                  <ItemTitle>
-                    {send.kind === "email"
-                      ? "Email"
-                      : send.kind === "sms"
-                        ? "SMS"
-                        : "Call"}{" "}
-                    to {send.person?.name ?? send.toAddress}
-                  </ItemTitle>
+                  <ItemTitle>{thread.person.name}</ItemTitle>
                   <ItemDescription className="line-clamp-none">
-                    {[
-                      send.subject,
-                      send.status,
-                      send.provider === "logged"
-                        ? "recorded locally"
-                        : send.provider,
-                      send.kind === "email"
-                        ? `${send.tracking.uniqueOpens} opens · ${send.tracking.uniqueClicks} clicks`
-                        : null,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
+                    {threadSummary(thread)}
                   </ItemDescription>
                 </ItemContent>
                 <ItemActions>
-                  {send.kind === "email" ? (
-                    <IconMail className="size-4 text-muted-foreground" />
-                  ) : send.kind === "sms" ? (
-                    <IconMessage className="size-4 text-muted-foreground" />
-                  ) : (
-                    <IconPhone className="size-4 text-muted-foreground" />
-                  )}
-                </ItemActions>
-              </Item>
-              {!last ? <Separator /> : null}
-            </StaggerItem>
-          )}
-        />
-      ) : null}
-
-      {tab === "activity" ? (
-        <CrmList
-          pending={conversations.isPending}
-          error={conversations.error}
-          empty="No activity yet."
-          items={conversations.data?.items ?? []}
-          render={(conversation, index, last) => (
-            <StaggerItem index={index} key={conversation.id}>
-              <Item size="sm">
-                <ItemContent>
-                  <ItemTitle>{conversation.subject}</ItemTitle>
-                  <ItemDescription className="line-clamp-none">
-                    {[
-                      conversation.channel,
-                      conversation.person?.name,
-                      conversation.company?.name,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </ItemDescription>
-                </ItemContent>
-                <ItemActions>
-                  <span className="text-muted-foreground text-xs tabular-nums">
-                    {relativeDay(conversation.occurredAt)}
+                  <span className="text-muted-foreground text-xs">
+                    {threadStatusLabel(thread.status)}
+                    {thread.latestSend?.kind === "email"
+                      ? ` · ${thread.latestSend.tracking.uniqueOpens} opens · ${thread.latestSend.tracking.uniqueClicks} clicks`
+                      : ""}
                   </span>
                 </ItemActions>
               </Item>
@@ -433,6 +431,7 @@ function CrmPage() {
                     phones: splitList(values.phones),
                     jobTitle: values.jobTitle || null,
                     companyId: values.companyId || null,
+                    stageKey: values.stageKey || "new",
                     notes: values.notes || null,
                   });
                   setDialog(null);
@@ -471,7 +470,7 @@ function CrmPage() {
                 try {
                   await createOpportunity.mutateAsync({
                     name: values.name,
-                    stage: values.stage || "new",
+                    stage: values.stage || DEFAULT_DEAL_STAGE,
                     amountCents: dollarsToCents(values.amount),
                     personId: values.personId || null,
                     companyId: values.companyId || null,
@@ -600,8 +599,7 @@ function primaryAction(tab: Tab): { kind: Exclude<DialogKind, null>; label: stri
   if (tab === "opportunities")
     return { kind: "opportunity", label: "New opportunity" };
   if (tab === "campaigns") return { kind: "campaign", label: "New campaign" };
-  if (tab === "sends") return { kind: "email", label: "New send" };
-  if (tab === "activity") return { kind: "note", label: "New note" };
+  if (tab === "conversations") return { kind: "email", label: "Email" };
   return { kind: "person", label: "New person" };
 }
 
@@ -621,6 +619,7 @@ function PersonDialog({
       phones: "",
       jobTitle: "",
       companyId: "",
+      stageKey: "new",
       notes: "",
     },
     validators: { onSubmit: personFormSchema },
@@ -663,6 +662,16 @@ function PersonDialog({
               options={companies.map((company) => ({
                 value: company.id,
                 label: company.name,
+              }))}
+            />
+            <SelectField
+              form={form}
+              name="stageKey"
+              label="Stage"
+              blank={false}
+              options={CONTACT_STAGE_DEFS.map((stage) => ({
+                value: stage.key,
+                label: stage.label,
               }))}
             />
             <TextField form={form} name="notes" label="Notes" />
@@ -745,7 +754,7 @@ function OpportunityDialog({
   const form = useForm({
     defaultValues: {
       name: "",
-      stage: "new",
+      stage: DEFAULT_DEAL_STAGE as string,
       amount: "",
       personId: "",
       companyId: "",
@@ -769,7 +778,16 @@ function OpportunityDialog({
         <DialogBody className="mt-4 overflow-y-auto">
           <FieldGroup>
             <TextField form={form} name="name" label="Name" />
-            <TextField form={form} name="stage" label="Stage" />
+            <SelectField
+              form={form}
+              name="stage"
+              label="Stage"
+              blank={false}
+              options={DEAL_STAGE_DEFS.map((stage) => ({
+                value: stage.key,
+                label: stage.label,
+              }))}
+            />
             <TextField form={form} name="amount" label="Amount" />
             <SelectField
               form={form}
@@ -1076,12 +1094,14 @@ function SelectField({
   label,
   options,
   onPicked,
+  blank = true,
 }: {
   form: AnyCrmForm;
   name: string;
   label: string;
   options: { value: string; label: string }[];
   onPicked?: (value: string) => void;
+  blank?: boolean;
 }) {
   return (
     <form.Field name={name}>
@@ -1098,7 +1118,7 @@ function SelectField({
               onPicked?.(event.target.value);
             }}
           >
-            <option value="">None</option>
+            {blank ? <option value="">None</option> : null}
             {options.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -1109,6 +1129,139 @@ function SelectField({
       )}
     </form.Field>
   );
+}
+
+function StageSelect({
+  value,
+  options,
+  disabled,
+  onChange,
+}: {
+  value: string;
+  options: Array<{ key: string; label: string }>;
+  disabled?: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <select
+      className="h-8 max-w-40 rounded-md border border-input bg-background px-2 text-xs"
+      value={value}
+      disabled={disabled}
+      aria-label="Stage"
+      onChange={(event) => onChange(event.target.value)}
+    >
+      {options.map((option) => (
+        <option key={option.key} value={option.key}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function DealBoard({
+  pending,
+  error,
+  items,
+  busy,
+  onMove,
+}: {
+  pending: boolean;
+  error: unknown;
+  items: CrmOpportunity[];
+  busy: boolean;
+  onMove: (id: string, stage: string) => void;
+}) {
+  if (pending) return null;
+  if (error) {
+    return (
+      <p className="text-destructive text-sm" role="alert">
+        Could not load this list.
+      </p>
+    );
+  }
+  if (items.length === 0) return <PageEmpty>No opportunities yet.</PageEmpty>;
+  return (
+    // A deal board is five columns, not a settings list — the same reason audit is wide.
+    <div className="grid gap-3 md:grid-cols-5">
+      {DEAL_STAGE_DEFS.map((column) => {
+        const columnItems = items
+          .filter((item) => normalizeDealStage(item.stage) === column.key)
+          .sort((left, right) => left.position - right.position);
+        return (
+          <section key={column.key} className="min-w-0">
+            <h3 className="mb-2 text-sm">
+              {column.label}{" "}
+              <span className="text-muted-foreground tabular-nums">
+                {columnItems.length}
+              </span>
+            </h3>
+            {columnItems.length === 0 ? (
+              <PageEmpty>None.</PageEmpty>
+            ) : (
+              <PageRows>
+                {columnItems.map((opportunity, index) => (
+                  <StaggerItem index={index} key={opportunity.id}>
+                    <Item size="sm">
+                      <ItemContent>
+                        <ItemTitle>{opportunity.name}</ItemTitle>
+                        <ItemDescription className="line-clamp-none">
+                          {[
+                            opportunity.company?.name,
+                            opportunity.person?.name,
+                            formatAmount(
+                              opportunity.amountCents,
+                              opportunity.currency,
+                            ),
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </ItemDescription>
+                      </ItemContent>
+                      <ItemActions>
+                        <StageSelect
+                          value={normalizeDealStage(opportunity.stage)}
+                          disabled={busy}
+                          options={DEAL_STAGE_DEFS}
+                          onChange={(stage) => onMove(opportunity.id, stage)}
+                        />
+                      </ItemActions>
+                    </Item>
+                    {index < columnItems.length - 1 ? <Separator /> : null}
+                  </StaggerItem>
+                ))}
+              </PageRows>
+            )}
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+function threadSummary(thread: CrmThread): string {
+  if (!thread.latestSend) {
+    return [thread.person.company?.name, contactStageLabel(thread.person.stageKey)]
+      .filter(Boolean)
+      .join(" · ") || "No send yet";
+  }
+  const send = thread.latestSend;
+  const kind =
+    send.kind === "email" ? "Email" : send.kind === "sms" ? "SMS" : "Call";
+  return [
+    kind,
+    send.subject,
+    send.toAddress,
+    thread.outboundCount > 1 ? `${thread.outboundCount} sends` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function threadStatusLabel(status: CrmThread["status"]): string {
+  if (status === "none") return "No activity";
+  if (status === "no_answer") return "No answer";
+  return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
 function fieldMessage(errors: unknown[]): string | null {
@@ -1137,10 +1290,3 @@ function formatAmount(cents: number | null, currency: string): string | null {
   }).format(cents / 100);
 }
 
-function relativeDay(iso: string): string {
-  const then = new Date(iso).getTime();
-  const days = Math.round((Date.now() - then) / 86_400_000);
-  if (days <= 0) return "today";
-  if (days === 1) return "yesterday";
-  return `${days}d ago`;
-}

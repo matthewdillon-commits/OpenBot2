@@ -474,7 +474,7 @@ function summarise(kind: CrmKind, record: AnyRecord): string {
     const emails =
       person.emails.length > 0 ? person.emails.join(", ") : "no email";
     const company = person.company?.name ?? "no company";
-    return `${person.name} (${person.id})\n${emails}\n${company}\ncreated by ${person.createdBy.name}`;
+    return `${person.name} (${person.id})\n${emails}\n${company}\n${person.stageKey}${person.doNotContact ? " · DNC" : ""}\ncreated by ${person.createdBy.name}`;
   }
   if (kind === "company") {
     const company = record as CrmCompany;

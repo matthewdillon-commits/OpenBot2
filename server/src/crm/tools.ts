@@ -50,6 +50,8 @@ const createParameters = z.object({
   phone: z.string().optional(),
   notes: z.string().optional(),
   stage: z.string().optional(),
+  stage_key: z.string().optional(),
+  do_not_contact: z.boolean().optional(),
   amount_cents: z.number().optional(),
   currency: z.string().optional(),
   expected_close_at: z.string().optional(),
@@ -134,9 +136,9 @@ export function crmTools(options: {
     {
       name: CRM_CREATE_TOOL,
       description:
-        "Create a CRM record. kind=person needs name (emails, phones, job_title, company_id optional). " +
+        "Create a CRM record. kind=person needs name (emails, phones, job_title, company_id, stage_key optional). " +
         "kind=company needs name (domain, website, industry, phone optional). " +
-        "kind=opportunity needs name (stage, amount_cents, company_id, person_id optional). " +
+        "kind=opportunity needs name (stage qualify|proposal|negotiation|won|lost, amount_cents, company_id, person_id optional). " +
         "kind=campaign needs name. kind=conversation needs subject. " +
         "kind=send needs to_address and send_kind=email|sms|call. " +
         "The row is recorded as created by this Bot.",
@@ -158,7 +160,8 @@ export function crmTools(options: {
       name: CRM_UPDATE_TOOL,
       description:
         "Update a CRM record by kind and id. Pass only the fields that should change. " +
-        "Use company_id on a person to link them to a company.",
+        "Use company_id on a person to link them to a company. " +
+        "Use stage_key to move a person, or stage to move an opportunity on the deal board.",
       parameters: updateParameters,
       execute: async (args: unknown) => {
         const parsed = updateParameters.safeParse(args);
@@ -227,7 +230,14 @@ function fieldsFrom(
   if (data.industry !== undefined) fields.industry = data.industry;
   if (data.phone !== undefined) fields.phone = data.phone;
   if (data.notes !== undefined) fields.notes = data.notes;
-  if (data.stage !== undefined) fields.stage = data.stage;
+  if (kind === "person") {
+    if (data.stage_key !== undefined) fields.stageKey = data.stage_key;
+    else if (data.stage !== undefined) fields.stageKey = data.stage;
+  } else if (data.stage !== undefined) {
+    fields.stage = data.stage;
+  }
+  if (data.do_not_contact !== undefined)
+    fields.doNotContact = data.do_not_contact;
   if (data.amount_cents !== undefined) fields.amountCents = data.amount_cents;
   if (data.currency !== undefined) fields.currency = data.currency;
   if (data.expected_close_at !== undefined)

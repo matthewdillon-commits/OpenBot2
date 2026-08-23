@@ -8,6 +8,12 @@ import {
   parsePersonPatch,
   parseSendInput,
 } from "../src/crm/routes";
+import {
+  CONTACT_STAGE_KEYS,
+  DEFAULT_DEAL_STAGE,
+  normalizeContactStage,
+  normalizeDealStage,
+} from "../src/crm/stages";
 import type {
   CrmCreatedBy,
   CrmPage,
@@ -15,6 +21,7 @@ import type {
   CrmSend,
   CrmStore,
 } from "../src/crm/store";
+import { deriveThreadStatus } from "../src/crm/store";
 import { crmTools } from "../src/crm/tools";
 import { REFUSAL_MARKER } from "../src/plugins/tools";
 
@@ -34,6 +41,8 @@ function person(overrides: Partial<CrmPerson> = {}): CrmPerson {
     jobTitle: "Buyer",
     companyId: null,
     company: null,
+    stageKey: "new",
+    doNotContact: false,
     notes: null,
     createdBy: CREATED_BY,
     createdAt: "2026-08-22T00:00:00.000Z",
@@ -89,6 +98,7 @@ function fakeStore(overrides: Partial<CrmStore> = {}): CrmStore & {
   const emptyPage = async () => page([]);
   const store: CrmStore = {
     listPeople: async () => page([]),
+    listThreads: async () => page([]),
     getPerson: async () => undefined,
     createPerson: async (_orgId, input, createdBy) => {
       const row = person({
@@ -181,6 +191,12 @@ describe("CRM input parsers", () => {
       ok: true,
       value: { name: "Casey", emails: ["a@b.test"] },
     });
+    expect(
+      parsePersonInput({ name: "Casey", stageKey: "contacted" }),
+    ).toEqual({
+      ok: true,
+      value: { name: "Casey", stageKey: "contacted" },
+    });
   });
 
   test("a person patch may omit the name", () => {
@@ -201,6 +217,48 @@ describe("CRM input parsers", () => {
       ok: true,
       value: { kind: "sms", toAddress: "+15550100", body: "Hi" },
     });
+  });
+});
+
+describe("CRM stages", () => {
+  test("people start at new and deals at qualify", () => {
+    expect(normalizeContactStage(undefined)).toBe("new");
+    expect(normalizeContactStage("replied")).toBe("replied");
+    expect(normalizeDealStage(undefined)).toBe(DEFAULT_DEAL_STAGE);
+    expect(normalizeDealStage("new")).toBe("qualify");
+    expect(CONTACT_STAGE_KEYS).toContain("dnc");
+  });
+
+  test("a conversation status prefers a click over an open, and a fail first", () => {
+    expect(deriveThreadStatus(null)).toBe("none");
+    expect(
+      deriveThreadStatus(
+        send({
+          status: "sent",
+          tracking: {
+            opens: 2,
+            clicks: 1,
+            uniqueOpens: 1,
+            uniqueClicks: 1,
+            lastEventAt: "2026-08-22T00:00:00.000Z",
+          },
+        }),
+      ),
+    ).toBe("clicked");
+    expect(
+      deriveThreadStatus(
+        send({
+          status: "failed",
+          tracking: {
+            opens: 1,
+            clicks: 0,
+            uniqueOpens: 1,
+            uniqueClicks: 0,
+            lastEventAt: null,
+          },
+        }),
+      ),
+    ).toBe("failed");
   });
 });
 

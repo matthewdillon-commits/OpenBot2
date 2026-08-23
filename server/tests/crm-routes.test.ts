@@ -26,6 +26,8 @@ function person(overrides: Partial<CrmPerson> = {}): CrmPerson {
     jobTitle: "Buyer",
     companyId: null,
     company: null,
+    stageKey: "new",
+    doNotContact: false,
     notes: null,
     createdBy: { kind: "user", id: USER.id, name: USER.name },
     createdAt: "2026-08-22T00:00:00.000Z",
@@ -96,6 +98,7 @@ function appWith(options?: {
       total: people.length,
       ...(query?.orgId ? {} : {}),
     }),
+    listThreads: async () => emptyPage(),
     getPerson: async (_orgId, id) => people.find((entry) => entry.id === id),
     createPerson: async (_orgId, input, actor) => {
       createdBy.push(actor);
@@ -203,6 +206,34 @@ describe("CRM HTTP routes", () => {
     };
     expect(body.total).toBe(1);
     expect(body.people[0]?.name).toBe("Casey Chen");
+    expect(body.people[0]?.stageKey).toBe("new");
+    expect(JSON.stringify(body)).not.toContain("trackingToken");
+  });
+
+  test("lists the LimitlessAI-2 stage catalog", async () => {
+    const { request } = appWith();
+    const response = await request("/api/crm/stages");
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      people: Array<{ key: string }>;
+      opportunities: Array<{ key: string }>;
+    };
+    expect(body.people.map((stage) => stage.key)).toContain("contacted");
+    expect(body.opportunities.map((stage) => stage.key)).toEqual([
+      "qualify",
+      "proposal",
+      "negotiation",
+      "won",
+      "lost",
+    ]);
+  });
+
+  test("lists conversation threads without a tracking token", async () => {
+    const { request } = appWith({ people: [person()] });
+    const response = await request("/api/crm/threads");
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { threads: unknown[]; total: number };
+    expect(body.threads).toEqual([]);
     expect(JSON.stringify(body)).not.toContain("trackingToken");
   });
 

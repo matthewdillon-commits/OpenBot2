@@ -350,4 +350,77 @@ describe("CRM against a real store", () => {
     expect(tracked?.tracking.uniqueOpens).toBe(1);
     expect(tracked?.tracking.uniqueClicks).toBe(1);
   });
+
+  test("people list by stage and conversations come from sends", async () => {
+    if (!databaseUrl) return;
+    await ensureLocalOrganization(database);
+    const actor = await createUser();
+    const orgId = actor.orgId ?? LOCAL_ORGANIZATION_ID;
+    const fresh = await store.createPerson(
+      orgId,
+      { name: "New Lead", emails: ["new@acme.test"] },
+      { kind: "user", id: actor.id, name: "CRM Test User" },
+    );
+    createdPersonIds.push(fresh.id);
+    const contacted = await store.createPerson(
+      orgId,
+      { name: "Reached", emails: ["reached@acme.test"], stageKey: "contacted" },
+      { kind: "user", id: actor.id, name: "CRM Test User" },
+    );
+    createdPersonIds.push(contacted.id);
+    expect(fresh.stageKey).toBe("new");
+    expect(contacted.stageKey).toBe("contacted");
+
+    const listed = await store.listPeople({ orgId, stage: "contacted" });
+    expect(listed.items.every((row) => row.stageKey === "contacted")).toBe(true);
+    expect(listed.items.some((row) => row.id === contacted.id)).toBe(true);
+    expect(listed.items.some((row) => row.id === fresh.id)).toBe(false);
+    expect(listed.stageCounts?.contacted).toBeGreaterThanOrEqual(1);
+    expect(listed.totalAllStages).toBeGreaterThanOrEqual(listed.total);
+
+    const deal = await store.createOpportunity(
+      orgId,
+      { name: "Acme seat" },
+      { kind: "user", id: actor.id, name: "CRM Test User" },
+    );
+    createdOpportunityIds.push(deal.id);
+    expect(deal.stage).toBe("qualify");
+    const moved = await store.updateOpportunity(orgId, deal.id, {
+      stage: "proposal",
+    });
+    expect(moved?.stage).toBe("proposal");
+
+    const send = await store.createSend(
+      orgId,
+      {
+        kind: "email",
+        toAddress: "reached@acme.test",
+        subject: "Hello",
+        personId: contacted.id,
+      },
+      { kind: "user", id: actor.id, name: "CRM Test User" },
+    );
+    createdSendIds.push(send.id);
+    const threads = await store.listThreads({ orgId, search: "Reached" });
+    const thread = threads.items.find((row) => row.person.id === contacted.id);
+    expect(thread?.latestSend?.id).toBe(send.id);
+    expect(thread?.status).toBe("queued");
+    expect(JSON.stringify(threads)).not.toContain("trackingToken");
+
+    const dnc = await store.updatePerson(orgId, contacted.id, {
+      stageKey: "dnc",
+    });
+    expect(dnc?.doNotContact).toBe(true);
+    await expect(
+      store.createSend(
+        orgId,
+        {
+          kind: "email",
+          toAddress: "reached@acme.test",
+          personId: contacted.id,
+        },
+        { kind: "user", id: actor.id, name: "CRM Test User" },
+      ),
+    ).rejects.toThrow(/Do Not Contact/);
+  });
 });

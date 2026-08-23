@@ -114,11 +114,13 @@ See [coworkers.md](coworkers.md).
 
 ## CRM
 
-The organization's CRM is the book of people, companies, opportunities, campaigns, conversations, and sends. It is not `/admin/people`, which is who may sign in.
+The organization's CRM is LimitlessAI-2's five-module book: people, companies, opportunities, campaigns, and conversations. It is not `/admin/people`, which is who may sign in.
 
 Rows live in `crm_people`, `crm_companies`, `crm_opportunities`, `crm_campaigns`, `crm_conversations`, `crm_sends`, and `crm_send_events`, each scoped by `org_id`. Created-by is stored as a kind (`user`, `bot`, or `system`) plus the id and the display name at write time.
 
-Sends are email, SMS, or call. SMTP and Twilio deliver when configured; otherwise the row is `logged` rather than pretending a message left. Email opens and clicks use a tracking token that is write-only on the list: a 1×1 pixel and an http(s) click redirect.
+People carry `stage_key` (the outreach pipeline) and `do_not_contact`. The People index counts every stage on the server (`stageCounts`, `totalAllStages`) so the views menu stays honest past one page. Opportunities default to `qualify` and move across qualify / proposal / negotiation / won / lost. `crm_conversations` is still the notes table; the Conversations tab reads `GET /api/crm/threads`, one row per person from their latest send and its open/click events.
+
+Sends are email, SMS, or call. SMTP and Twilio deliver when configured; otherwise the row is `logged` rather than pretending a message left. A person marked DNC cannot be sent to. Email opens and clicks use a tracking token that is write-only on the list: a 1×1 pixel and an http(s) click redirect.
 
 Bots are offered `crm_search`, `crm_get`, `crm_create`, `crm_update`, and `crm_send`. Every call goes through the gateway: resolve the kind and fields, decide against the live policy (`intent == "crm"` or the tool name), write an audit row (`crm.record_read`, `crm.record_written`, or `crm.record_refused`), and only then act. A deny leaves the tables alone.
 
