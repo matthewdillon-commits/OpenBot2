@@ -269,12 +269,7 @@ function SignScreen() {
                   <button
                     className="mt-2 flex h-[52px] w-full items-center justify-center gap-2 rounded-[12px] bg-[#111] text-[15px] font-medium text-white transition-opacity enabled:hover:opacity-90 disabled:bg-[#d4d4d4] disabled:text-white"
                     data-testid="button-client-login"
-                    disabled={
-                      busy ||
-                      email.trim().length === 0 ||
-                      password.length < 8 ||
-                      (mode === "up" && name.trim().length === 0)
-                    }
+                    disabled={busy}
                     type="submit"
                   >
                     {opening === "email"
