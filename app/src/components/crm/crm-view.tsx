@@ -624,8 +624,8 @@ function PeopleIndex({
                 </td>
                 <td className="ui-crm-col-meta">
                   <span className="ui-crm-pill ui-twenty-actor">
-                    {person.createdBy.kind !== "user" ? <BotMark /> : null}
-                    <span>{person.createdBy.name}</span>
+                    <BotMark />
+                    <span>System</span>
                   </span>
                 </td>
                 <td>

@@ -337,7 +337,7 @@ function DealsPanel({
             onClick={onCreate}
             className="ui-btn h-8 !min-h-0 !rounded-[8px] !px-2.5 text-12"
           >
-            {busy ? "Creating…" : "Create"}
+            {busy ? "Creating…" : "Save"}
           </button>
           <button
             type="button"
