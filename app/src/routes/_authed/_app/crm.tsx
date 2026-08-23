@@ -552,8 +552,11 @@ function CrmPage() {
   );
 }
 
-/** Shared field helper; each dialog's form names a different field union. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+/**
+ * Shared field helper; each dialog's `useForm` names a different field union, so the helpers take
+ * the form as `any` rather than a generated type that cannot be shared.
+ */
+// biome-ignore lint/suspicious/noExplicitAny: TanStack Form field-name unions cannot be shared
 type AnyCrmForm = any;
 
 type CrmField = {
