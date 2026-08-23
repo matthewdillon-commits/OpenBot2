@@ -52,6 +52,7 @@ Sessions survive and nobody signs in again.
 ### Added
 
 - **The product name is LimitlessAI.** Sign-in, the sidebar, the browser title, settings, and credentials copy all take it from the tenant package `product_name`.
+- **The sign-in screen matches LimitlessAI-2.** Welcome Back, rounded fields, a navy Sign In, then Continue with Google when `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` are set. The same Google account links to an existing email/password user.
 - **Email and password sign-in, without an OAuth client.** `OPENBOT_EMAIL_AUTH=true` with the usual Better Auth session values shows Sign in / Create account. Create-account asks for an organization name so the first workspace is visible before anybody is inside the app. A signed-in person can also create another organization from `/o`.
 - **A phone can open the sidebar.** The rail becomes a sheet under 768px; a bar at the top of the app, Admin, and Settings opens it. The composer no longer assumes a desktop width, and a channel's detail pane is a full-screen overlay on a phone instead of shrinking the transcript.
 - **A channel can hold a room of up to eight coworkers.** New channel's To: field takes several people, in the order they will appear, and the first is the lead. One shared thread; one speaker per message you send. `@` a member to have them answer that turn — a name that is not already in the room stays in the words and does not invite them yet. Replies are labelled with who spoke, and Watch / settings follow the current speaker. Home still starts a 1:1.

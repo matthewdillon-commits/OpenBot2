@@ -1,13 +1,10 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
-import { motion, useReducedMotion } from "motion/react";
 import { useState } from "react";
-import AgentOrb from "@/components/agents/orb/agent-orb";
 import { ProviderLogo } from "@/components/auth/provider-logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 import {
   providerName,
   signInWith,
@@ -23,13 +20,8 @@ import {
 } from "@/lib/auth/queries";
 import { appConfig } from "@/lib/generated/application-config";
 import { createOwnOrganizationMutationOptions } from "@/lib/orgs/mutations";
+import { cn } from "@/lib/utils";
 import { queryClient } from "@/query-client";
-
-const EASE_OUT = [0.23, 1, 0.32, 1] as const;
-
-const ENTRANCE_SECONDS = 0.4;
-const ENTRANCE_STAGGER_SECONDS = 0.08;
-const ENTRANCE_OFFSET = "translateY(12px)";
 
 export const Route = createFileRoute("/sign")({
   beforeLoad: async ({ context }) => {
@@ -46,6 +38,16 @@ export const Route = createFileRoute("/sign")({
   component: SignScreen,
 });
 
+const fieldClassName =
+  "h-11 rounded-xl border-border/50 bg-white dark:bg-background";
+
+/**
+ * The unauthenticated entrance.
+ *
+ * This screen is a deliberate exception to PageShell: it is not a configuration page. The layout
+ * matches LimitlessAI-2 — a centred column, editorial heading, rounded-xl fields, navy primary
+ * button, then Continue with Google under an "or".
+ */
 function SignScreen() {
   // Which provider is being opened, rather than whether one is: with three buttons, a single
   // boolean would put "Opening…" on all of them.
@@ -143,150 +145,86 @@ function SignScreen() {
     }
   }
 
-  const prefersReducedMotion = useReducedMotion();
-  const hidden = {
-    opacity: 0,
-    ...(prefersReducedMotion ? {} : { transform: ENTRANCE_OFFSET }),
-  };
-  const shown = {
-    opacity: 1,
-    ...(prefersReducedMotion ? {} : { transform: "translateY(0px)" }),
-  };
-  const hasOtherMethods = providers.length > 0 || options?.sso === true;
   const busy = opening !== null;
+  const otherProviders = providers.filter((provider) => provider !== "google");
+  const googleConfigured = providers.includes("google");
 
   return (
-    <div className="flex min-h-dvh w-full items-center justify-center overflow-y-auto py-8">
-      <motion.div
-        animate="shown"
-        className="flex w-full max-w-82 flex-col items-center justify-center p-4"
-        initial="hidden"
-        variants={{
-          hidden: {},
-          shown: { transition: { staggerChildren: ENTRANCE_STAGGER_SECONDS } },
-        }}
-      >
-        <motion.div
-          transition={{ duration: ENTRANCE_SECONDS, ease: EASE_OUT }}
-          variants={{ hidden, shown }}
-          className="flex items-center justify-center"
-        >
-          <AgentOrb size="56px" />
-        </motion.div>
-        <motion.h1
-          className="text-2xl font-medium tracking-tight text-center mt-8"
-          transition={{ duration: ENTRANCE_SECONDS, ease: EASE_OUT }}
-          variants={{ hidden, shown }}
-        >
-          {mode === "up"
-            ? `Create an account on ${appConfig.brand.productName}`
-            : `Sign in to ${appConfig.brand.productName}`}
-        </motion.h1>
-        {mode === "up" ? (
-          <motion.p
-            className="mt-2 text-center text-sm text-muted-foreground"
-            transition={{ duration: ENTRANCE_SECONDS, ease: EASE_OUT }}
-            variants={{ hidden, shown }}
-          >
-            Your organization is the company workspace you will work in.
-          </motion.p>
-        ) : null}
-        <motion.div
-          className="mt-8 w-full"
-          transition={{ duration: ENTRANCE_SECONDS, ease: EASE_OUT }}
-          variants={{ hidden, shown }}
-        >
-          {providers.length > 0 ? (
-            <div className="flex flex-col gap-2">
-              {providers.map((provider) => (
-                /*
-                 * Every provider gets the same button, and it is the light-themed outline one
-                 * rather than the app's filled primary. Google's guidelines require their button be
-                 * at least as prominent as any other sign-in option and specify its fill and
-                 * stroke, so making one provider the loud one would break that for the others. The
-                 * same size and weight throughout is also the honest presentation: a deployment
-                 * that configured three has three, and none of them is the recommended one.
-                 */
-                <Button
-                  className="h-10 w-full justify-start gap-3 px-3 tracking-tight"
-                  disabled={busy}
-                  key={provider}
-                  onClick={() => handleSignIn(provider)}
-                  size="lg"
-                  variant="outline"
-                >
-                  <ProviderLogo provider={provider} />
-                  {/* Centred against the button, not against the space left of the mark. */}
-                  <span className="flex-1 text-center">
-                    {opening === provider
-                      ? `Opening ${providerName(provider)}…`
-                      : `Continue with ${providerName(provider)}`}
-                  </span>
-                  {/* Balances the mark so the label sits in the middle of the button. */}
-                  <span aria-hidden="true" className="size-[18px]" />
-                </Button>
-              ))}
-            </div>
-          ) : options?.sso || emailPassword ? null : (
+    <div className="sign-screen flex min-h-dvh w-full flex-col items-center justify-center overflow-y-auto p-6">
+      <div aria-hidden="true" className="sign-screen-grain" />
+      <div className="relative z-10 flex w-full max-w-sm flex-col space-y-8">
+        <div className="flex flex-col items-center gap-4">
+          <p className="text-lg font-semibold tracking-tight">
+            {appConfig.brand.productName}
+          </p>
+          <div className="flex flex-col items-center gap-1.5">
+            <h1 className="text-center text-2xl font-semibold tracking-tight">
+              {mode === "up" ? "Create an account" : "Welcome Back"}
+            </h1>
             <p className="text-center text-sm text-muted-foreground">
-              No sign-in provider is configured for this deployment.
+              {mode === "up"
+                ? "Your organization is the company workspace you will work in."
+                : "Sign in to your AI dashboard"}
             </p>
-          )}
+          </div>
+        </div>
+
+        <div className="space-y-4">
           {emailPassword ? (
-            <form
-              className={hasOtherMethods ? "mt-3" : undefined}
-              onSubmit={handleEmailAuth}
-            >
-              {hasOtherMethods ? (
-                <div className="mb-3 flex items-center gap-3">
-                  <Separator className="flex-1" />
-                  <span className="text-muted-foreground text-xs">or</span>
-                  <Separator className="flex-1" />
+            <form className="space-y-3" onSubmit={handleEmailAuth}>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="sign-email">Email</Label>
+                <Input
+                  autoComplete="email"
+                  className={fieldClassName}
+                  id="sign-email"
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="you@company.com"
+                  required
+                  type="email"
+                  value={email}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="sign-password">Password</Label>
+                <Input
+                  autoComplete={
+                    mode === "up" ? "new-password" : "current-password"
+                  }
+                  className={fieldClassName}
+                  id="sign-password"
+                  minLength={8}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="Password"
+                  required
+                  type="password"
+                  value={password}
+                />
+              </div>
+              {mode === "up" ? (
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="sign-organization">Organization</Label>
+                  <Input
+                    autoComplete="organization"
+                    className={fieldClassName}
+                    id="sign-organization"
+                    onChange={(event) => setOrganization(event.target.value)}
+                    placeholder="Your company"
+                    required
+                    value={organization}
+                  />
                 </div>
               ) : null}
-              <div className="flex flex-col gap-3">
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="sign-email">Email</Label>
-                  <Input
-                    autoComplete="email"
-                    id="sign-email"
-                    onChange={(event) => setEmail(event.target.value)}
-                    placeholder="you@company.com"
-                    required
-                    type="email"
-                    value={email}
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="sign-password">Password</Label>
-                  <Input
-                    autoComplete={
-                      mode === "up" ? "new-password" : "current-password"
-                    }
-                    id="sign-password"
-                    minLength={8}
-                    onChange={(event) => setPassword(event.target.value)}
-                    required
-                    type="password"
-                    value={password}
-                  />
-                </div>
-                {mode === "up" ? (
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="sign-organization">Organization</Label>
-                    <Input
-                      autoComplete="organization"
-                      id="sign-organization"
-                      onChange={(event) => setOrganization(event.target.value)}
-                      placeholder="Your company"
-                      required
-                      value={organization}
-                    />
-                  </div>
-                ) : null}
-              </div>
+              {error ? (
+                <p
+                  className="text-center text-sm text-destructive"
+                  role="alert"
+                >
+                  {error}
+                </p>
+              ) : null}
               <Button
-                className="mt-3 h-10 w-full tracking-tight"
+                className="h-11 w-full rounded-xl bg-[hsl(230_65%_28%)] text-white shadow-lg shadow-[hsl(230_65%_28%)/0.2] hover:bg-[hsl(230_65%_24%)]"
                 disabled={
                   busy ||
                   email.trim().length === 0 ||
@@ -302,27 +240,55 @@ function SignScreen() {
                     : "Signing in…"
                   : mode === "up"
                     ? "Create account"
-                    : "Sign in"}
+                    : "Sign In"}
               </Button>
             </form>
           ) : null}
-          {/*
-           * The way in for a company that runs its own identity provider.
-           *
-           * Below the buttons, because a deployment with both has more people arriving through the
-           * buttons: the registered providers are for the companies whose IdP was added by hand.
-           */}
+
+          {googleConfigured || otherProviders.length > 0 || options?.sso ? (
+            <OrDivider shown={emailPassword} />
+          ) : null}
+
+          {googleConfigured ? (
+            <Button
+              className="h-11 w-full justify-center gap-2 rounded-xl"
+              disabled={busy}
+              onClick={() => handleSignIn("google")}
+              size="lg"
+              variant="outline"
+            >
+              <ProviderLogo provider="google" />
+              {opening === "google"
+                ? "Opening Google…"
+                : "Continue with Google"}
+            </Button>
+          ) : null}
+
+          {otherProviders.length > 0 ? (
+            <div className="flex flex-col gap-2">
+              {otherProviders.map((provider) => (
+                <Button
+                  className="h-11 w-full justify-center gap-2 rounded-xl"
+                  disabled={busy}
+                  key={provider}
+                  onClick={() => handleSignIn(provider)}
+                  size="lg"
+                  variant="outline"
+                >
+                  <ProviderLogo provider={provider} />
+                  {opening === provider
+                    ? `Opening ${providerName(provider)}…`
+                    : `Continue with ${providerName(provider)}`}
+                </Button>
+              ))}
+            </div>
+          ) : null}
+
           {options?.sso ? (
-            <form className="mt-3" onSubmit={handleDomainSignIn}>
-              {providers.length > 0 || emailPassword ? (
-                <div className="mb-3 flex items-center gap-3">
-                  <Separator className="flex-1" />
-                  <span className="text-muted-foreground text-xs">or</span>
-                  <Separator className="flex-1" />
-                </div>
-              ) : null}
+            <form className="space-y-3" onSubmit={handleDomainSignIn}>
               <Input
                 autoComplete="email"
+                className={fieldClassName}
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="you@company.com"
                 required
@@ -330,7 +296,7 @@ function SignScreen() {
                 value={email}
               />
               <Button
-                className="mt-2 h-10 w-full tracking-tight"
+                className="h-11 w-full rounded-xl"
                 disabled={busy || email.trim().length === 0}
                 size="lg"
                 type="submit"
@@ -342,8 +308,18 @@ function SignScreen() {
               </Button>
             </form>
           ) : null}
+
+          {!emailPassword &&
+          !googleConfigured &&
+          otherProviders.length === 0 &&
+          !options?.sso ? (
+            <p className="text-center text-sm text-muted-foreground">
+              No sign-in provider is configured for this deployment.
+            </p>
+          ) : null}
+
           {emailPassword ? (
-            <p className="mt-4 text-center text-sm text-muted-foreground">
+            <p className="text-center text-sm text-muted-foreground">
               {mode === "up" ? (
                 <>
                   Already have an account?{" "}
@@ -375,13 +351,34 @@ function SignScreen() {
               )}
             </p>
           ) : null}
-          {error ? (
-            <p className="mt-3 text-sm text-destructive" role="alert">
+
+          {!emailPassword && error ? (
+            <p className="text-center text-sm text-destructive" role="alert">
               {error}
             </p>
           ) : null}
-        </motion.div>
-      </motion.div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OrDivider({ shown }: { shown: boolean }) {
+  if (!shown) return null;
+  return (
+    <div className="relative">
+      <div className="absolute inset-0 flex items-center">
+        <span className="w-full border-t border-border/40" />
+      </div>
+      <div className="relative flex justify-center text-xs uppercase">
+        <span
+          className={cn(
+            "bg-[hsl(220_18%_97%)] px-3 text-muted-foreground dark:bg-background",
+          )}
+        >
+          or
+        </span>
+      </div>
     </div>
   );
 }

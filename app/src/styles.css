@@ -232,3 +232,21 @@ body {
 .tool-line[open] .tool-line-chevron {
   transform: rotate(90deg);
 }
+
+/*
+ * Sign-in only. Copied from the LimitlessAI-2 login: a light navy page with a grain so the
+ * card does not sit on a flat fill. Scoped so the rest of the app keeps its own tokens.
+ */
+.sign-screen {
+  --sign-primary: 230 65% 28%;
+  --sign-paper: 220 18% 97%;
+  background-color: hsl(var(--sign-paper));
+}
+
+.sign-screen-grain {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  opacity: 0.35;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}

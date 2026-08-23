@@ -182,6 +182,7 @@ export function createAuth(
       }),
       config.keyEncryptionKey,
     ),
+    appName: "LimitlessAI",
     account: {
       /*
        * The provider's access and refresh tokens, encrypted at rest.
@@ -194,6 +195,15 @@ export function createAuth(
        * accounts of everybody who has already signed in.
        */
       encryptOAuthTokens: true,
+      /*
+       * Same person, two ways in. Email/password and Google both key on the address, so refusing
+       * to link them would create a second account the moment somebody who already has a password
+       * pressed Continue with Google.
+       */
+      accountLinking: {
+        enabled: true,
+        trustedProviders: ["google", "microsoft", "okta"],
+      },
     },
     plugins,
     emailAndPassword: {
