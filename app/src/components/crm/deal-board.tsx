@@ -2,6 +2,7 @@ import {
   DndContext,
   DragOverlay,
   PointerSensor,
+  closestCorners,
   useDraggable,
   useDroppable,
   useSensor,
@@ -75,7 +76,7 @@ export function DealBoard({ className }: { className?: string }) {
   const jumpingTo = useRef<string | null>(null);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 3 } }),
   );
 
   const deals = (opportunities.data?.items ?? []).map(asDeal);
@@ -135,7 +136,10 @@ export function DealBoard({ className }: { className?: string }) {
     if (!overId) return;
     const stageKey = overId.startsWith("stage:")
       ? overId.slice("stage:".length)
-      : deals.find((deal) => deal.id === overId)?.stageKey;
+      : overId.startsWith("deal:")
+        ? deals.find((deal) => deal.id === overId.slice("deal:".length))
+            ?.stageKey
+        : deals.find((deal) => deal.id === overId)?.stageKey;
     if (!stageKey || !STAGES.includes(stageKey as (typeof STAGES)[number])) {
       return;
     }
@@ -248,6 +252,7 @@ export function DealBoard({ className }: { className?: string }) {
       ) : (
         <DndContext
           sensors={sensors}
+          collisionDetection={closestCorners}
           onDragStart={onDragStart}
           onDragEnd={onDragEnd}
           onDragCancel={() => setActiveId(null)}
@@ -323,6 +328,7 @@ function StageColumn({
 
   return (
     <section
+      ref={setNodeRef}
       data-stage={stage}
       className="ui-crm-board-col flex shrink-0 flex-col"
       aria-label={label}
@@ -343,7 +349,6 @@ function StageColumn({
         </div>
       </header>
       <ul
-        ref={setNodeRef}
         className={cn(
           "flex min-h-[160px] flex-1 flex-col gap-2 overflow-y-auto rounded-[12px] bg-[var(--bg-muted)] p-1.5 transition-colors",
           isOver && "bg-[oklch(0.94_0.02_250)]",
@@ -366,10 +371,22 @@ function DealCard({ deal, overlay }: { deal: Deal; overlay?: boolean }) {
     id: deal.id,
     data: { stageKey: deal.stageKey },
   });
+  const droppable = useDroppable({
+    id: `deal:${deal.id}`,
+    data: { stageKey: deal.stageKey },
+    disabled: overlay,
+  });
 
   return (
     <li
-      ref={overlay ? undefined : setNodeRef}
+      ref={
+        overlay
+          ? undefined
+          : (node) => {
+              setNodeRef(node);
+              droppable.setNodeRef(node);
+            }
+      }
       {...(overlay ? {} : { ...listeners, ...attributes })}
       className={cn(
         "list-none rounded-[10px] border border-[var(--hairline)] bg-[var(--bg-solid)] px-3 py-2.5 shadow-[0_1px_0_oklch(0_0_0/0.03)]",
