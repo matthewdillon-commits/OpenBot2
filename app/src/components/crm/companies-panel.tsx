@@ -15,7 +15,8 @@ function companyInitials(name: string) {
 
 function logoHue(name: string) {
   let hue = 0;
-  for (let i = 0; i < name.length; i++) hue = (hue * 31 + name.charCodeAt(i)) % 360;
+  for (let i = 0; i < name.length; i++)
+    hue = (hue * 31 + name.charCodeAt(i)) % 360;
   return hue;
 }
 
@@ -29,7 +30,9 @@ export function CompaniesPanel({
   onCreateOpenChange?: (open: boolean) => void;
 }) {
   const companiesQuery = useQuery(crmCompaniesQueryOptions(search ?? ""));
-  const createCompany = useMutation(createCrmCompanyMutationOptions(queryClient));
+  const createCompany = useMutation(
+    createCrmCompanyMutationOptions(queryClient),
+  );
   const [name, setName] = useState("");
   const [domain, setDomain] = useState("");
   const [internalCreate, setInternalCreate] = useState(false);
@@ -54,7 +57,9 @@ export function CompaniesPanel({
       setShowCreate(false);
       toast.success("Company created");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Couldn’t create company");
+      toast.error(
+        err instanceof Error ? err.message : "Couldn’t create company",
+      );
     }
   }
 
@@ -119,7 +124,9 @@ export function CompaniesPanel({
         </div>
       ) : companies.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-2 p-10 text-center">
-          <p className="text-14 font-medium text-[var(--text)]">No companies yet</p>
+          <p className="text-14 font-medium text-[var(--text)]">
+            No companies yet
+          </p>
           <p className="max-w-xs text-13 text-[var(--text-secondary)]">
             Add accounts you sell into — people and opportunities link here.
           </p>
@@ -146,26 +153,38 @@ export function CompaniesPanel({
                 </th>
                 <th>
                   <span className="inline-flex items-center gap-1.5">
-                    <Building2 className="h-3.5 w-3.5 opacity-55" strokeWidth={1.75} />
+                    <Building2
+                      className="h-3.5 w-3.5 opacity-55"
+                      strokeWidth={1.75}
+                    />
                     Companies
                   </span>
                 </th>
                 <th>
                   <span className="inline-flex items-center gap-1.5">
-                    <Globe2 className="h-3.5 w-3.5 opacity-55" strokeWidth={1.75} />
+                    <Globe2
+                      className="h-3.5 w-3.5 opacity-55"
+                      strokeWidth={1.75}
+                    />
                     Url
                   </span>
                 </th>
                 <th className="ui-crm-col-meta">Industry</th>
                 <th className="ui-crm-col-aux">
                   <span className="inline-flex items-center gap-1.5">
-                    <MapPin className="h-3.5 w-3.5 opacity-55" strokeWidth={1.75} />
+                    <MapPin
+                      className="h-3.5 w-3.5 opacity-55"
+                      strokeWidth={1.75}
+                    />
                     Address
                   </span>
                 </th>
                 <th className="ui-crm-col-aux">
                   <span className="inline-flex items-center gap-1.5">
-                    <Calendar className="h-3.5 w-3.5 opacity-55" strokeWidth={1.75} />
+                    <Calendar
+                      className="h-3.5 w-3.5 opacity-55"
+                      strokeWidth={1.75}
+                    />
                     Added
                   </span>
                 </th>
@@ -211,7 +230,7 @@ export function CompaniesPanel({
                       {company.industry || ""}
                     </td>
                     <td className="ui-crm-col-aux max-w-[14rem] truncate text-[13px] text-[#555]">
-                      {company.phone || ""}
+                      {company.location || ""}
                     </td>
                     <td className="ui-crm-col-aux text-[13px] text-[#555]">
                       {company.createdAt
@@ -254,16 +273,16 @@ export function CompaniesPanel({
                     >
                       {company.domain || "No website"}
                     </span>
-                    {company.industry || company.phone ? (
+                    {company.industry || company.location ? (
                       <span className="ui-crm-card-meta">
                         {company.industry ? (
                           <span className="ui-crm-pill">
                             <span>{company.industry}</span>
                           </span>
                         ) : null}
-                        {company.phone ? (
+                        {company.location ? (
                           <span className="ui-crm-pill">
-                            <span>{company.phone}</span>
+                            <span>{company.location}</span>
                           </span>
                         ) : null}
                       </span>

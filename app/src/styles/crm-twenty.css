@@ -32,6 +32,7 @@
   --c3: oklch(0.63 0.22 28);
   --danger: var(--c3);
   --success: var(--c2);
+  --attention-bg: oklch(0.92 0.06 85);
   --shadow-md: 0 4px 12px oklch(0 0 0 / 0.06), 0 1px 3px oklch(0 0 0 / 0.04);
   --duration-quick: 80ms;
   --duration-fast: 100ms;
@@ -110,6 +111,48 @@
   text-transform: uppercase;
   color: var(--text-muted);
   line-height: 1.2;
+}
+
+.ui-record-card {
+  background: var(--bg-solid);
+  border-radius: inherit;
+}
+.ui-record-band {
+  box-shadow: inset 0 -1px 0 var(--hairline);
+  background: var(--bg-solid);
+}
+.ui-record-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7.25rem, 1fr));
+  gap: 1px;
+  background: var(--hairline);
+}
+.ui-record-stat {
+  background: var(--bg-solid);
+}
+.ui-record-stat > p {
+  white-space: nowrap;
+}
+.ui-record-tab {
+  position: relative;
+  font-weight: 400;
+}
+.ui-record-tab[data-active="true"] {
+  color: var(--text);
+  font-weight: 510;
+  box-shadow: inset 0 -2px 0 var(--text);
+}
+.ui-field-suggested {
+  background: var(--attention-bg);
+  border-radius: 8px;
+  padding: 4px 8px;
+}
+.ui-stroke {
+  border: 1px solid var(--stroke);
+  box-shadow: none;
+}
+.ui-stroke:hover {
+  border-color: var(--stroke-hover);
 }
 /* —— Twenty CRM people index (tokens from twentyhq/twenty theme-light) —— */
 .ui-crm-split-twenty {

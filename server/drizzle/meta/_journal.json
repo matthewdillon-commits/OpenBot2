@@ -92,6 +92,13 @@
       "when": 1787512020367,
       "tag": "0012_crm_stages",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1787520000000,
+      "tag": "0013_crm_lai2_record",
+      "breakpoints": true
     }
   ]
 }

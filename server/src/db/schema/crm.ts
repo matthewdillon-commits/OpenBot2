@@ -79,6 +79,8 @@ export const crmCompanies = pgTable(
     website: text("website"),
     industry: text("industry"),
     phone: text("phone"),
+    /** LimitlessAI-2 company address / city line. */
+    location: text("location"),
     notes: text("notes"),
     ...createdByColumns(),
     createdAt: createdAt(),
@@ -112,6 +114,11 @@ export const crmPeople = pgTable(
     stageKey: text("stage_key").notNull().default("new"),
     doNotContact: boolean("do_not_contact").notNull().default(false),
     notes: text("notes"),
+    linkedinUrl: text("linkedin_url"),
+    location: text("location"),
+    timezone: text("timezone"),
+    /** manual | import | inbound | other */
+    source: text("source").notNull().default("manual"),
     ...createdByColumns(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -184,6 +191,72 @@ export const crmCampaigns = pgTable(
       table.createdAt.desc(),
       table.id.desc(),
     ),
+  ],
+);
+
+/**
+ * A named audience inside a campaign — LimitlessAI-2's campaign lists.
+ *
+ * Membership is real rows, not "people who happened to get a send". Agents and
+ * the board add people here; the campaign screen reads these lists.
+ */
+export const crmCampaignLists = pgTable(
+  "crm_campaign_lists",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: organizationIdColumn(),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => crmCampaigns.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    description: text("description").notNull().default(""),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    uniqueIndex("crm_campaign_lists_campaign_slug_uidx").on(
+      table.campaignId,
+      table.slug,
+    ),
+    index("crm_campaign_lists_org_campaign_idx").on(
+      table.orgId,
+      table.campaignId,
+    ),
+  ],
+);
+
+export const crmCampaignListMembers = pgTable(
+  "crm_campaign_list_members",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: organizationIdColumn(),
+    listId: uuid("list_id")
+      .notNull()
+      .references(() => crmCampaignLists.id, { onDelete: "cascade" }),
+    personId: uuid("person_id")
+      .notNull()
+      .references(() => crmPeople.id, { onDelete: "cascade" }),
+    /** user | bot */
+    addedBy: text("added_by").notNull().default("user"),
+    source: text("source"),
+    /** active | removed */
+    status: text("status").notNull().default("active"),
+    addedAt: timestamp("added_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("crm_campaign_list_members_list_person_uidx").on(
+      table.listId,
+      table.personId,
+    ),
+    index("crm_campaign_list_members_list_status_idx").on(
+      table.listId,
+      table.status,
+    ),
+    index("crm_campaign_list_members_person_idx").on(table.personId),
+    index("crm_campaign_list_members_org_idx").on(table.orgId),
   ],
 );
 

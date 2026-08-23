@@ -1,15 +1,17 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { campaignStatusStyle, stageLabel, stageStyle } from "@/lib/crm/colors";
 import {
+  createCrmCampaignListMutationOptions,
   createCrmCampaignMutationOptions,
+  removeCrmListMembersMutationOptions,
   updateCrmCampaignMutationOptions,
 } from "@/lib/crm/mutations";
 import {
+  crmCampaignListMembersQueryOptions,
+  crmCampaignListsQueryOptions,
   crmCampaignsQueryOptions,
-  crmPeopleQueryOptions,
-  crmSendsQueryOptions,
 } from "@/lib/crm/queries";
 import { cn } from "@/lib/utils";
 import { queryClient } from "@/query-client";
@@ -20,28 +22,49 @@ export function CampaignsPanel({
   onSelectContact?: (contactId: string) => void;
 }) {
   const campaignsQuery = useQuery(crmCampaignsQueryOptions());
-  const peopleQuery = useQuery(crmPeopleQueryOptions());
-  const createCampaign = useMutation(createCrmCampaignMutationOptions(queryClient));
-  const updateCampaign = useMutation(updateCrmCampaignMutationOptions(queryClient));
+  const createCampaign = useMutation(
+    createCrmCampaignMutationOptions(queryClient),
+  );
+  const updateCampaign = useMutation(
+    updateCrmCampaignMutationOptions(queryClient),
+  );
+  const createList = useMutation(
+    createCrmCampaignListMutationOptions(queryClient),
+  );
+  const removeMembers = useMutation(
+    removeCrmListMembersMutationOptions(queryClient),
+  );
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedListId, setSelectedListId] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [newGoal, setNewGoal] = useState("");
+  const [newListName, setNewListName] = useState("");
 
   const campaigns = campaignsQuery.data?.items ?? [];
-  const selected = campaigns.find((campaign) => campaign.id === selectedId) || null;
-  const sends = useQuery({
-    ...crmSendsQueryOptions("", "", "", selected?.id ?? ""),
+  const selected =
+    campaigns.find((campaign) => campaign.id === selectedId) || null;
+  const listsQuery = useQuery({
+    ...crmCampaignListsQueryOptions(selected?.id ?? ""),
     enabled: Boolean(selected?.id),
   });
+  const lists = listsQuery.data ?? [];
+  const membersQuery = useQuery({
+    ...crmCampaignListMembersQueryOptions(selectedListId ?? ""),
+    enabled: Boolean(selectedListId),
+  });
+  const members = membersQuery.data?.items ?? [];
+  const memberTotal = membersQuery.data?.total ?? 0;
 
-  const memberIds = new Set(
-    (sends.data?.items ?? [])
-      .map((send) => send.personId)
-      .filter((id): id is string => Boolean(id)),
-  );
-  const members = (peopleQuery.data?.items ?? []).filter((person) =>
-    memberIds.has(person.id),
-  );
+  useEffect(() => {
+    if (!selectedId) {
+      setSelectedListId(null);
+      return;
+    }
+    if (selectedListId && lists.some((list) => list.id === selectedListId)) {
+      return;
+    }
+    setSelectedListId(lists[0]?.id ?? null);
+  }, [lists, selectedId, selectedListId]);
 
   async function saveCampaign() {
     if (!newName.trim()) return;
@@ -60,6 +83,33 @@ export function CampaignsPanel({
     }
   }
 
+  async function addList() {
+    if (!selectedId || !newListName.trim()) return;
+    try {
+      const list = await createList.mutateAsync({
+        campaignId: selectedId,
+        name: newListName.trim(),
+      });
+      setNewListName("");
+      setSelectedListId(list.id);
+      toast.success("List created");
+    } catch {
+      toast.error("Couldn’t create list");
+    }
+  }
+
+  async function removeMember(personId: string) {
+    if (!selectedListId) return;
+    try {
+      await removeMembers.mutateAsync({
+        listId: selectedListId,
+        personIds: [personId],
+      });
+    } catch {
+      toast.error("Couldn’t remove contact");
+    }
+  }
+
   return (
     <div className="ui-crm-panes flex min-h-0 flex-1">
       <div className="ui-crm-pane-fixed flex w-[260px] shrink-0 flex-col bg-[var(--bg-solid)] shadow-[inset_-1px_0_0_var(--hairline)]">
@@ -67,7 +117,7 @@ export function CampaignsPanel({
           <div className="text-13 font-medium tracking-[-0.01em] text-[var(--text)]">
             Start a campaign
           </div>
-          <p className="mt-0.5 text-12 text-[var(--text-muted)] text-pretty">
+          <p className="mt-0.5 text-pretty text-12 text-[var(--text-muted)]">
             Group people into lists your agents can work.
           </p>
           <input
@@ -93,7 +143,7 @@ export function CampaignsPanel({
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
           {campaignsQuery.isPending ? null : campaigns.length === 0 ? (
-            <p className="px-2.5 py-3 text-13 text-[var(--text-muted)] text-pretty">
+            <p className="text-pretty px-2.5 py-3 text-13 text-[var(--text-muted)]">
               No campaigns yet. Create one above to organize outreach.
             </p>
           ) : (
@@ -157,8 +207,10 @@ export function CampaignsPanel({
                       {campaignStatusStyle(selected.status).label}
                     </span>
                   </div>
-                  <p className="mt-0.5 text-13 text-[var(--text-secondary)] text-pretty">
-                    {selected.description || selected.notes || "No goal set yet"}
+                  <p className="text-pretty mt-0.5 text-13 text-[var(--text-secondary)]">
+                    {selected.description ||
+                      selected.notes ||
+                      "No goal set yet"}
                   </p>
                 </div>
                 <label className="shrink-0">
@@ -196,14 +248,44 @@ export function CampaignsPanel({
               <div className="ui-crm-pane-fixed flex w-[200px] shrink-0 flex-col shadow-[inset_-1px_0_0_var(--hairline)]">
                 <div className="ui-label px-3 py-2">Lists</div>
                 <div className="min-h-0 flex-1 overflow-y-auto px-1">
+                  {lists.map((list) => (
+                    <button
+                      key={list.id}
+                      type="button"
+                      onClick={() => setSelectedListId(list.id)}
+                      className={cn(
+                        "flex w-full items-center justify-between rounded-[var(--radius-control)] px-2.5 py-2 text-left text-13 transition-[background-color]",
+                        selectedListId === list.id
+                          ? "bg-[var(--bg-muted)] font-medium"
+                          : "hover:bg-[var(--bg-muted)]/60",
+                      )}
+                    >
+                      <span className="truncate text-[var(--text)]">
+                        {list.name}
+                      </span>
+                      <span className="tabular text-12 text-[var(--text-muted)]">
+                        {list.memberCount}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                <div className="border-t border-[var(--border)] p-2">
+                  <input
+                    value={newListName}
+                    onChange={(event) => setNewListName(event.target.value)}
+                    placeholder="New list name"
+                    className="ui-field w-full !min-h-9 text-12"
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") void addList();
+                    }}
+                  />
                   <button
                     type="button"
-                    className="flex w-full items-center justify-between rounded-[var(--radius-control)] bg-[var(--bg-muted)] px-2.5 py-2 text-left text-13 font-medium"
+                    onClick={() => void addList()}
+                    disabled={!newListName.trim() || createList.isPending}
+                    className="ui-cta-secondary mt-1.5 !min-h-[var(--wb-chrome-control)] w-full text-12"
                   >
-                    <span className="truncate text-[var(--text)]">Audience</span>
-                    <span className="tabular text-12 text-[var(--text-muted)]">
-                      {members.length}
-                    </span>
+                    Add list
                   </button>
                 </div>
               </div>
@@ -211,10 +293,10 @@ export function CampaignsPanel({
               <div className="min-w-0 flex-1 overflow-auto">
                 <div className="flex items-center justify-between px-4 py-2.5 text-12 text-[var(--text-muted)]">
                   <span>Members</span>
-                  <span className="tabular">{members.length}</span>
+                  <span className="tabular">{memberTotal}</span>
                 </div>
                 {members.length === 0 ? (
-                  <p className="px-4 py-3 text-13 text-[var(--text-muted)] text-pretty">
+                  <p className="text-pretty px-4 py-3 text-13 text-[var(--text-muted)]">
                     No members yet. Ask an agent to research people into this
                     list, or add contacts from the board.
                   </p>
@@ -225,6 +307,7 @@ export function CampaignsPanel({
                         <th className="px-4 py-2 font-medium">Name</th>
                         <th className="px-4 py-2 font-medium">Company</th>
                         <th className="px-4 py-2 font-medium">Stage</th>
+                        <th className="px-4 py-2 font-medium" />
                       </tr>
                     </thead>
                     <tbody>
@@ -256,6 +339,15 @@ export function CampaignsPanel({
                                 />
                                 {stageLabel(person.stageKey)}
                               </span>
+                            </td>
+                            <td className="px-4 py-2 text-right">
+                              <button
+                                type="button"
+                                onClick={() => void removeMember(person.id)}
+                                className="text-12 text-[var(--text-muted)] hover:text-[var(--danger)]"
+                              >
+                                Remove
+                              </button>
                             </td>
                           </tr>
                         );

@@ -2,6 +2,8 @@ import { randomBytes } from "node:crypto";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import type { Database } from "../db/client";
 import {
+  crmCampaignListMembers,
+  crmCampaignLists,
   crmCampaigns,
   crmCompanies,
   crmConversations,
@@ -33,6 +35,7 @@ export type CrmCompany = {
   website: string | null;
   industry: string | null;
   phone: string | null;
+  location: string | null;
   notes: string | null;
   createdBy: CrmCreatedBy;
   createdAt: string;
@@ -50,7 +53,22 @@ export type CrmPerson = {
   stageKey: string;
   doNotContact: boolean;
   notes: string | null;
+  linkedinUrl: string | null;
+  location: string | null;
+  timezone: string | null;
+  source: string;
   createdBy: CrmCreatedBy;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CrmCampaignList = {
+  id: string;
+  campaignId: string;
+  name: string;
+  slug: string;
+  description: string;
+  memberCount: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -207,6 +225,7 @@ export type CrmCompanyInput = {
   website?: string | null;
   industry?: string | null;
   phone?: string | null;
+  location?: string | null;
   notes?: string | null;
 };
 
@@ -219,6 +238,15 @@ export type CrmPersonInput = {
   stageKey?: string | null;
   doNotContact?: boolean;
   notes?: string | null;
+  linkedinUrl?: string | null;
+  location?: string | null;
+  timezone?: string | null;
+  source?: string | null;
+};
+
+export type CrmCampaignListInput = {
+  name: string;
+  description?: string | null;
 };
 
 export type CrmOpportunityInput = {
@@ -319,6 +347,29 @@ export type CrmStore = {
     id: string,
     input: Partial<CrmCampaignInput>,
   ) => Promise<CrmCampaign | undefined>;
+  listCampaignLists: (
+    orgId: string,
+    campaignId: string,
+  ) => Promise<CrmCampaignList[]>;
+  createCampaignList: (
+    orgId: string,
+    campaignId: string,
+    input: CrmCampaignListInput,
+  ) => Promise<CrmCampaignList>;
+  listCampaignListMembers: (
+    orgId: string,
+    listId: string,
+  ) => Promise<{ items: CrmPerson[]; total: number }>;
+  addCampaignListMembers: (
+    orgId: string,
+    listId: string,
+    personIds: string[],
+  ) => Promise<{ added: number }>;
+  removeCampaignListMembers: (
+    orgId: string,
+    listId: string,
+    personIds: string[],
+  ) => Promise<{ removed: number }>;
 
   listConversations: (
     query?: CrmListQuery,
@@ -520,24 +571,7 @@ export function createCrmStore(database: Database): CrmStore {
     }
 
     const rows = await database
-      .select({
-        id: crmPeople.id,
-        name: crmPeople.name,
-        emails: crmPeople.emails,
-        phones: crmPeople.phones,
-        jobTitle: crmPeople.jobTitle,
-        companyId: crmPeople.companyId,
-        stageKey: crmPeople.stageKey,
-        doNotContact: crmPeople.doNotContact,
-        notes: crmPeople.notes,
-        createdByKind: crmPeople.createdByKind,
-        createdById: crmPeople.createdById,
-        createdByName: crmPeople.createdByName,
-        createdAt: crmPeople.createdAt,
-        updatedAt: crmPeople.updatedAt,
-        companyName: crmCompanies.name,
-        companyDomain: crmCompanies.domain,
-      })
+      .select(personSelect())
       .from(crmPeople)
       .leftJoin(crmCompanies, eq(crmCompanies.id, crmPeople.companyId))
       .where(and(...filters))
@@ -566,24 +600,7 @@ export function createCrmStore(database: Database): CrmStore {
     id: string,
   ): Promise<CrmPerson | undefined> {
     const [row] = await database
-      .select({
-        id: crmPeople.id,
-        name: crmPeople.name,
-        emails: crmPeople.emails,
-        phones: crmPeople.phones,
-        jobTitle: crmPeople.jobTitle,
-        companyId: crmPeople.companyId,
-        stageKey: crmPeople.stageKey,
-        doNotContact: crmPeople.doNotContact,
-        notes: crmPeople.notes,
-        createdByKind: crmPeople.createdByKind,
-        createdById: crmPeople.createdById,
-        createdByName: crmPeople.createdByName,
-        createdAt: crmPeople.createdAt,
-        updatedAt: crmPeople.updatedAt,
-        companyName: crmCompanies.name,
-        companyDomain: crmCompanies.domain,
-      })
+      .select(personSelect())
       .from(crmPeople)
       .leftJoin(crmCompanies, eq(crmCompanies.id, crmPeople.companyId))
       .where(and(eq(crmPeople.id, id), eq(crmPeople.orgId, orgId)))
@@ -613,6 +630,10 @@ export function createCrmStore(database: Database): CrmStore {
         stageKey,
         doNotContact: doNotContact || stageKey === "dnc",
         notes: emptyToNull(input.notes) ?? null,
+        linkedinUrl: emptyToNull(input.linkedinUrl) ?? null,
+        location: emptyToNull(input.location) ?? null,
+        timezone: emptyToNull(input.timezone) ?? null,
+        source: emptyToNull(input.source) ?? "manual",
         ...createdByColumns(createdBy),
       })
       .returning({ id: crmPeople.id });
@@ -628,7 +649,8 @@ export function createCrmStore(database: Database): CrmStore {
   ): Promise<CrmPerson | undefined> {
     const existing = await getPerson(orgId, id);
     if (!existing) return undefined;
-    if (input.companyId !== undefined) await assertCompany(orgId, input.companyId);
+    if (input.companyId !== undefined)
+      await assertCompany(orgId, input.companyId);
     const patch: Record<string, unknown> = { updatedAt: new Date() };
     if (input.name !== undefined) {
       const name = input.name.trim();
@@ -651,6 +673,14 @@ export function createCrmStore(database: Database): CrmStore {
       if (input.doNotContact) patch.stageKey = "dnc";
     }
     if (input.notes !== undefined) patch.notes = emptyToNull(input.notes);
+    if (input.linkedinUrl !== undefined)
+      patch.linkedinUrl = emptyToNull(input.linkedinUrl);
+    if (input.location !== undefined)
+      patch.location = emptyToNull(input.location);
+    if (input.timezone !== undefined)
+      patch.timezone = emptyToNull(input.timezone);
+    if (input.source !== undefined)
+      patch.source = emptyToNull(input.source) ?? "manual";
     await database
       .update(crmPeople)
       .set(patch)
@@ -678,7 +708,9 @@ export function createCrmStore(database: Database): CrmStore {
     }
     const searchFilters = filters.slice();
     if (cursor) {
-      filters.push(keysetAfter(crmCompanies.createdAt, crmCompanies.id, cursor));
+      filters.push(
+        keysetAfter(crmCompanies.createdAt, crmCompanies.id, cursor),
+      );
     }
     const [{ total }] = await database
       .select({ total: sql<number>`cast(count(*) as int)` })
@@ -733,6 +765,7 @@ export function createCrmStore(database: Database): CrmStore {
         website: emptyToNull(input.website) ?? null,
         industry: emptyToNull(input.industry) ?? null,
         phone: emptyToNull(input.phone) ?? null,
+        location: emptyToNull(input.location) ?? null,
         notes: emptyToNull(input.notes) ?? null,
         ...createdByColumns(createdBy),
       })
@@ -760,6 +793,8 @@ export function createCrmStore(database: Database): CrmStore {
     if (input.industry !== undefined)
       patch.industry = emptyToNull(input.industry);
     if (input.phone !== undefined) patch.phone = emptyToNull(input.phone);
+    if (input.location !== undefined)
+      patch.location = emptyToNull(input.location);
     if (input.notes !== undefined) patch.notes = emptyToNull(input.notes);
     await database
       .update(crmCompanies)
@@ -788,6 +823,9 @@ export function createCrmStore(database: Database): CrmStore {
     }
     if (stage && stage !== "all") {
       filters.push(eq(crmOpportunities.stage, normalizeDealStage(stage)));
+    }
+    if (query.personId) {
+      filters.push(eq(crmOpportunities.personId, query.personId));
     }
     const searchFilters = filters.slice();
     if (cursor) {
@@ -913,7 +951,8 @@ export function createCrmStore(database: Database): CrmStore {
   ): Promise<CrmOpportunity | undefined> {
     const existing = await getOpportunity(orgId, id);
     if (!existing) return undefined;
-    if (input.companyId !== undefined) await assertCompany(orgId, input.companyId);
+    if (input.companyId !== undefined)
+      await assertCompany(orgId, input.companyId);
     if (input.personId !== undefined) await assertPerson(orgId, input.personId);
     const patch: Record<string, unknown> = { updatedAt: new Date() };
     if (input.name !== undefined) {
@@ -965,7 +1004,9 @@ export function createCrmStore(database: Database): CrmStore {
     }
     const searchFilters = filters.slice();
     if (cursor) {
-      filters.push(keysetAfter(crmCampaigns.createdAt, crmCampaigns.id, cursor));
+      filters.push(
+        keysetAfter(crmCampaigns.createdAt, crmCampaigns.id, cursor),
+      );
     }
     const [{ total }] = await database
       .select({ total: sql<number>`cast(count(*) as int)` })
@@ -1058,6 +1099,212 @@ export function createCrmStore(database: Database): CrmStore {
       .set(patch)
       .where(and(eq(crmCampaigns.id, id), eq(crmCampaigns.orgId, orgId)));
     return getCampaign(orgId, id);
+  }
+
+  async function listCampaignLists(
+    orgId: string,
+    campaignId: string,
+  ): Promise<CrmCampaignList[]> {
+    const campaign = await getCampaign(orgId, campaignId);
+    if (!campaign) return [];
+    const rows = await database
+      .select({
+        id: crmCampaignLists.id,
+        campaignId: crmCampaignLists.campaignId,
+        name: crmCampaignLists.name,
+        slug: crmCampaignLists.slug,
+        description: crmCampaignLists.description,
+        createdAt: crmCampaignLists.createdAt,
+        updatedAt: crmCampaignLists.updatedAt,
+        memberCount: sql<number>`cast(count(${crmCampaignListMembers.id}) filter (where ${crmCampaignListMembers.status} = 'active') as int)`,
+      })
+      .from(crmCampaignLists)
+      .leftJoin(
+        crmCampaignListMembers,
+        eq(crmCampaignListMembers.listId, crmCampaignLists.id),
+      )
+      .where(
+        and(
+          eq(crmCampaignLists.orgId, orgId),
+          eq(crmCampaignLists.campaignId, campaignId),
+        ),
+      )
+      .groupBy(
+        crmCampaignLists.id,
+        crmCampaignLists.campaignId,
+        crmCampaignLists.name,
+        crmCampaignLists.slug,
+        crmCampaignLists.description,
+        crmCampaignLists.createdAt,
+        crmCampaignLists.updatedAt,
+      )
+      .orderBy(crmCampaignLists.createdAt);
+    return rows.map(mapCampaignList);
+  }
+
+  async function createCampaignList(
+    orgId: string,
+    campaignId: string,
+    input: CrmCampaignListInput,
+  ): Promise<CrmCampaignList> {
+    const campaign = await getCampaign(orgId, campaignId);
+    if (!campaign) throw new Error("That campaign is not here.");
+    const name = input.name.trim();
+    if (!name) throw new Error("A list needs a name.");
+    const slug = await uniqueListSlug(orgId, campaignId, slugify(name));
+    const [row] = await database
+      .insert(crmCampaignLists)
+      .values({
+        orgId,
+        campaignId,
+        name,
+        slug,
+        description: input.description?.trim() ?? "",
+      })
+      .returning({ id: crmCampaignLists.id });
+    const lists = await listCampaignLists(orgId, campaignId);
+    const created = lists.find((list) => list.id === row.id);
+    if (!created) throw new Error("The list could not be read back.");
+    return created;
+  }
+
+  async function getCampaignList(orgId: string, listId: string) {
+    const [row] = await database
+      .select()
+      .from(crmCampaignLists)
+      .where(
+        and(eq(crmCampaignLists.id, listId), eq(crmCampaignLists.orgId, orgId)),
+      )
+      .limit(1);
+    return row ?? undefined;
+  }
+
+  async function listCampaignListMembers(
+    orgId: string,
+    listId: string,
+  ): Promise<{ items: CrmPerson[]; total: number }> {
+    const list = await getCampaignList(orgId, listId);
+    if (!list) return { items: [], total: 0 };
+    const [{ total }] = await database
+      .select({ total: sql<number>`cast(count(*) as int)` })
+      .from(crmCampaignListMembers)
+      .where(
+        and(
+          eq(crmCampaignListMembers.listId, listId),
+          eq(crmCampaignListMembers.orgId, orgId),
+          eq(crmCampaignListMembers.status, "active"),
+        ),
+      );
+    const memberRows = await database
+      .select({ personId: crmCampaignListMembers.personId })
+      .from(crmCampaignListMembers)
+      .where(
+        and(
+          eq(crmCampaignListMembers.listId, listId),
+          eq(crmCampaignListMembers.orgId, orgId),
+          eq(crmCampaignListMembers.status, "active"),
+        ),
+      )
+      .orderBy(desc(crmCampaignListMembers.addedAt));
+    const items: CrmPerson[] = [];
+    for (const member of memberRows) {
+      const person = await getPerson(orgId, member.personId);
+      if (person) items.push(person);
+    }
+    return { items, total };
+  }
+
+  async function addCampaignListMembers(
+    orgId: string,
+    listId: string,
+    personIds: string[],
+  ): Promise<{ added: number }> {
+    const list = await getCampaignList(orgId, listId);
+    if (!list) throw new Error("That list is not here.");
+    const ids = [...new Set(personIds.filter(Boolean))];
+    let added = 0;
+    for (const personId of ids) {
+      const person = await getPerson(orgId, personId);
+      if (!person) continue;
+      const [existing] = await database
+        .select()
+        .from(crmCampaignListMembers)
+        .where(
+          and(
+            eq(crmCampaignListMembers.listId, listId),
+            eq(crmCampaignListMembers.personId, personId),
+          ),
+        )
+        .limit(1);
+      if (existing) {
+        if (existing.status !== "active") {
+          await database
+            .update(crmCampaignListMembers)
+            .set({ status: "active", addedAt: new Date(), addedBy: "user" })
+            .where(eq(crmCampaignListMembers.id, existing.id));
+          added += 1;
+        }
+        continue;
+      }
+      await database.insert(crmCampaignListMembers).values({
+        orgId,
+        listId,
+        personId,
+        addedBy: "user",
+        status: "active",
+      });
+      added += 1;
+    }
+    return { added };
+  }
+
+  async function removeCampaignListMembers(
+    orgId: string,
+    listId: string,
+    personIds: string[],
+  ): Promise<{ removed: number }> {
+    const list = await getCampaignList(orgId, listId);
+    if (!list) throw new Error("That list is not here.");
+    const ids = [...new Set(personIds.filter(Boolean))];
+    if (ids.length === 0) return { removed: 0 };
+    const result = await database
+      .update(crmCampaignListMembers)
+      .set({ status: "removed" })
+      .where(
+        and(
+          eq(crmCampaignListMembers.orgId, orgId),
+          eq(crmCampaignListMembers.listId, listId),
+          inArray(crmCampaignListMembers.personId, ids),
+          eq(crmCampaignListMembers.status, "active"),
+        ),
+      )
+      .returning({ id: crmCampaignListMembers.id });
+    return { removed: result.length };
+  }
+
+  async function uniqueListSlug(
+    orgId: string,
+    campaignId: string,
+    base: string,
+  ) {
+    let slug = base;
+    let n = 0;
+    while (true) {
+      const [hit] = await database
+        .select({ id: crmCampaignLists.id })
+        .from(crmCampaignLists)
+        .where(
+          and(
+            eq(crmCampaignLists.orgId, orgId),
+            eq(crmCampaignLists.campaignId, campaignId),
+            eq(crmCampaignLists.slug, slug),
+          ),
+        )
+        .limit(1);
+      if (!hit) return slug;
+      n += 1;
+      slug = `${base}-${n}`;
+    }
   }
 
   async function listConversations(
@@ -1194,7 +1441,8 @@ export function createCrmStore(database: Database): CrmStore {
   ): Promise<CrmConversation | undefined> {
     const existing = await getConversation(orgId, id);
     if (!existing) return undefined;
-    if (input.companyId !== undefined) await assertCompany(orgId, input.companyId);
+    if (input.companyId !== undefined)
+      await assertCompany(orgId, input.companyId);
     if (input.personId !== undefined) await assertPerson(orgId, input.personId);
     const patch: Record<string, unknown> = { updatedAt: new Date() };
     if (input.subject !== undefined) {
@@ -1223,14 +1471,17 @@ export function createCrmStore(database: Database): CrmStore {
     return getConversation(orgId, id);
   }
 
-  async function listSends(query: CrmListQuery = {}): Promise<CrmPage<CrmSend>> {
+  async function listSends(
+    query: CrmListQuery = {},
+  ): Promise<CrmPage<CrmSend>> {
     const orgId = scopedOrg(query);
     const limit = clampLimit(query.limit);
     const cursor = decodeCursor(query.cursor);
     const search = query.search?.trim();
     const filters = [eq(crmSends.orgId, orgId)];
     if (query.kind) filters.push(eq(crmSends.kind, query.kind));
-    if (query.campaignId) filters.push(eq(crmSends.campaignId, query.campaignId));
+    if (query.campaignId)
+      filters.push(eq(crmSends.campaignId, query.campaignId));
     if (query.personId) filters.push(eq(crmSends.personId, query.personId));
     if (search) {
       const pattern = `%${escapeLike(search)}%`;
@@ -1671,6 +1922,11 @@ export function createCrmStore(database: Database): CrmStore {
     getCampaign,
     createCampaign,
     updateCampaign,
+    listCampaignLists,
+    createCampaignList,
+    listCampaignListMembers,
+    addCampaignListMembers,
+    removeCampaignListMembers,
     listConversations,
     getConversation,
     createConversation,
@@ -1686,6 +1942,42 @@ export function createCrmStore(database: Database): CrmStore {
   };
 }
 
+function personSelect() {
+  return {
+    id: crmPeople.id,
+    name: crmPeople.name,
+    emails: crmPeople.emails,
+    phones: crmPeople.phones,
+    jobTitle: crmPeople.jobTitle,
+    companyId: crmPeople.companyId,
+    stageKey: crmPeople.stageKey,
+    doNotContact: crmPeople.doNotContact,
+    notes: crmPeople.notes,
+    linkedinUrl: crmPeople.linkedinUrl,
+    location: crmPeople.location,
+    timezone: crmPeople.timezone,
+    source: crmPeople.source,
+    createdByKind: crmPeople.createdByKind,
+    createdById: crmPeople.createdById,
+    createdByName: crmPeople.createdByName,
+    createdAt: crmPeople.createdAt,
+    updatedAt: crmPeople.updatedAt,
+    companyName: crmCompanies.name,
+    companyDomain: crmCompanies.domain,
+  };
+}
+
+function slugify(name: string) {
+  return (
+    name
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 64) || "list"
+  );
+}
+
 function mapPerson(row: {
   id: string;
   name: string;
@@ -1696,6 +1988,10 @@ function mapPerson(row: {
   stageKey: string;
   doNotContact: boolean;
   notes: string | null;
+  linkedinUrl: string | null;
+  location: string | null;
+  timezone: string | null;
+  source: string;
   createdByKind: "user" | "bot" | "system";
   createdById: string;
   createdByName: string;
@@ -1722,6 +2018,10 @@ function mapPerson(row: {
     stageKey: row.stageKey,
     doNotContact: row.doNotContact,
     notes: row.notes,
+    linkedinUrl: row.linkedinUrl,
+    location: row.location,
+    timezone: row.timezone,
+    source: row.source,
     createdBy: createdByOf(row),
     createdAt: requiredIso(row.createdAt),
     updatedAt: requiredIso(row.updatedAt),
@@ -1735,6 +2035,7 @@ function mapCompany(row: {
   website: string | null;
   industry: string | null;
   phone: string | null;
+  location: string | null;
   notes: string | null;
   createdByKind: "user" | "bot" | "system";
   createdById: string;
@@ -1749,8 +2050,31 @@ function mapCompany(row: {
     website: row.website,
     industry: row.industry,
     phone: row.phone,
+    location: row.location,
     notes: row.notes,
     createdBy: createdByOf(row),
+    createdAt: requiredIso(row.createdAt),
+    updatedAt: requiredIso(row.updatedAt),
+  };
+}
+
+function mapCampaignList(row: {
+  id: string;
+  campaignId: string;
+  name: string;
+  slug: string;
+  description: string;
+  memberCount: number;
+  createdAt: Date;
+  updatedAt: Date;
+}): CrmCampaignList {
+  return {
+    id: row.id,
+    campaignId: row.campaignId,
+    name: row.name,
+    slug: row.slug,
+    description: row.description,
+    memberCount: row.memberCount,
     createdAt: requiredIso(row.createdAt),
     updatedAt: requiredIso(row.updatedAt),
   };

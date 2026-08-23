@@ -20,6 +20,7 @@ export type CrmCompany = {
   website: string | null;
   industry: string | null;
   phone: string | null;
+  location: string | null;
   notes: string | null;
   createdBy: CrmCreatedBy;
   createdAt: string;
@@ -37,7 +38,22 @@ export type CrmPerson = {
   stageKey: string;
   doNotContact: boolean;
   notes: string | null;
+  linkedinUrl: string | null;
+  location: string | null;
+  timezone: string | null;
+  source: string;
   createdBy: CrmCreatedBy;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CrmCampaignList = {
+  id: string;
+  campaignId: string;
+  name: string;
+  slug: string;
+  description: string;
+  memberCount: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -143,7 +159,12 @@ export type CrmThread = {
 };
 
 export type CrmStages = {
-  people: Array<{ key: string; label: string; position: number; playbook: string }>;
+  people: Array<{
+    key: string;
+    label: string;
+    position: number;
+    playbook: string;
+  }>;
   opportunities: Array<{ key: string; label: string; position: number }>;
 };
 
@@ -152,14 +173,20 @@ export const crmKeys = {
   people: (search = "", stage = "") =>
     ["crm", "people", { search, stage }] as const,
   companies: (search = "") => ["crm", "companies", { search }] as const,
-  opportunities: (search = "") => ["crm", "opportunities", { search }] as const,
+  opportunities: (search = "", personId = "") =>
+    ["crm", "opportunities", { search, personId }] as const,
   campaigns: (search = "") => ["crm", "campaigns", { search }] as const,
-  conversations: (search = "") => ["crm", "conversations", { search }] as const,
+  conversations: (search = "", personId = "") =>
+    ["crm", "conversations", { search, personId }] as const,
   threads: (search = "") => ["crm", "threads", { search }] as const,
   stages: ["crm", "stages"] as const,
   person: (id: string) => ["crm", "person", id] as const,
   sends: (search = "", kind = "", personId = "", campaignId = "") =>
     ["crm", "sends", { search, kind, personId, campaignId }] as const,
+  campaignLists: (campaignId: string) =>
+    ["crm", "campaign-lists", campaignId] as const,
+  campaignListMembers: (listId: string) =>
+    ["crm", "campaign-list-members", listId] as const,
 };
 
 function listParams(search: string, extra?: Record<string, string>) {
@@ -211,9 +238,12 @@ export function crmCompaniesQueryOptions(search = "") {
     queryKey: crmKeys.companies(search),
     queryFn: async (): Promise<CrmPage<CrmCompany>> => {
       const body = (await (
-        await client(`/api/crm/companies${listParams(search, { limit: "200" })}`, {
-          fallback: "Could not load companies",
-        })
+        await client(
+          `/api/crm/companies${listParams(search, { limit: "200" })}`,
+          {
+            fallback: "Could not load companies",
+          },
+        )
       ).json()) as {
         companies: CrmCompany[];
         nextCursor: string | null;
@@ -228,13 +258,16 @@ export function crmCompaniesQueryOptions(search = "") {
   });
 }
 
-export function crmOpportunitiesQueryOptions(search = "") {
+export function crmOpportunitiesQueryOptions(search = "", personId = "") {
   return queryOptions({
-    queryKey: crmKeys.opportunities(search),
+    queryKey: crmKeys.opportunities(search, personId),
     queryFn: async (): Promise<CrmPage<CrmOpportunity>> => {
       const body = (await (
         await client(
-          `/api/crm/opportunities${listParams(search, { limit: "200" })}`,
+          `/api/crm/opportunities${listParams(search, {
+            limit: "200",
+            ...(personId ? { personId } : {}),
+          })}`,
           {
             fallback: "Could not load opportunities",
           },
@@ -258,9 +291,12 @@ export function crmCampaignsQueryOptions(search = "") {
     queryKey: crmKeys.campaigns(search),
     queryFn: async (): Promise<CrmPage<CrmCampaign>> => {
       const body = (await (
-        await client(`/api/crm/campaigns${listParams(search, { limit: "200" })}`, {
-          fallback: "Could not load campaigns",
-        })
+        await client(
+          `/api/crm/campaigns${listParams(search, { limit: "200" })}`,
+          {
+            fallback: "Could not load campaigns",
+          },
+        )
       ).json()) as {
         campaigns: CrmCampaign[];
         nextCursor: string | null;
@@ -280,9 +316,12 @@ export function crmThreadsQueryOptions(search = "") {
     queryKey: crmKeys.threads(search),
     queryFn: async (): Promise<CrmPage<CrmThread>> => {
       const body = (await (
-        await client(`/api/crm/threads${listParams(search, { limit: "200" })}`, {
-          fallback: "Could not load conversations",
-        })
+        await client(
+          `/api/crm/threads${listParams(search, { limit: "200" })}`,
+          {
+            fallback: "Could not load conversations",
+          },
+        )
       ).json()) as {
         threads: CrmThread[];
         nextCursor: string | null;
@@ -311,14 +350,19 @@ export function crmStagesQueryOptions() {
   });
 }
 
-export function crmConversationsQueryOptions(search = "") {
+export function crmConversationsQueryOptions(search = "", personId = "") {
   return queryOptions({
-    queryKey: crmKeys.conversations(search),
+    queryKey: crmKeys.conversations(search, personId),
     queryFn: async (): Promise<CrmPage<CrmConversation>> => {
       const body = (await (
-        await client(`/api/crm/conversations${listParams(search)}`, {
-          fallback: "Could not load activity",
-        })
+        await client(
+          `/api/crm/conversations${listParams(search, {
+            ...(personId ? { personId } : {}),
+          })}`,
+          {
+            fallback: "Could not load activity",
+          },
+        )
       ).json()) as {
         conversations: CrmConversation[];
         nextCursor: string | null;
@@ -372,6 +416,40 @@ export function crmSendsQueryOptions(
         items: body.sends,
         nextCursor: body.nextCursor,
         total: body.total,
+      };
+    },
+  });
+}
+
+export function crmCampaignListsQueryOptions(campaignId: string) {
+  return queryOptions({
+    queryKey: crmKeys.campaignLists(campaignId),
+    enabled: Boolean(campaignId),
+    queryFn: async (): Promise<CrmCampaignList[]> => {
+      const body = (await (
+        await client(`/api/crm/campaigns/${campaignId}/lists`, {
+          fallback: "Could not load lists",
+        })
+      ).json()) as { lists: CrmCampaignList[] };
+      return body.lists ?? [];
+    },
+  });
+}
+
+export function crmCampaignListMembersQueryOptions(listId: string) {
+  return queryOptions({
+    queryKey: crmKeys.campaignListMembers(listId),
+    enabled: Boolean(listId),
+    queryFn: async (): Promise<CrmPage<CrmPerson>> => {
+      const body = (await (
+        await client(`/api/crm/lists/${listId}/members`, {
+          fallback: "Could not load list members",
+        })
+      ).json()) as { people: CrmPerson[]; total: number };
+      return {
+        items: body.people ?? [],
+        nextCursor: null,
+        total: body.total ?? 0,
       };
     },
   });

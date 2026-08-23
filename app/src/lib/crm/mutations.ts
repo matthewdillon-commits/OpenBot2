@@ -2,12 +2,13 @@ import { mutationOptions, type QueryClient } from "@tanstack/react-query";
 import { client } from "@/lib/client";
 import {
   type CrmCampaign,
+  type CrmCampaignList,
   type CrmCompany,
   type CrmConversation,
-  crmKeys,
   type CrmOpportunity,
   type CrmPerson,
   type CrmSend,
+  crmKeys,
 } from "./queries";
 
 const FALLBACK = "CRM write failed";
@@ -25,6 +26,10 @@ export type CrmPersonInput = {
   stageKey?: string | null;
   doNotContact?: boolean;
   notes?: string | null;
+  linkedinUrl?: string | null;
+  location?: string | null;
+  timezone?: string | null;
+  source?: string | null;
 };
 
 export type CrmCompanyInput = {
@@ -33,6 +38,7 @@ export type CrmCompanyInput = {
   website?: string | null;
   industry?: string | null;
   phone?: string | null;
+  location?: string | null;
   notes?: string | null;
 };
 
@@ -189,8 +195,65 @@ export function updateCrmCampaignMutationOptions(queryClient: QueryClient) {
   });
 }
 
+export function createCrmCampaignListMutationOptions(queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: (variables: {
+      campaignId: string;
+      name: string;
+      description?: string | null;
+    }): Promise<CrmCampaignList> =>
+      client(`/api/crm/campaigns/${variables.campaignId}/lists`, "list", {
+        method: "POST",
+        body: {
+          name: variables.name,
+          description: variables.description,
+        },
+        fallback: FALLBACK,
+      }),
+    onSuccess: () => invalidateCrm(queryClient),
+  });
+}
+
+export function addCrmListMembersMutationOptions(queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: (variables: {
+      listId: string;
+      personIds: string[];
+    }): Promise<{ added: number }> =>
+      client(`/api/crm/lists/${variables.listId}/members`, {
+        method: "POST",
+        body: { personIds: variables.personIds },
+        fallback: FALLBACK,
+      }).then(async (response) => {
+        const body = (await response.json()) as { added: number };
+        return body;
+      }),
+    onSuccess: () => invalidateCrm(queryClient),
+  });
+}
+
+export function removeCrmListMembersMutationOptions(queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: (variables: {
+      listId: string;
+      personIds: string[];
+    }): Promise<{ removed: number }> =>
+      client(`/api/crm/lists/${variables.listId}/members`, {
+        method: "DELETE",
+        body: { personIds: variables.personIds },
+        fallback: FALLBACK,
+      }).then(async (response) => {
+        const body = (await response.json()) as { removed: number };
+        return body;
+      }),
+    onSuccess: () => invalidateCrm(queryClient),
+  });
+}
+
 /** Look up a company by exact name, or write one, so New contact can take a name. */
-export async function findOrCreateCrmCompany(name: string): Promise<CrmCompany> {
+export async function findOrCreateCrmCompany(
+  name: string,
+): Promise<CrmCompany> {
   const trimmed = name.trim();
   const body = (await (
     await client(

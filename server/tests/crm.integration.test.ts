@@ -407,6 +407,35 @@ describe("CRM against a real store", () => {
     expect(thread?.status).toBe("queued");
     expect(JSON.stringify(threads)).not.toContain("trackingToken");
 
+    const withLinkedin = await store.updatePerson(orgId, contacted.id, {
+      linkedinUrl: "https://linkedin.com/in/reached",
+      location: "Toronto",
+    });
+    expect(withLinkedin?.linkedinUrl).toBe("https://linkedin.com/in/reached");
+    expect(withLinkedin?.location).toBe("Toronto");
+
+    const campaign = await store.createCampaign(
+      orgId,
+      { name: "Spring outbound", status: "active" },
+      { kind: "user", id: actor.id, name: "CRM Test User" },
+    );
+    createdCampaignIds.push(campaign.id);
+    const list = await store.createCampaignList(orgId, campaign.id, {
+      name: "Warm leads",
+    });
+    expect(list.memberCount).toBe(0);
+    const added = await store.addCampaignListMembers(orgId, list.id, [
+      contacted.id,
+    ]);
+    expect(added.added).toBe(1);
+    const members = await store.listCampaignListMembers(orgId, list.id);
+    expect(members.total).toBe(1);
+    expect(members.items[0]?.id).toBe(contacted.id);
+    expect(await store.listCampaignLists(otherOrg.id, campaign.id)).toEqual([]);
+    await expect(
+      store.createCampaignList(otherOrg.id, campaign.id, { name: "Stolen" }),
+    ).rejects.toThrow(/not here/);
+
     const dnc = await store.updatePerson(orgId, contacted.id, {
       stageKey: "dnc",
     });

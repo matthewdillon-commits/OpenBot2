@@ -24,6 +24,8 @@ import {
   userRoles,
   users,
   verifications,
+  crmCampaignListMembers,
+  crmCampaignLists,
   crmCampaigns,
   crmCompanies,
   crmConversations,
@@ -339,6 +341,8 @@ describe("OpenBot database schema", () => {
         crmPeople,
         crmOpportunities,
         crmCampaigns,
+        crmCampaignLists,
+        crmCampaignListMembers,
         crmConversations,
         crmSends,
         crmSendEvents,
@@ -348,6 +352,8 @@ describe("OpenBot database schema", () => {
       "crm_people",
       "crm_opportunities",
       "crm_campaigns",
+      "crm_campaign_lists",
+      "crm_campaign_list_members",
       "crm_conversations",
       "crm_sends",
       "crm_send_events",
@@ -361,6 +367,10 @@ describe("OpenBot database schema", () => {
         "companyId",
         "stageKey",
         "doNotContact",
+        "linkedinUrl",
+        "location",
+        "timezone",
+        "source",
       ]),
     );
     expect(Object.keys(crmOpportunities)).toEqual(
@@ -390,6 +400,17 @@ describe("OpenBot database schema", () => {
     expect(migration).toContain(
       `CREATE UNIQUE INDEX "crm_sends_tracking_token_key"`,
     );
+  });
+
+  test("adds LimitlessAI-2 record fields and campaign lists in their own migration", async () => {
+    const migration = await readFile(
+      new URL("../drizzle/0013_crm_lai2_record.sql", import.meta.url),
+      "utf8",
+    );
+    expect(migration).toContain(`CREATE TABLE "crm_campaign_lists"`);
+    expect(migration).toContain(`CREATE TABLE "crm_campaign_list_members"`);
+    expect(migration).toContain(`"linkedin_url"`);
+    expect(migration).toContain(`ALTER TABLE "crm_companies" ADD COLUMN "location"`);
   });
 
   test("adds LimitlessAI-2 stages in their own migration", async () => {

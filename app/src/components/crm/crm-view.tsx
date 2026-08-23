@@ -17,30 +17,30 @@ import {
   X,
 } from "lucide-react";
 import {
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
   useRef,
   useState,
-  type CSSProperties,
-  type KeyboardEvent as ReactKeyboardEvent,
-  type PointerEvent as ReactPointerEvent,
 } from "react";
 import { toast } from "sonner";
 import { CampaignsPanel } from "@/components/crm/campaigns-panel";
 import { CompaniesPanel } from "@/components/crm/companies-panel";
-import { ContactPreview } from "@/components/crm/contact-preview";
+import { ContactRecord } from "@/components/crm/contact-record";
 import { ConversationsPanel } from "@/components/crm/conversations-panel";
 import {
-  BotMark,
-  LinkedInMark,
   avatarHue,
+  BotMark,
   faviconDomainFromContact,
   formatRelativeCreated,
+  LinkedInMark,
 } from "@/components/crm/crm-marks";
 import {
   CRM_OBJECT_TABS,
-  crmModeLabel,
   type CrmObjectMode,
+  crmModeLabel,
 } from "@/components/crm/crm-object-nav";
 import { DealBoard } from "@/components/crm/deal-board";
 import { stageLabel, stageStyle } from "@/lib/crm/colors";
@@ -102,7 +102,10 @@ export function CrmView({
   const crmSplitRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setSearchDebounced(search.trim()), 220);
+    const timer = window.setTimeout(
+      () => setSearchDebounced(search.trim()),
+      220,
+    );
     return () => window.clearTimeout(timer);
   }, [search]);
 
@@ -439,10 +442,9 @@ export function CrmView({
               } as CSSProperties
             }
           >
-            <ContactPreview
+            <ContactRecord
               person={selected}
               fullscreen={false}
-              onToggleFullscreen={() => setRecordMode("full")}
               onClose={() => selectContact(null)}
             />
           </div>
@@ -451,10 +453,9 @@ export function CrmView({
 
       {selected && recordMode === "full" ? (
         <div className="absolute inset-0 z-40 flex min-h-0 w-full flex-col overflow-hidden p-2">
-          <ContactPreview
+          <ContactRecord
             person={selected}
             fullscreen
-            onToggleFullscreen={() => setRecordMode("preview")}
             onClose={() => selectContact(null)}
           />
         </div>
@@ -518,14 +519,22 @@ function PeopleIndex({
               </label>
             </th>
             <IconColumnHeader icon={UserRound} label="Name" />
-            <IconColumnHeader icon={Mail} label="Emails" className="ui-crm-col-email" />
+            <IconColumnHeader
+              icon={Mail}
+              label="Emails"
+              className="ui-crm-col-email"
+            />
             <IconColumnHeader
               icon={Settings2}
               label="Created by"
               className="ui-crm-col-meta"
             />
             <IconColumnHeader icon={Building2} label="Company" />
-            <IconColumnHeader icon={Phone} label="Phones" className="ui-crm-col-aux" />
+            <IconColumnHeader
+              icon={Phone}
+              label="Phones"
+              className="ui-crm-col-aux"
+            />
             <IconColumnHeader
               icon={Calendar}
               label="Creation date"
@@ -658,7 +667,21 @@ function PeopleIndex({
                     </span>
                   ) : null}
                 </td>
-                <td className="ui-crm-col-aux" />
+                <td className="ui-crm-col-aux">
+                  {person.linkedinUrl ? (
+                    <a
+                      href={person.linkedinUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={(event) => event.stopPropagation()}
+                      className="ui-crm-pill"
+                      aria-label="LinkedIn profile"
+                    >
+                      <LinkedInMark className="h-3.5 w-3.5" />
+                      <span>LinkedIn</span>
+                    </a>
+                  ) : null}
+                </td>
               </tr>
             );
           })}
@@ -689,8 +712,11 @@ function PeopleIndex({
               <span className="ui-crm-calc-stat">
                 Unique of Emails{" "}
                 <strong>
-                  {new Set(rows.flatMap((person) => person.emails).filter(Boolean))
-                    .size}
+                  {
+                    new Set(
+                      rows.flatMap((person) => person.emails).filter(Boolean),
+                    ).size
+                  }
                 </strong>
               </span>
             </td>
@@ -888,7 +914,9 @@ function NewContactForm({
       });
       onCreated(person);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Couldn’t create contact");
+      toast.error(
+        err instanceof Error ? err.message : "Couldn’t create contact",
+      );
     }
   }
 
@@ -900,7 +928,8 @@ function NewContactForm({
             New contact
           </Dialog.Title>
           <Dialog.Description className="mt-1.5 text-13 leading-relaxed text-[var(--text-secondary)]">
-            Give a name and email. The agent can enrich title, company, and next play from there.
+            Give a name and email. The agent can enrich title, company, and next
+            play from there.
           </Dialog.Description>
         </div>
         <button
@@ -1019,7 +1048,11 @@ function BulkActionBar({
         >
           <option value="">{busy ? "Moving…" : "Move to stage…"}</option>
           {CONTACT_STAGE_DEFS.map((stage) => (
-            <option key={stage.key} value={stage.key} className="text-[var(--text)]">
+            <option
+              key={stage.key}
+              value={stage.key}
+              className="text-[var(--text)]"
+            >
               {stage.label}
             </option>
           ))}

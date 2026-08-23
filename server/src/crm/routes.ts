@@ -7,12 +7,10 @@ import {
 } from "../auth/guards";
 import { orgIdOf } from "../orgs/constants";
 import { deliverSend, trackingOrigin } from "./deliver";
-import {
-  CONTACT_STAGE_DEFS,
-  DEAL_STAGE_DEFS,
-} from "./stages";
+import { CONTACT_STAGE_DEFS, DEAL_STAGE_DEFS } from "./stages";
 import type {
   CrmCampaignInput,
+  CrmCampaignListInput,
   CrmCompanyInput,
   CrmConversationInput,
   CrmCreatedBy,
@@ -119,8 +117,7 @@ export function createCrmRoutes(
       });
     }),
   );
-  routes.get(
-    "/people/:id", requireUser, async (context) =>
+  routes.get("/people/:id", requireUser, async (context) =>
     withOrg(context, async (orgId) => {
       const person = await store.getPerson(orgId, context.req.param("id"));
       if (!person)
@@ -128,10 +125,11 @@ export function createCrmRoutes(
       return context.json({ person });
     }),
   );
-  routes.post(
-    "/people", requireUser, async (context) =>
+  routes.post("/people", requireUser, async (context) =>
     withOrg(context, async (orgId) => {
-      const parsed = parsePersonInput(await context.req.json().catch(() => null));
+      const parsed = parsePersonInput(
+        await context.req.json().catch(() => null),
+      );
       if (!parsed.ok) return context.json({ error: parsed.error }, 400);
       try {
         const person = await store.createPerson(
@@ -145,10 +143,11 @@ export function createCrmRoutes(
       }
     }),
   );
-  routes.patch(
-    "/people/:id", requireUser, async (context) =>
+  routes.patch("/people/:id", requireUser, async (context) =>
     withOrg(context, async (orgId) => {
-      const parsed = parsePersonPatch(await context.req.json().catch(() => null));
+      const parsed = parsePersonPatch(
+        await context.req.json().catch(() => null),
+      );
       if (!parsed.ok) return context.json({ error: parsed.error }, 400);
       try {
         const person = await store.updatePerson(
@@ -165,8 +164,7 @@ export function createCrmRoutes(
     }),
   );
 
-  routes.get(
-    "/companies", requireUser, async (context) =>
+  routes.get("/companies", requireUser, async (context) =>
     withOrg(context, async (orgId) => {
       const page = await store.listCompanies({
         ...listQuery(context.req.url),
@@ -179,8 +177,7 @@ export function createCrmRoutes(
       });
     }),
   );
-  routes.get(
-    "/companies/:id", requireUser, async (context) =>
+  routes.get("/companies/:id", requireUser, async (context) =>
     withOrg(context, async (orgId) => {
       const company = await store.getCompany(orgId, context.req.param("id"));
       if (!company)
@@ -188,8 +185,7 @@ export function createCrmRoutes(
       return context.json({ company });
     }),
   );
-  routes.post(
-    "/companies", requireUser, async (context) =>
+  routes.post("/companies", requireUser, async (context) =>
     withOrg(context, async (orgId) => {
       const parsed = parseCompanyInput(
         await context.req.json().catch(() => null),
@@ -207,8 +203,7 @@ export function createCrmRoutes(
       }
     }),
   );
-  routes.patch(
-    "/companies/:id", requireUser, async (context) =>
+  routes.patch("/companies/:id", requireUser, async (context) =>
     withOrg(context, async (orgId) => {
       const parsed = parseCompanyPatch(
         await context.req.json().catch(() => null),
@@ -229,8 +224,7 @@ export function createCrmRoutes(
     }),
   );
 
-  routes.get(
-    "/opportunities", requireUser, async (context) =>
+  routes.get("/opportunities", requireUser, async (context) =>
     withOrg(context, async (orgId) => {
       const page = await store.listOpportunities({
         ...listQuery(context.req.url),
@@ -243,8 +237,7 @@ export function createCrmRoutes(
       });
     }),
   );
-  routes.get(
-    "/opportunities/:id", requireUser, async (context) =>
+  routes.get("/opportunities/:id", requireUser, async (context) =>
     withOrg(context, async (orgId) => {
       const opportunity = await store.getOpportunity(
         orgId,
@@ -255,8 +248,7 @@ export function createCrmRoutes(
       return context.json({ opportunity });
     }),
   );
-  routes.post(
-    "/opportunities", requireUser, async (context) =>
+  routes.post("/opportunities", requireUser, async (context) =>
     withOrg(context, async (orgId) => {
       const parsed = parseOpportunityInput(
         await context.req.json().catch(() => null),
@@ -274,8 +266,7 @@ export function createCrmRoutes(
       }
     }),
   );
-  routes.patch(
-    "/opportunities/:id", requireUser, async (context) =>
+  routes.patch("/opportunities/:id", requireUser, async (context) =>
     withOrg(context, async (orgId) => {
       const parsed = parseOpportunityPatch(
         await context.req.json().catch(() => null),
@@ -296,8 +287,7 @@ export function createCrmRoutes(
     }),
   );
 
-  routes.get(
-    "/campaigns", requireUser, async (context) =>
+  routes.get("/campaigns", requireUser, async (context) =>
     withOrg(context, async (orgId) => {
       const page = await store.listCampaigns({
         ...listQuery(context.req.url),
@@ -310,17 +300,88 @@ export function createCrmRoutes(
       });
     }),
   );
-  routes.get(
-    "/campaigns/:id", requireUser, async (context) =>
+  routes.get("/campaigns/:id", requireUser, async (context) =>
     withOrg(context, async (orgId) => {
       const campaign = await store.getCampaign(orgId, context.req.param("id"));
       if (!campaign)
         return context.json({ error: "That campaign is not here." }, 404);
-      return context.json({ campaign });
+      const lists = await store.listCampaignLists(orgId, campaign.id);
+      return context.json({ campaign, lists });
     }),
   );
-  routes.post(
-    "/campaigns", requireUser, async (context) =>
+  routes.get("/campaigns/:id/lists", requireUser, async (context) =>
+    withOrg(context, async (orgId) => {
+      const campaign = await store.getCampaign(orgId, context.req.param("id"));
+      if (!campaign)
+        return context.json({ error: "That campaign is not here." }, 404);
+      const lists = await store.listCampaignLists(orgId, campaign.id);
+      return context.json({ lists });
+    }),
+  );
+  routes.post("/campaigns/:id/lists", requireUser, async (context) =>
+    withOrg(context, async (orgId) => {
+      const parsed = parseCampaignListInput(
+        await context.req.json().catch(() => null),
+      );
+      if (!parsed.ok) return context.json({ error: parsed.error }, 400);
+      try {
+        const list = await store.createCampaignList(
+          orgId,
+          context.req.param("id"),
+          parsed.value,
+        );
+        return context.json({ list }, 201);
+      } catch (error) {
+        return context.json({ error: messageOf(error) }, 400);
+      }
+    }),
+  );
+  routes.get("/lists/:id/members", requireUser, async (context) =>
+    withOrg(context, async (orgId) => {
+      const page = await store.listCampaignListMembers(
+        orgId,
+        context.req.param("id"),
+      );
+      return context.json({
+        people: page.items,
+        contacts: page.items,
+        total: page.total,
+      });
+    }),
+  );
+  routes.post("/lists/:id/members", requireUser, async (context) =>
+    withOrg(context, async (orgId) => {
+      const ids = personIdsFrom(await context.req.json().catch(() => null));
+      if (!ids.ok) return context.json({ error: ids.error }, 400);
+      try {
+        const result = await store.addCampaignListMembers(
+          orgId,
+          context.req.param("id"),
+          ids.value,
+        );
+        return context.json(result);
+      } catch (error) {
+        return context.json({ error: messageOf(error) }, 400);
+      }
+    }),
+  );
+  routes.delete("/lists/:id/members", requireUser, async (context) =>
+    withOrg(context, async (orgId) => {
+      const ids = personIdsFrom(await context.req.json().catch(() => null));
+      if (!ids.ok) return context.json({ error: ids.error }, 400);
+      try {
+        const result = await store.removeCampaignListMembers(
+          orgId,
+          context.req.param("id"),
+          ids.value,
+        );
+        return context.json(result);
+      } catch (error) {
+        return context.json({ error: messageOf(error) }, 400);
+      }
+    }),
+  );
+  routes.post("/campaigns", requireUser, async (context) =>
     withOrg(context, async (orgId) => {
       const parsed = parseCampaignInput(
         await context.req.json().catch(() => null),
@@ -338,8 +399,7 @@ export function createCrmRoutes(
       }
     }),
   );
-  routes.patch(
-    "/campaigns/:id", requireUser, async (context) =>
+  routes.patch("/campaigns/:id", requireUser, async (context) =>
     withOrg(context, async (orgId) => {
       const parsed = parseCampaignPatch(
         await context.req.json().catch(() => null),
@@ -360,8 +420,7 @@ export function createCrmRoutes(
     }),
   );
 
-  routes.get(
-    "/conversations", requireUser, async (context) =>
+  routes.get("/conversations", requireUser, async (context) =>
     withOrg(context, async (orgId) => {
       const page = await store.listConversations({
         ...listQuery(context.req.url),
@@ -374,8 +433,7 @@ export function createCrmRoutes(
       });
     }),
   );
-  routes.get(
-    "/conversations/:id", requireUser, async (context) =>
+  routes.get("/conversations/:id", requireUser, async (context) =>
     withOrg(context, async (orgId) => {
       const conversation = await store.getConversation(
         orgId,
@@ -386,8 +444,7 @@ export function createCrmRoutes(
       return context.json({ conversation });
     }),
   );
-  routes.post(
-    "/conversations", requireUser, async (context) =>
+  routes.post("/conversations", requireUser, async (context) =>
     withOrg(context, async (orgId) => {
       const parsed = parseConversationInput(
         await context.req.json().catch(() => null),
@@ -405,8 +462,7 @@ export function createCrmRoutes(
       }
     }),
   );
-  routes.patch(
-    "/conversations/:id", requireUser, async (context) =>
+  routes.patch("/conversations/:id", requireUser, async (context) =>
     withOrg(context, async (orgId) => {
       const parsed = parseConversationPatch(
         await context.req.json().catch(() => null),
@@ -427,8 +483,7 @@ export function createCrmRoutes(
     }),
   );
 
-  routes.get(
-    "/sends", requireUser, async (context) =>
+  routes.get("/sends", requireUser, async (context) =>
     withOrg(context, async (orgId) => {
       const page = await store.listSends({
         ...listQuery(context.req.url),
@@ -441,8 +496,7 @@ export function createCrmRoutes(
       });
     }),
   );
-  routes.get(
-    "/sends/:id", requireUser, async (context) =>
+  routes.get("/sends/:id", requireUser, async (context) =>
     withOrg(context, async (orgId) => {
       const send = await store.getSend(orgId, context.req.param("id"));
       if (!send) return context.json({ error: "That send is not here." }, 404);
@@ -450,8 +504,7 @@ export function createCrmRoutes(
       return context.json({ send, events });
     }),
   );
-  routes.post(
-    "/sends", requireUser, async (context) =>
+  routes.post("/sends", requireUser, async (context) =>
     withOrg(context, async (orgId) => {
       const parsed = parseSendInput(await context.req.json().catch(() => null));
       if (!parsed.ok) return context.json({ error: parsed.error }, 400);
@@ -573,6 +626,70 @@ function requiredName(body: Record<string, unknown>): ParseResult<string> {
   return { ok: true, value: body.name };
 }
 
+function parsePersonExtras(
+  body: Record<string, unknown>,
+): ParseResult<
+  Pick<CrmPersonInput, "linkedinUrl" | "location" | "timezone" | "source">
+> {
+  const linkedinUrl = optionalString(body.linkedinUrl);
+  if (!linkedinUrl.ok)
+    return { ok: false, error: "linkedinUrl must be a string." };
+  const location = optionalString(body.location);
+  if (!location.ok) return { ok: false, error: "location must be a string." };
+  const timezone = optionalString(body.timezone);
+  if (!timezone.ok) return { ok: false, error: "timezone must be a string." };
+  const source = optionalString(body.source);
+  if (!source.ok) return { ok: false, error: "source must be a string." };
+  return {
+    ok: true,
+    value: {
+      ...(linkedinUrl.value !== undefined
+        ? { linkedinUrl: linkedinUrl.value }
+        : {}),
+      ...(location.value !== undefined ? { location: location.value } : {}),
+      ...(timezone.value !== undefined ? { timezone: timezone.value } : {}),
+      ...(source.value !== undefined ? { source: source.value } : {}),
+    },
+  };
+}
+
+function parseCampaignListInput(
+  value: unknown,
+): ParseResult<CrmCampaignListInput> {
+  const body = asObject(value);
+  if (!body) return { ok: false, error: "List input must be a JSON object." };
+  const name = requiredName(body);
+  if (!name.ok) return name;
+  const description = optionalString(body.description);
+  if (!description.ok)
+    return { ok: false, error: "description must be a string." };
+  return {
+    ok: true,
+    value: {
+      name: name.value,
+      ...(description.value !== undefined
+        ? { description: description.value }
+        : {}),
+    },
+  };
+}
+
+function personIdsFrom(value: unknown): ParseResult<string[]> {
+  const body = asObject(value);
+  if (!body) return { ok: false, error: "Member input must be a JSON object." };
+  const raw = body.personIds ?? body.contactIds;
+  const single = body.personId ?? body.contactId;
+  const ids = Array.isArray(raw)
+    ? raw
+    : typeof single === "string"
+      ? [single]
+      : [];
+  if (ids.length === 0 || ids.some((id) => typeof id !== "string" || !id)) {
+    return { ok: false, error: "personIds required" };
+  }
+  return { ok: true, value: ids as string[] };
+}
+
 export function parsePersonInput(value: unknown): ParseResult<CrmPersonInput> {
   const body = asObject(value);
   if (!body) return { ok: false, error: "Person input must be a JSON object." };
@@ -593,6 +710,8 @@ export function parsePersonInput(value: unknown): ParseResult<CrmPersonInput> {
   const doNotContact = optionalBoolean(body.doNotContact);
   if (!doNotContact.ok)
     return { ok: false, error: "doNotContact must be a boolean." };
+  const extras = parsePersonExtras(body);
+  if (!extras.ok) return extras;
   return {
     ok: true,
     value: {
@@ -606,6 +725,7 @@ export function parsePersonInput(value: unknown): ParseResult<CrmPersonInput> {
         ? { doNotContact: doNotContact.value }
         : {}),
       ...(notes.value !== undefined ? { notes: notes.value } : {}),
+      ...extras.value,
     },
   };
 }
@@ -636,6 +756,8 @@ export function parsePersonPatch(
   const doNotContact = optionalBoolean(body.doNotContact);
   if (!doNotContact.ok)
     return { ok: false, error: "doNotContact must be a boolean." };
+  const extras = parsePersonExtras(body);
+  if (!extras.ok) return extras;
   return {
     ok: true,
     value: {
@@ -651,6 +773,7 @@ export function parsePersonPatch(
         ? { doNotContact: doNotContact.value }
         : {}),
       ...(notes.value !== undefined ? { notes: notes.value } : {}),
+      ...extras.value,
     },
   };
 }
@@ -671,6 +794,8 @@ export function parseCompanyInput(
   if (!industry.ok) return { ok: false, error: "industry must be a string." };
   const phone = optionalString(body.phone);
   if (!phone.ok) return { ok: false, error: "phone must be a string." };
+  const location = optionalString(body.location);
+  if (!location.ok) return { ok: false, error: "location must be a string." };
   const notes = optionalString(body.notes);
   if (!notes.ok) return { ok: false, error: "notes must be a string." };
   return {
@@ -681,6 +806,7 @@ export function parseCompanyInput(
       ...(website.value !== undefined ? { website: website.value } : {}),
       ...(industry.value !== undefined ? { industry: industry.value } : {}),
       ...(phone.value !== undefined ? { phone: phone.value } : {}),
+      ...(location.value !== undefined ? { location: location.value } : {}),
       ...(notes.value !== undefined ? { notes: notes.value } : {}),
     },
   };
@@ -915,11 +1041,7 @@ export function parseConversationPatch(
 export function parseSendInput(value: unknown): ParseResult<CrmSendInput> {
   const body = asObject(value);
   if (!body) return { ok: false, error: "Send input must be a JSON object." };
-  if (
-    body.kind !== "email" &&
-    body.kind !== "sms" &&
-    body.kind !== "call"
-  ) {
+  if (body.kind !== "email" && body.kind !== "sms" && body.kind !== "call") {
     return { ok: false, error: "kind must be email, sms, or call." };
   }
   if (typeof body.toAddress !== "string" || !body.toAddress.trim()) {

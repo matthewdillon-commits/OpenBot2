@@ -41,6 +41,10 @@ const createParameters = z.object({
   emails: z.array(z.string()).optional(),
   phones: z.array(z.string()).optional(),
   job_title: z.string().optional(),
+  linkedin_url: z.string().optional(),
+  location: z.string().optional(),
+  timezone: z.string().optional(),
+  source: z.string().optional(),
   company_id: z.string().optional(),
   person_id: z.string().optional(),
   campaign_id: z.string().optional(),
@@ -198,7 +202,9 @@ export function crmTools(options: {
             toAddress: parsed.data.to_address,
             ...(parsed.data.subject ? { subject: parsed.data.subject } : {}),
             ...(parsed.data.body ? { body: parsed.data.body } : {}),
-            ...(parsed.data.person_id ? { personId: parsed.data.person_id } : {}),
+            ...(parsed.data.person_id
+              ? { personId: parsed.data.person_id }
+              : {}),
             ...(parsed.data.company_id
               ? { companyId: parsed.data.company_id }
               : {}),
@@ -222,6 +228,10 @@ function fieldsFrom(
   if (data.emails !== undefined) fields.emails = data.emails;
   if (data.phones !== undefined) fields.phones = data.phones;
   if (data.job_title !== undefined) fields.jobTitle = data.job_title;
+  if (data.linkedin_url !== undefined) fields.linkedinUrl = data.linkedin_url;
+  if (data.location !== undefined) fields.location = data.location;
+  if (data.timezone !== undefined) fields.timezone = data.timezone;
+  if (data.source !== undefined) fields.source = data.source;
   if (data.company_id !== undefined) fields.companyId = data.company_id;
   if (data.person_id !== undefined) fields.personId = data.person_id;
   if (data.campaign_id !== undefined) fields.campaignId = data.campaign_id;
