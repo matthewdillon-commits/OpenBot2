@@ -1,8 +1,6 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { useState, type ReactNode } from "react";
 import {
   providerName,
   signInWith,
@@ -16,7 +14,6 @@ import {
   authProvidersQueryOptions,
   currentUserQueryOptions,
 } from "@/lib/auth/queries";
-import { createOwnOrganizationMutationOptions } from "@/lib/orgs/mutations";
 import { queryClient } from "@/query-client";
 
 export const Route = createFileRoute("/sign")({
@@ -32,11 +29,16 @@ export const Route = createFileRoute("/sign")({
   component: SignScreen,
 });
 
-const fieldClassName = "h-11 bg-white border-border/50 rounded-xl";
+const fieldChrome =
+  "flex h-[52px] items-center gap-3 rounded-[12px] border border-[#e6e6e6] bg-white px-3.5 transition-[border-color,box-shadow] focus-within:border-[#111] focus-within:shadow-[0_0_0_3px_rgba(0,0,0,0.04)]";
+const fieldInput =
+  "w-full bg-transparent text-[15px] text-[#111] outline-none placeholder:text-[#b0b0b0]";
+const socialButton =
+  "relative z-10 flex h-12 min-h-12 w-full touch-manipulation items-center justify-center gap-2.5 rounded-[12px] border border-[#e6e6e6] bg-white text-[14px] font-medium text-[#222] transition-colors hover:bg-[#fafafa] disabled:opacity-50";
 
 /**
- * Copied from LimitlessAI-2's `/login` (app.limitlessai.ca): grain, logo, Welcome Back,
- * unlabeled rounded fields, navy Sign In with a lock, then Continue with Google.
+ * Copied from os.limitlessai.ca/login: split form and aerial hero, Inter Tight,
+ * labelled fields, black Sign In, Google + Apple Soon.
  *
  * This screen is a deliberate exception to PageShell — it is the unauthenticated entrance.
  */
@@ -46,19 +48,18 @@ function SignScreen() {
   >(null);
   const [mode, setMode] = useState<"in" | "up">("in");
   const [error, setError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
   const { data: options } = useQuery(authProvidersQueryOptions());
   const providers = options?.providers ?? [];
   const emailPassword = options?.emailPassword === true;
   const googleConfigured = providers.includes("google");
   const otherProviders = providers.filter((provider) => provider !== "google");
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [organization, setOrganization] = useState("");
   const navigate = useNavigate();
-  const createOrg = useMutation(
-    createOwnOrganizationMutationOptions(queryClient),
-  );
   const busy = opening !== null;
+  const year = new Date().getFullYear();
 
   async function handleDomainSignIn(submission: React.FormEvent) {
     submission.preventDefault();
@@ -124,12 +125,9 @@ function SignScreen() {
 
     try {
       if (mode === "up") {
-        const name = email.split("@")[0] || email;
-        await signUpWithEmail({ email, password, name });
+        const accountName = name.trim() || email.split("@")[0] || email;
+        await signUpWithEmail({ email, password, name: accountName });
         await queryClient.invalidateQueries({ queryKey: authKeys.all });
-        if (organization.trim()) {
-          await createOrg.mutateAsync({ name: organization.trim() });
-        }
       } else {
         await signInWithEmail({ email, password });
         await queryClient.invalidateQueries({ queryKey: authKeys.all });
@@ -157,266 +155,480 @@ function SignScreen() {
   }
 
   return (
-    <div className="sign-screen min-h-screen bg-background flex flex-col items-center justify-center p-6">
-      <div className="grain-overlay" />
-      <div className="w-full max-w-sm space-y-8 relative z-10">
-        <div className="flex flex-col items-center gap-4">
-          <img alt="Logo" className="h-12 w-auto" src="/limitless-logo.png" />
-          <h1 className="text-2xl font-semibold tracking-tight font-editorial">
-            {mode === "up" ? "Create an account" : "Welcome Back"}
-          </h1>
-          <p className="text-sm text-muted-foreground text-center">
-            {mode === "up"
-              ? "Your organization is the company workspace you will work in."
-              : "Sign in to your AI dashboard"}
-          </p>
-        </div>
-
-        {emailPassword ? (
-          <form className="space-y-4" onSubmit={handleEmailAuth}>
-            <Input
-              autoComplete="email"
-              className={fieldClassName}
-              data-testid="input-login-email"
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder="you@example.com"
-              required
-              type="email"
-              value={email}
-            />
-            <Input
-              autoComplete={mode === "up" ? "new-password" : "current-password"}
-              className={fieldClassName}
-              data-testid="input-login-password"
-              minLength={8}
-              onChange={(event) => setPassword(event.target.value)}
-              placeholder="Password"
-              required
-              type="password"
-              value={password}
-            />
-            {mode === "up" ? (
-              <Input
-                autoComplete="organization"
-                className={fieldClassName}
-                onChange={(event) => setOrganization(event.target.value)}
-                placeholder="Your company"
-                required
-                value={organization}
+    <div className="sign-screen flex min-h-dvh w-full bg-white">
+      <div className="relative flex w-full min-w-0 flex-col px-4 py-6 sm:px-10 lg:w-[46%] lg:px-12 xl:px-16">
+        <div className="mx-auto flex w-full min-w-0 max-w-[420px] flex-1 flex-col">
+          <div className="flex items-center">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <img
+                alt="LimitlessAI"
+                className="ui-logo block shrink-0 object-contain !rounded-none"
+                decoding="async"
+                draggable={false}
+                height={32}
+                src="/logo.webp"
+                style={{ width: 32, height: 32 }}
+                width={32}
               />
-            ) : (
-              <div className="flex justify-end -mt-1">
+              <span className="truncate text-[15px] font-semibold leading-none tracking-[-0.02em] text-[#111]">
+                LimitlessAI
+              </span>
+            </div>
+          </div>
+
+          <div className="flex min-w-0 flex-1 flex-col justify-center py-8 sm:py-10">
+            <div className="min-w-0">
+              <h1 className="text-[28px] font-semibold leading-[1.15] tracking-[-0.03em] text-[#111] sm:text-[34px]">
+                {mode === "up" ? "Create Your Account" : "Welcome back"}
+              </h1>
+              <p className="mt-2.5 text-[15px] leading-relaxed text-[#6b6b6b] text-pretty">
+                {mode === "up"
+                  ? "Welcome to LimitlessAI. Put agents to work in your workspace."
+                  : "Sign in to LimitlessAI and pick up where you left off."}
+              </p>
+
+              {emailPassword ? (
+                <form className="mt-8 min-w-0 space-y-4" onSubmit={handleEmailAuth}>
+                  {mode === "up" ? (
+                    <Field label="Full Name">
+                      <UserMark />
+                      <input
+                        autoComplete="name"
+                        className={fieldInput}
+                        name="name"
+                        onChange={(event) => setName(event.target.value)}
+                        placeholder="Alex Morgan"
+                        value={name}
+                      />
+                    </Field>
+                  ) : null}
+                  <Field label="Email Address">
+                    <MailMark />
+                    <input
+                      autoComplete="email"
+                      className={fieldInput}
+                      data-testid="input-login-email"
+                      name="email"
+                      onChange={(event) => setEmail(event.target.value)}
+                      placeholder="alex@company.com"
+                      required
+                      type="email"
+                      value={email}
+                    />
+                  </Field>
+                  <Field
+                    extra={
+                      mode === "in" ? (
+                        <button
+                          className="font-normal text-[#6b6b6b] underline-offset-2 hover:underline"
+                          data-testid="link-forgot-password"
+                          onClick={() =>
+                            setError(
+                              "Password reset is not available on this deployment yet.",
+                            )
+                          }
+                          type="button"
+                        >
+                          Forgot password?
+                        </button>
+                      ) : null
+                    }
+                    label="Password"
+                  >
+                    <LockMark />
+                    <input
+                      autoComplete={
+                        mode === "up" ? "new-password" : "current-password"
+                      }
+                      className={fieldInput}
+                      data-testid="input-login-password"
+                      minLength={8}
+                      name="password"
+                      onChange={(event) => setPassword(event.target.value)}
+                      placeholder="At least 8 characters"
+                      required
+                      type={showPassword ? "text" : "password"}
+                      value={password}
+                    />
+                    <button
+                      aria-label={
+                        showPassword ? "Hide password" : "Show password"
+                      }
+                      className="shrink-0 text-[#9a9a9a] hover:text-[#444]"
+                      onClick={() => setShowPassword((value) => !value)}
+                      type="button"
+                    >
+                      {showPassword ? <EyeOffMark /> : <EyeMark />}
+                    </button>
+                  </Field>
+                  {error ? (
+                    <p className="text-sm text-[#c00]" role="alert">
+                      {error}
+                    </p>
+                  ) : null}
+                  <button
+                    className="mt-2 flex h-[52px] w-full items-center justify-center gap-2 rounded-[12px] bg-[#111] text-[15px] font-medium text-white transition-opacity enabled:hover:opacity-90 disabled:bg-[#d4d4d4] disabled:text-white"
+                    data-testid="button-client-login"
+                    disabled={
+                      busy ||
+                      email.trim().length === 0 ||
+                      password.length < 8 ||
+                      (mode === "up" && name.trim().length === 0)
+                    }
+                    type="submit"
+                  >
+                    {opening === "email"
+                      ? mode === "up"
+                        ? "Creating account…"
+                        : "Signing in…"
+                      : mode === "up"
+                        ? "Create Account"
+                        : "Sign In"}
+                  </button>
+                </form>
+              ) : null}
+
+              <div className="my-6 flex items-center gap-3">
+                <div className="h-px flex-1 bg-[#e8e8e8]" />
+                <span className="text-[13px] text-[#9a9a9a]">Or</span>
+                <div className="h-px flex-1 bg-[#e8e8e8]" />
+              </div>
+
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                 <button
-                  className="text-xs text-muted-foreground hover:text-primary transition-colors"
-                  data-testid="link-forgot-password"
-                  onClick={() =>
-                    setError(
-                      "Password reset is not available on this deployment yet.",
-                    )
-                  }
+                  className={socialButton}
+                  data-testid="button-login-google"
+                  disabled={busy}
+                  onClick={handleGoogle}
                   type="button"
                 >
-                  Forgot password?
+                  <span className="inline-flex h-[18px] w-[18px] items-center justify-center">
+                    <GoogleMark />
+                  </span>
+                  {opening === "google"
+                    ? "Opening Google…"
+                    : mode === "up"
+                      ? "Sign up with Google"
+                      : "Continue with Google"}
+                </button>
+                <button
+                  className="relative flex h-[48px] items-center justify-center gap-2.5 rounded-[12px] border border-[#e6e6e6] bg-white text-[14px] font-medium text-[#222] transition-colors hover:bg-[#fafafa] disabled:opacity-50"
+                  disabled
+                  type="button"
+                >
+                  <span className="inline-flex h-[18px] w-[18px] items-center justify-center text-[#111]">
+                    <AppleMark />
+                  </span>
+                  Continue with Apple
+                  <span className="absolute -top-2 right-2 rounded-full bg-[#111] px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-[0.04em] text-white">
+                    Soon
+                  </span>
                 </button>
               </div>
-            )}
-            {error ? (
-              <p className="text-sm text-destructive text-center" role="alert">
-                {error}
-              </p>
-            ) : null}
-            <Button
-              className="w-full h-11 rounded-xl shadow-lg shadow-primary/20"
-              data-testid="button-client-login"
-              disabled={
-                busy ||
-                email.trim().length === 0 ||
-                password.length < 8 ||
-                (mode === "up" && organization.trim().length === 0)
-              }
-              type="submit"
+
+              {otherProviders.length > 0 ? (
+                <div className="mt-2.5 space-y-2.5">
+                  {otherProviders.map((provider) => (
+                    <button
+                      className={socialButton}
+                      disabled={busy}
+                      key={provider}
+                      onClick={() => handleSignIn(provider)}
+                      type="button"
+                    >
+                      {opening === provider
+                        ? `Opening ${providerName(provider)}…`
+                        : `Continue with ${providerName(provider)}`}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+
+              {options?.sso ? (
+                <form className="mt-4 space-y-4" onSubmit={handleDomainSignIn}>
+                  <Field label="Work email">
+                    <MailMark />
+                    <input
+                      autoComplete="email"
+                      className={fieldInput}
+                      onChange={(event) => setEmail(event.target.value)}
+                      placeholder="alex@company.com"
+                      required
+                      type="email"
+                      value={email}
+                    />
+                  </Field>
+                  <button
+                    className={socialButton}
+                    disabled={busy || email.trim().length === 0}
+                    type="submit"
+                  >
+                    {opening === "sso"
+                      ? "Opening…"
+                      : "Continue with your company account"}
+                  </button>
+                </form>
+              ) : null}
+
+              {emailPassword ? (
+                <p className="mt-6 text-center text-[14px] text-[#6b6b6b]">
+                  {mode === "up" ? (
+                    <>
+                      Already have an account?{" "}
+                      <button
+                        className="font-semibold text-[#111] underline-offset-2 hover:underline"
+                        onClick={() => {
+                          setMode("in");
+                          setError(null);
+                        }}
+                        type="button"
+                      >
+                        Sign In
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      Need an account?{" "}
+                      <button
+                        className="font-semibold text-[#111] underline-offset-2 hover:underline"
+                        onClick={() => {
+                          setMode("up");
+                          setError(null);
+                        }}
+                        type="button"
+                      >
+                        Create Account
+                      </button>
+                    </>
+                  )}
+                </p>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2 pb-[max(0.25rem,env(safe-area-inset-bottom))] text-[12px] text-[#9a9a9a]">
+            <span>© {year} LimitlessAI</span>
+            <a
+              className="text-[#666] transition-colors hover:text-[#111]"
+              href="mailto:support@limitlessai.ca"
             >
-              {opening === "email" ? (
-                mode === "up" ? (
-                  "Creating account…"
-                ) : (
-                  "Signing in…"
-                )
-              ) : (
-                <>
-                  <SignInMark />
-                  {mode === "up" ? "Create account" : "Sign In"}
-                </>
-              )}
-            </Button>
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-border/40" />
+              Need help? Contact Support
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <div className="auth-hero relative hidden overflow-hidden lg:block lg:w-[54%]">
+        <div className="auth-hero-bg absolute inset-0 scale-[1.02] blur-[2px]" />
+        <div className="absolute inset-0 bg-black/20" />
+        <div
+          className="pointer-events-none absolute inset-0 opacity-[0.35] mix-blend-overlay"
+          style={{
+            backgroundImage:
+              "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
+            backgroundSize: "180px 180px",
+          }}
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-black/10" />
+        <div className="absolute inset-x-0 bottom-0 p-10 xl:p-14">
+          <p
+            className="max-w-[520px] text-[22px] font-medium leading-[1.35] tracking-[-0.02em] text-white xl:text-[24px]"
+            style={{
+              fontFamily: "ui-serif, Georgia, 'Times New Roman', serif",
+            }}
+          >
+            LimitlessAI puts agents to work across research, CRM, and outreach —
+            so your team ships while you stay in control.
+          </p>
+          <div className="mt-8 flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-full bg-white/15 ring-1 ring-white/30 backdrop-blur-sm">
+              <img
+                alt="LimitlessAI"
+                className="ui-logo block shrink-0 object-contain"
+                decoding="async"
+                draggable={false}
+                height={26}
+                src="/logo.webp"
+                style={{ width: 26, height: 26 }}
+                width={26}
+              />
+            </div>
+            <div>
+              <div className="text-[14px] font-semibold text-white">
+                Your workspace
               </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-background px-3 text-muted-foreground">
-                  or
-                </span>
+              <div className="text-[13px] text-white/75">
+                Agents · CRM · drafts — shared with your team
               </div>
             </div>
-            <Button
-              className="w-full h-11 rounded-xl"
-              data-testid="button-login-google"
-              disabled={busy}
-              onClick={handleGoogle}
-              type="button"
-              variant="outline"
-            >
-              <GoogleMark />
-              {opening === "google"
-                ? "Opening Google…"
-                : "Continue with Google"}
-            </Button>
-          </form>
-        ) : (
-          <div className="space-y-4">
-            <Button
-              className="w-full h-11 rounded-xl"
-              data-testid="button-login-google"
-              disabled={busy}
-              onClick={handleGoogle}
-              type="button"
-              variant="outline"
-            >
-              <GoogleMark />
-              {opening === "google"
-                ? "Opening Google…"
-                : "Continue with Google"}
-            </Button>
-            {error ? (
-              <p className="text-sm text-destructive text-center" role="alert">
-                {error}
-              </p>
-            ) : null}
           </div>
-        )}
-
-        {otherProviders.length > 0 ? (
-          <div className="space-y-2">
-            {otherProviders.map((provider) => (
-              <Button
-                className="w-full h-11 rounded-xl"
-                disabled={busy}
-                key={provider}
-                onClick={() => handleSignIn(provider)}
-                type="button"
-                variant="outline"
-              >
-                {opening === provider
-                  ? `Opening ${providerName(provider)}…`
-                  : `Continue with ${providerName(provider)}`}
-              </Button>
-            ))}
-          </div>
-        ) : null}
-
-        {options?.sso ? (
-          <form className="space-y-4" onSubmit={handleDomainSignIn}>
-            <Input
-              autoComplete="email"
-              className={fieldClassName}
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder="you@example.com"
-              required
-              type="email"
-              value={email}
-            />
-            <Button
-              className="w-full h-11 rounded-xl"
-              disabled={busy || email.trim().length === 0}
-              type="submit"
-              variant="outline"
-            >
-              {opening === "sso"
-                ? "Opening…"
-                : "Continue with your company account"}
-            </Button>
-          </form>
-        ) : null}
-
-        {emailPassword ? (
-          <div className="flex items-center justify-center gap-4 text-sm text-muted-foreground">
-            {mode === "up" ? (
-              <>
-                Already have an account?{" "}
-                <button
-                  className="hover:text-primary transition-colors"
-                  onClick={() => {
-                    setMode("in");
-                    setError(null);
-                  }}
-                  type="button"
-                >
-                  Sign in
-                </button>
-              </>
-            ) : (
-              <>
-                No account yet?{" "}
-                <button
-                  className="hover:text-primary transition-colors"
-                  onClick={() => {
-                    setMode("up");
-                    setError(null);
-                  }}
-                  type="button"
-                >
-                  Create one
-                </button>
-              </>
-            )}
-          </div>
-        ) : null}
+        </div>
       </div>
     </div>
   );
 }
 
-/** Lucide `log-in`, the icon LimitlessAI-2 puts on Sign In. */
-function SignInMark() {
+function Field({
+  extra,
+  label,
+  children,
+}: {
+  extra?: ReactNode;
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <label className="block">
+      <span
+        className={
+          extra
+            ? "mb-1.5 flex items-center justify-between text-[13px] font-medium text-[#222]"
+            : "mb-1.5 block text-[13px] font-medium text-[#222]"
+        }
+      >
+        {extra ? (
+          <>
+            <span>
+              {label} <span className="text-[#111]">*</span>
+            </span>
+            {extra}
+          </>
+        ) : (
+          <>
+            {label} <span className="text-[#111]">*</span>
+          </>
+        )}
+      </span>
+      <div className={fieldChrome}>{children}</div>
+    </label>
+  );
+}
+
+function MailMark() {
   return (
     <svg
       aria-hidden="true"
-      className="mr-2 h-4 w-4"
+      className="h-[18px] w-[18px] shrink-0 text-[#9a9a9a]"
       fill="none"
       stroke="currentColor"
       strokeLinecap="round"
       strokeLinejoin="round"
-      strokeWidth="2"
+      strokeWidth="1.75"
       viewBox="0 0 24 24"
     >
-      <path d="m10 17 5-5-5-5" />
-      <path d="M15 12H3" />
-      <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+      <path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7" />
+      <rect height="16" rx="2" width="20" x="2" y="4" />
     </svg>
   );
 }
 
-/** Google's four-colour G, same paths LimitlessAI-2 uses on Continue with Google. */
+function LockMark() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-[18px] w-[18px] shrink-0 text-[#9a9a9a]"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.75"
+      viewBox="0 0 24 24"
+    >
+      <rect height="11" rx="2" ry="2" width="18" x="3" y="11" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </svg>
+  );
+}
+
+function UserMark() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-[18px] w-[18px] shrink-0 text-[#9a9a9a]"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.75"
+      viewBox="0 0 24 24"
+    >
+      <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
+    </svg>
+  );
+}
+
+function EyeMark() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-[18px] w-[18px]"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.75"
+      viewBox="0 0 24 24"
+    >
+      <path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function EyeOffMark() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-[18px] w-[18px]"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.75"
+      viewBox="0 0 24 24"
+    >
+      <path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49" />
+      <path d="M14.084 14.158a3 3 0 0 1-4.242-4.242" />
+      <path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.073" />
+      <path d="m2 2 20 20" />
+    </svg>
+  );
+}
+
 function GoogleMark() {
   return (
-    <svg aria-hidden="true" className="mr-2 h-4 w-4" viewBox="0 0 24 24">
+    <svg aria-hidden="true" height="18" viewBox="0 0 18 18" width="18">
       <path
-        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
+        d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615Z"
         fill="#4285F4"
       />
       <path
-        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+        d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18Z"
         fill="#34A853"
       />
       <path
-        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+        d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332Z"
         fill="#FBBC05"
       />
       <path
-        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+        d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58Z"
         fill="#EA4335"
       />
+    </svg>
+  );
+}
+
+function AppleMark() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="currentColor"
+      height="18"
+      viewBox="0 0 24 24"
+      width="18"
+    >
+      <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83ZM13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11Z" />
     </svg>
   );
 }
