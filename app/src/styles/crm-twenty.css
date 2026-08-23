@@ -136,6 +136,18 @@
 .lai2-crm .ui-btn:disabled {
   opacity: 0.5;
 }
+/* LAI2 RecordPage close/research: `ui-btn ui-stroke` is a hairline icon, not the blue CTA. */
+.lai2-crm .ui-btn.ui-stroke {
+  border: 1px solid var(--stroke);
+  background: var(--bg-solid);
+  color: var(--text-muted);
+  box-shadow: none;
+}
+.lai2-crm .ui-btn.ui-stroke:hover {
+  background: var(--bg-muted);
+  color: var(--text);
+  border-color: var(--stroke-hover);
+}
 
 .tabular {
   font-variant-numeric: tabular-nums;

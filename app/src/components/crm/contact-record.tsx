@@ -92,9 +92,8 @@ export function ContactRecord({
             day: "numeric",
           })
         : null,
-      ownerName: person.createdBy.name,
     };
-  }, [openDeals, person.createdBy.name]);
+  }, [openDeals]);
 
   const details = [
     knownField("email", "Email", person.emails[0], "email"),
