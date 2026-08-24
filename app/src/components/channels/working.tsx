@@ -8,8 +8,8 @@
  * last message and next to Stop in the composer, so "it heard you" does not depend on noticing a
  * shimmer on a muted function name.
  *
- * It borrows the shimmer a running tool line uses, plus three dots, so the motion survives even
- * when the gradient is easy to miss on light grey.
+ * The three dots carry the motion. The words stay solid: the same shimmer a running tool uses
+ * paints the glyphs transparent, and "Working" that you cannot read is the original problem again.
  */
 export function Working({
   name,
@@ -30,9 +30,7 @@ export function Working({
       role="status"
     >
       <WorkingDots />
-      <span className="tool-line-running">
-        {name ? `${name} is working` : "Working"}
-      </span>
+      {name ? `${name} is working` : "Working"}
     </Tag>
   );
 }
