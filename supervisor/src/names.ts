@@ -12,8 +12,12 @@
  * Names are derived rather than accepted. A caller says which Bot; it never says which container.
  */
 
-/** Long enough for a uuid-shaped agent id, short enough to stay inside Docker's own name limits. */
-const MAX_BOT_ID = 64;
+/**
+ * Long enough for an org-scoped agent id (`org_<uuid>__agent_<uuid>`). Derived
+ * container names stay well under Docker's 255-character limit. Keep in lockstep
+ * with `agent-computer/src/bot-id.ts`.
+ */
+const MAX_BOT_ID = 128;
 
 const ALLOWED = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 

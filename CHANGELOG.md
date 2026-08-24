@@ -12,6 +12,8 @@ Newest first. `Unreleased` is what is on `main` and not yet tagged.
 
 - **The thinking line appears as soon as a message is sent.** It used to wait until the runtime marked the run as started, so the first send sat still for a second or more with no sign the Bot had heard. The person's message is posted first — including the first message of a new channel, which used to wait for the thread to join before showing thinking. Thinking follows immediately.
 - **Web search no longer dies on a one-character query.** Tavily refuses anything shorter than two characters, and CopilotKit Intelligence was turning a failed tool schema into a red "Unprocessable Entity". The tool now answers with a sentence the Bot can act on, tool schemas sent to the model are stripped of JSON Schema draft metadata some providers reject, and a 422 on the turn is explained in a sentence rather than a status phrase.
+- **A tool loop now finishes on OpenAI-compatible hosts.** CopilotKit's `openai/<id>` string uses the Responses API, which emits `item_reference` on the second step. Hosts such as xAI reject that as Unprocessable Entity after the search has already run, so the answer never arrives. When `OPENAI_BASE_URL` is set, built-in Bots use Chat Completions instead. Real OpenAI, with no base URL, still uses Responses.
+- **A tenant chat no longer 500s its computer or 404s home.** Package agent ids are already org-scoped; prefixing them again overflowed the computer's 64-character id limit and failed every control poll. The limit is 128, already-scoped ids are left alone, and the home page no longer polls grants for the `"default"` placeholder. A brand-new channel also skips restoring a thread Intelligence has not created yet.
 
 ### Multi-tenant organizations
 

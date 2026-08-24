@@ -6,6 +6,7 @@ import {
   buildAgents,
   builtInAgentConfiguration,
   createRequestAgents,
+  modelForBuiltInAgent,
   registeredAgentFromRow,
   resolveRuntimeAgents,
   standingRoleMessage,
@@ -97,11 +98,30 @@ describe("registered Copilot agents", () => {
         { provider: "openai", defaultModel: "gpt-4.1" },
         "openai-secret",
       ),
-    ).toEqual({
-      model: "openai/gpt-4.1",
+    ).toMatchObject({
       prompt: "Be helpful.",
       apiKey: "openai-secret",
     });
+  });
+
+  test("uses Chat Completions against an OpenAI-compatible host", () => {
+    const model = modelForBuiltInAgent(
+      { provider: "openai", defaultModel: "grok-4.6" },
+      "secret",
+      "https://api.x.ai/v1",
+    );
+    expect(typeof model).toBe("object");
+    expect(model).toMatchObject({ provider: "openai.chat" });
+  });
+
+  test("keeps CopilotKit's openai/id string on real OpenAI", () => {
+    expect(
+      modelForBuiltInAgent(
+        { provider: "openai", defaultModel: "gpt-4.1" },
+        "secret",
+        "",
+      ),
+    ).toBe("openai/gpt-4.1");
   });
 
   test("hands tools to the built-in agent as cleaned JSON Schema, not Zod 4's draft URI", () => {

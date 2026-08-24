@@ -53,7 +53,8 @@ export function componentListQueryOptions() {
 export function agentComponentsQueryOptions(agentId: string | undefined) {
   return queryOptions({
     queryKey: componentKeys.forAgent(agentId ?? ""),
-    enabled: Boolean(agentId),
+    // "default" is ActiveBot's placeholder while no channel is mounted.
+    enabled: Boolean(agentId) && agentId !== "default",
     refetchInterval: 5_000,
     // Refetched when the tab is looked at again, so a grant changed on another screen is not waiting
     // out an interval before it shows.

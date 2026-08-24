@@ -100,7 +100,8 @@ export function pluginsPageQueryOptions() {
 export function agentPluginsQueryOptions(agentId: string) {
   return queryOptions({
     queryKey: pluginKeys.forAgent(agentId),
-    enabled: agentId.length > 0,
+    // "default" is ActiveBot's placeholder while no channel is mounted.
+    enabled: agentId.length > 0 && agentId !== "default",
     refetchInterval: 15_000,
     queryFn: async (): Promise<GrantedPlugins> => {
       const response = await client(

@@ -12,6 +12,15 @@ describe("isPlainBotId", () => {
     ["risk_analyst", "an underscore"],
     ["shared", "the default this process falls back to"],
     ["7f3c1a2e9b4d4f0e8a1c2d3e4f5a6b7c", "a uuid-shaped id"],
+    [
+      "org_aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee__general-assistant",
+      "an org-scoped package agent",
+    ],
+    [
+      "org_aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee__agent_aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+      "an org-scoped custom agent",
+    ],
+    ["a".repeat(128), "the current length limit"],
     ["a", "a single character"],
   ])("accepts %s (%s)", (id) => {
     expect(isPlainBotId(id)).toBe(true);
@@ -32,7 +41,7 @@ describe("isPlainBotId", () => {
     ["  ", "whitespace"],
     ["sales support", "an inner space"],
     ["sales\n", "a trailing newline"],
-    ["a".repeat(65), "longer than a uuid-shaped id"],
+    ["a".repeat(129), "longer than an org-scoped agent id"],
   ])("refuses %s (%s)", (id) => {
     expect(isPlainBotId(id)).toBe(false);
   });

@@ -79,8 +79,16 @@ describe("the ids a supervisor will accept", () => {
   });
 
   test("an over-long id is refused", () => {
-    expect(namesFor("a".repeat(65)).ok).toBe(false);
-    expect(namesFor("a".repeat(64)).ok).toBe(true);
+    expect(namesFor("a".repeat(129)).ok).toBe(false);
+    expect(namesFor("a".repeat(128)).ok).toBe(true);
+  });
+
+  test("an org-scoped agent id is accepted", () => {
+    const id =
+      "org_aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee__general-assistant";
+    const result = namesFor(id);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.names.botId).toBe(id);
   });
 
   test("the ownership labels are stable", () => {

@@ -123,6 +123,9 @@ test("Intelligence user ids are namespaced by organization", () => {
 test("computer ids stay bare for the local org and are namespaced otherwise", () => {
   expect(computerIdFor(LOCAL_ORGANIZATION_ID, "analyst")).toBe("analyst");
   expect(computerIdFor("org_acme", "analyst")).toBe("org_acme__analyst");
+  expect(computerIdFor("org_acme", "org_acme__analyst")).toBe(
+    "org_acme__analyst",
+  );
   expect(scopedResourceId(LOCAL_ORGANIZATION_ID, "github")).toBe("github");
   expect(scopedResourceId("org_acme", "github")).toBe("org_acme__github");
 });

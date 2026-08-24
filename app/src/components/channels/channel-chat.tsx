@@ -176,8 +176,11 @@ export function ChannelChat({
       try {
         if (agent.messages.length === 0 && snapshotRef.current?.length) {
           agent.setMessages(snapshotRef.current);
-        } else if (!joinedOnceRef.current) {
-          // History always reads as the lead so a speaker switch does not fetch a different thread.
+        } else if (!joinedOnceRef.current && !seed.message) {
+          // A seeded new channel has no history. Asking Intelligence for a
+          // thread it has not seen 500s; skip restore and let the first send
+          // create it. Existing channels still restore, always as the lead, so
+          // a speaker switch does not fetch a different thread.
           const stored = await readThreadMessages(channel.threadId, leadId);
           // Never overwrite local messages that arrived while history was loading.
           if (current && stored.length > 0 && agent.messages.length === 0) {
@@ -194,7 +197,7 @@ export function ChannelChat({
     return () => {
       current = false;
     };
-  }, [copilotkit, agent, isReady, channel.threadId, leadId]);
+  }, [copilotkit, agent, isReady, channel.threadId, leadId, seed.message]);
 
   // Tool calls from this conversation act on the speaker's own computer.
   useActiveBot(speaker);

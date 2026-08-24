@@ -45,9 +45,15 @@ export function intelligenceUserId(orgId: string, userId: string): string {
  * The backfilled local org keeps the bare agent id so existing snapshots and the
  * laptop's one browser still resolve. Every other org is namespaced so two
  * companies cannot share a Chromium or a cookie jar.
+ *
+ * Package-copied agents already store that namespaced id (`org_…__general-assistant`).
+ * Prefixing it again overflows the computer's bot-id limit and 500s every control
+ * poll on a normal chat that never opens a browser.
  */
 export function computerIdFor(orgId: string, agentId: string): string {
-  return orgId === LOCAL_ORGANIZATION_ID ? agentId : `${orgId}__${agentId}`;
+  if (orgId === LOCAL_ORGANIZATION_ID) return agentId;
+  const prefix = `${orgId}__`;
+  return agentId.startsWith(prefix) ? agentId : `${prefix}${agentId}`;
 }
 
 /**

@@ -1,4 +1,5 @@
 import { AbstractAgent, HttpAgent } from "@ag-ui/client";
+import { createOpenAI } from "@ai-sdk/openai";
 import type { BuiltInAgentConfiguration } from "@copilotkit/runtime/v2";
 import {
   BuiltInAgent,
@@ -108,6 +109,28 @@ export type RuntimeModel = {
   defaultModel: string;
 };
 
+/**
+ * Which model object CopilotKit should call.
+ *
+ * CopilotKit's `openai/<id>` string uses the OpenAI Responses API. That path emits
+ * `item_reference` on the second step of a tool loop, which OpenAI-compatible hosts
+ * (xAI among them) reject as Unprocessable Entity — the search runs, then the
+ * answer never arrives. Chat Completions speaks the subset those hosts implement.
+ *
+ * Real OpenAI, with no `OPENAI_BASE_URL`, keeps the string so CopilotKit can use
+ * Responses there.
+ */
+export function modelForBuiltInAgent(
+  model: RuntimeModel,
+  apiKey: string,
+  baseURL = process.env.OPENAI_BASE_URL?.trim(),
+): BuiltInAgentConfiguration["model"] {
+  if (model.provider === "openai" && baseURL) {
+    return createOpenAI({ apiKey, baseURL }).chat(model.defaultModel);
+  }
+  return `${model.provider}/${model.defaultModel}`;
+}
+
 type RuntimeAgentRow = {
   id: string;
   name: string;
@@ -202,7 +225,7 @@ export function builtInAgentConfiguration(
   }
 
   return {
-    model: `${model.provider}/${model.defaultModel}`,
+    model: modelForBuiltInAgent(model, apiKey),
     prompt: computerGuidance
       ? `${agent.systemPrompt}\n\n${computerGuidance}`
       : agent.systemPrompt,

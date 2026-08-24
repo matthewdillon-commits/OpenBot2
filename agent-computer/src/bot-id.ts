@@ -18,8 +18,11 @@
  * and a decision this size should be testable without a browser.
  */
 
-/** Long enough for a uuid-shaped agent id, short enough to stay a sane directory name. */
-const MAX_BOT_ID = 64;
+/**
+ * Long enough for an org-scoped agent id (`org_<uuid>__agent_<uuid>`), short enough
+ * to stay a sane directory name. Keep in lockstep with `supervisor/src/names.ts`.
+ */
+const MAX_BOT_ID = 128;
 
 const ALLOWED = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 
