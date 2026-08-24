@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { readToolName } from "../src/lib/plugins/tool-name";
+import {
+  readToolName,
+  toolHintFrom,
+  toolHintFromArgs,
+} from "../src/lib/plugins/tool-name";
 
 /**
  * What the person watching is told a Bot just did.
@@ -41,5 +45,19 @@ describe("naming a tool call", () => {
   test("a component the app registered is left alone", () => {
     // These names were chosen by somebody and are already what the reader should see.
     expect(readToolName("showBarChart")).toEqual({ label: "showBarChart" });
+  });
+
+  test("a built-in snake_case tool reads as an action", () => {
+    expect(readToolName("search_web")).toEqual({ label: "Search web" });
+  });
+
+  test("a search query is the hint beside the action", () => {
+    expect(toolHintFrom({ query: "ontario mortgage broker" })).toBe(
+      "ontario mortgage broker",
+    );
+    expect(toolHintFromArgs('{"query":"ontario mortgage broker"}')).toBe(
+      "ontario mortgage broker",
+    );
+    expect(toolHintFrom({ url: "https://example.com" })).toBeUndefined();
   });
 });

@@ -15,6 +15,7 @@ import {
 } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "../../ui/button";
+import { Working } from "../working";
 import {
   applyCommandChips,
   type CommandOption,
@@ -289,6 +290,7 @@ export function Composer({
           triggers={triggers}
           value={value}
         />
+        {isBusy ? <Working compact /> : null}
         {canStop ? (
           <Button
             aria-label="Stop the Bot"
@@ -341,7 +343,7 @@ export function Composer({
         </div>
 
         <div className="mb-2 flex items-center justify-between px-2">
-          <div />
+          <div>{isBusy ? <Working compact /> : null}</div>
 
           <div>
             {canStop ? (

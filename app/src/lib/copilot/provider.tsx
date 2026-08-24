@@ -2,6 +2,7 @@ import { CopilotKitProvider } from "@copilotkit/react-core/v2";
 import type { ReactNode } from "react";
 import { ActiveBotProvider } from "./active-bot";
 import { ComputerTools } from "./computer-tools";
+import { DefaultToolRender } from "./default-tool-render";
 import { GalleryTools } from "./gallery-tools";
 import { SandboxedTools } from "./sandboxed-tools";
 
@@ -29,6 +30,8 @@ export function CopilotProvider({ children }: { children: ReactNode }) {
         <GalleryTools />
         {/* Browser-authored components use the same component grants as the compiled gallery. */}
         <SandboxedTools />
+        {/* Server tools with no dedicated renderer, named as actions rather than function ids. */}
+        <DefaultToolRender />
         {children}
       </ActiveBotProvider>
     </CopilotKitProvider>

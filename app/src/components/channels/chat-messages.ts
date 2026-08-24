@@ -80,6 +80,33 @@ export function toVisibleChatItems(
   });
 }
 
+/**
+ * Whether the transcript should still say the Bot is working.
+ *
+ * A tool call is not an answer. The line used to hide as soon as `search_web` (or any other call)
+ * landed, so a turn that spent its first seconds searching looked identical to one that had
+ * silently failed — a Stop button and a tiny tool name, and nothing under the person's message.
+ * Skip tools, and keep the line until the Bot has actually written something after the last thing
+ * the person said.
+ */
+export function waitingForAnswer(
+  items: readonly VisibleChatItem[],
+  busy: boolean,
+): boolean {
+  if (!busy) return false;
+
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (!item || item.kind === "tool") continue;
+    if (item.role === "assistant") {
+      return item.text.trim().length === 0;
+    }
+    return true;
+  }
+
+  return true;
+}
+
 function messageName(message: Readonly<Message>): string | undefined {
   if (!("name" in message)) return undefined;
   const name = message.name;

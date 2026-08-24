@@ -22,12 +22,12 @@ import {
 } from "@/components/ui/message-scroller";
 import { markdownComponents } from "@/lib/markdown";
 import { EASE_OUT, ENTRANCE_SECONDS } from "@/lib/motion";
-import { readToolName } from "@/lib/plugins/tool-name";
-import { asText, forDisplay, REFUSAL_MARKER } from "@/lib/plugins/tool-result";
-import { toVisibleChatItems } from "./chat-messages";
+import { toolHintFromArgs } from "@/lib/plugins/tool-name";
+import { toVisibleChatItems, waitingForAnswer } from "./chat-messages";
 import type { QueuedMessage } from "./composer";
+import { ServerToolLine } from "./server-tool-line";
 import { ToolRenderBoundary } from "./tool-boundary";
-import { ToolLine } from "./tool-line";
+import { Working } from "./working";
 
 type ChatTranscriptProps = {
   busy?: boolean;
@@ -49,7 +49,7 @@ type ChatTranscriptProps = {
    * be told, and only the thing that ended the turn knows which one happened.
    */
   stopped?: string;
-  /** Who is answering, for the thinking line in a room. */
+  /** Who is answering, for the working line in a room. */
   thinkingName?: string;
 };
 
@@ -81,33 +81,9 @@ function splitSkillChip(
 }
 
 /**
- * The Bot has the turn and has produced nothing yet.
- *
- * THE GAP THIS FILLS IS THE WORST ONE IN THE CONVERSATION. Between pressing send and the first token
- * there was `aria-busy` and nothing else: announced to a screen reader, invisible to everybody else.
- * A person who has just asked something watches their own message sit there, and a Bot that is
- * thinking is indistinguishable from a Bot that failed silently — which this app has shipped before.
- *
- * It borrows the shimmer a running tool line uses, so "working on it" reads the same whether the
- * work is a tool call or a model that has not spoken yet.
- */
-function Thinking({ name }: { name?: string }) {
-  return (
-    <p
-      className="tool-line-running text-muted-foreground text-sm"
-      // `status` rather than `alert`: this is progress, not something that interrupts what somebody
-      // is doing. The text says it, so a screen reader is told the same thing the shimmer implies.
-      role="status"
-    >
-      {name ? `${name} is thinking` : "Thinking"}
-    </p>
-  );
-}
-
-/**
  * The turn ended and no answer came.
  *
- * In the same slot as `Thinking`, and for the same reason it is there: the person is looking at the
+ * In the same slot as `Working`, and for the same reason it is there: the person is looking at the
  * bottom of the transcript, immediately under their own message, because that is where the answer
  * was going to appear. Saying so above the composer put the explanation in a different part of the
  * screen from the gap it explains, and left the last thing in the conversation looking unfinished.
@@ -483,51 +459,17 @@ const TranscriptToolCall = memo(function TranscriptToolCall({
          * What was called, shimmering until its result arrives, and then the server's own words
          * drawn the way a Bot's prose is drawn.
          */}
-        {drawn ?? <ServerToolLine name={name} result={result} />}
+        {drawn ?? (
+          <ServerToolLine
+            hint={toolHintFromArgs(args)}
+            name={name}
+            result={result}
+          />
+        )}
       </ToolRenderBoundary>
     </Arriving>
   );
 });
-
-/**
- * A tool the runtime executed, drawn for the person watching.
- *
- * Named from the reader's side: what was done, against which server, with the server's own words
- * behind a disclosure. The identifier the model was offered never reaches the screen.
- */
-function ServerToolLine({ name, result }: { name: string; result?: string }) {
-  const { label, detail } = readToolName(name);
-  /*
-   * A refusal is not a result, and must not read like one.
-   *
-   * The server says which it is rather than the browser inferring it from the wording, because the
-   * wording is a policy message an administrator can rewrite and the first rephrasing would break
-   * any guess made here. See REFUSAL_MARKER in server/src/plugins/tools.ts.
-   */
-  const answer = result === undefined ? undefined : asText(result);
-  const refused = answer?.startsWith(REFUSAL_MARKER) ?? false;
-  /*
-   * The marker is for this component, not for the reader. Left in, a refusal reads "Blocked" in the
-   * label and then "Refused." again in the first two words of the body, which is the same fact three
-   * times over by the end of the sentence. Stripped here rather than on the server, because the
-   * server's copy is what the model is told and "Refused." in front of a reason is right for it.
-   */
-  const body = refused ? answer?.slice(REFUSAL_MARKER.length).trim() : answer;
-  return (
-    <ToolLine
-      {...(detail ? { detail } : {})}
-      label={label}
-      refused={refused}
-      running={result === undefined}
-    >
-      {body ? (
-        <Streamdown components={markdownComponents}>
-          {forDisplay(body)}
-        </Streamdown>
-      ) : null}
-    </ToolLine>
-  );
-}
 
 export function ChatTranscript({
   busy = false,
@@ -551,16 +493,13 @@ export function ChatTranscript({
   const items = toVisibleChatItems(messages);
 
   /*
-   * ONLY WHILE THERE IS NOTHING ELSE TO LOOK AT. Once a reply starts streaming, or a tool line
-   * appears, the transcript is already saying the Bot is working — a second indicator under a
-   * half-written answer would claim it had stopped and started again.
-   *
-   * So: the turn is in flight AND the last thing in the conversation is still the person's own
-   * message. A tool call that is running shimmers on its own line and needs nothing from here.
+   * UNTIL THE BOT WRITES SOMETHING. A tool call is work, not an answer, and hiding this the moment
+   * one appeared is how a search sat under the person's message looking like a hang: a tiny
+   * function name at the top of the scroller, a Stop button, and an empty middle. Keep the line
+   * for the whole wait. Once prose starts streaming, drop it — a second indicator under a
+   * half-written answer would claim the Bot had stopped and started again.
    */
-  const lastItem = items.at(-1);
-  const waitingOnFirstToken =
-    busy && lastItem?.kind === "text" && lastItem.role === "user";
+  const showWorking = waitingForAnswer(items, busy);
 
   /*
    * One decider per mounted transcript, so opening a different channel starts the cascade over and
@@ -633,15 +572,15 @@ export function ChatTranscript({
              * the scroller to measure and anchor something that exists for a second and a half.
              *
              * One or the other, never both: a turn that ended has stopped being in flight, and a
-             * shimmering "Thinking" under a line saying the Bot stopped would contradict it.
+             * shimmering "Working" under a line saying the Bot stopped would contradict it.
              */}
             {stopped ? (
               <Stopped reason={stopped} />
-            ) : waitingOnFirstToken ? (
-              <Thinking {...(thinkingName ? { name: thinkingName } : {})} />
+            ) : showWorking ? (
+              <Working {...(thinkingName ? { name: thinkingName } : {})} />
             ) : null}
             {/*
-             * Below the thinking line, and outside the item list for the same reason it is: these
+             * Below the working line, and outside the item list for the same reason it is: these
              * are not yet turns. They have ids of their own, but they are this tab's ids and not the
              * thread's, so handing them to the scroller would ask it to anchor on something that is
              * about to be replaced by a message with a different id — and the replacement is the

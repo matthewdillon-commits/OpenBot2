@@ -75,7 +75,7 @@ export function ConversationView({
    * moving it onto this composer or asking for it upstream, and neither is a queue.
    */
   queueWhileBusy?: boolean;
-  /** Shown on the thinking line so a room names who is answering. */
+  /** Shown on the working line so a room names who is answering. */
   thinkingName?: string;
   /** Live draft, so `/` can follow who will speak without switching the runtime yet. */
   onDraftChange?: (draft: ComposerDraft) => void;
@@ -214,7 +214,7 @@ export function ConversationView({
            * The turn, not the run on the wire. `busy` used to be `agent.isRunning` alone, which
            * stays false until the runtime has opened a stream — often a second after send.
            * `inFlight` is true from the moment the person pressed send (`running` / `pending`)
-           * and stays true while the run is on the wire (`busy`), which is when the thinking
+           * and stays true while the run is on the wire (`busy`), which is when the working
            * line has to appear or the transcript looks frozen.
            */
           busy={inFlight}

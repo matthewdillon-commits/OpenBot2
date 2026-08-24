@@ -90,7 +90,7 @@ export function ChannelChat({
   /**
    * True while a new channel still has its first message on screen and has not yet been allowed
    * to start the run. Join can take a second and a half; without this the seed sits there with
-   * no thinking line.
+   * no working line.
    */
   const [seedSending, setSeedSending] = useState(() => seed.message !== null);
   /** Words just sent, until CopilotKit's message list includes them. */
@@ -294,7 +294,7 @@ export function ChannelChat({
      * `transcriptMessages` draws user and assistant turns, so this never appears on screen — the
      * chip is what says a skill was used, and it stays visible in the message they sent.
      *
-     * Added before waiting for the runtime. The thinking line only appears under the person's
+     * Added before waiting for the runtime. The working line only appears under the person's
      * own message; waiting first left a silent gap of up to a second and a half after send.
      */
     for (const instruction of skillInstructions) {
@@ -313,7 +313,7 @@ export function ChannelChat({
     /*
      * Shown immediately. CopilotKit often keeps the same `messages` array and mutates it later,
      * so React would otherwise re-render as busy with the previous turn still last — no bubble,
-     * no thinking line, and a composer that already emptied.
+     * no working line, and a composer that already emptied.
      */
     setOutgoing(userMessage);
     agent.addMessage(userMessage);

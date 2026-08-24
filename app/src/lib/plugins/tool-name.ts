@@ -6,8 +6,9 @@
  * the reader's problem, and putting it on screen tells them how the thing is built rather than what
  * their Bot just did.
  *
- * Anything that is not a prefixed MCP name is left exactly as it is: a component the app registered
- * already has a name somebody chose.
+ * A built-in snake_case name (`search_web`) is humanised the same way: the person is watching an
+ * action, not an identifier. camelCase gallery names are left alone — those were chosen for the
+ * screen already.
  */
 export type ToolName = {
   /** What was done, for the line itself. */
@@ -18,7 +19,9 @@ export type ToolName = {
 
 export function readToolName(name: string): ToolName {
   const parts = name.split("__");
-  if (parts.length < 3 || parts[0] !== "mcp") return { label: name };
+  if (parts.length < 3 || parts[0] !== "mcp") {
+    return { label: name.includes("_") ? humanise(name) : name };
+  }
 
   const [, server, ...rest] = parts;
   const tool = rest.join("__");
@@ -48,4 +51,25 @@ function humanise(tool: string): string {
     .toLowerCase();
   if (words.length === 0) return tool;
   return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/**
+ * The search query (or the same-shaped field on another tool), when the arguments carry one.
+ *
+ * Shown beside the action so "Search web" is not an empty claim: the person can see what is being
+ * looked up. Other argument shapes are ignored rather than dumped; a JSON blob next to the line
+ * is the identifier problem again.
+ */
+export function toolHintFrom(value: unknown): string | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const query = (value as { query?: unknown }).query;
+  return typeof query === "string" && query.trim() ? query.trim() : undefined;
+}
+
+export function toolHintFromArgs(args: string): string | undefined {
+  try {
+    return toolHintFrom(JSON.parse(args) as unknown);
+  } catch {
+    return undefined;
+  }
 }
