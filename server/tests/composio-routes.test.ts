@@ -49,7 +49,11 @@ describe("Composio HTTP routes", () => {
     const { request } = appWith();
     const response = await request("/api/composio/catalog");
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ configured: false, plugins: [] });
+    expect(await response.json()).toEqual({
+      configured: false,
+      plugins: [],
+      categories: [],
+    });
   });
 
   test("refuses the catalogue without an organisation", async () => {

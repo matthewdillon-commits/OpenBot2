@@ -13,6 +13,7 @@ import {
   type ComposioPlugin,
   parseConnection,
   parseToolkit,
+  topCategories,
 } from "./map";
 
 const COMPOSIO_API = "https://backend.composio.dev/api/v3.1";
@@ -23,6 +24,7 @@ const CATALOGUE_TTL_MS = 10 * 60 * 1000;
 export type ComposioCatalog = {
   configured: boolean;
   plugins: ComposioPlugin[];
+  categories: string[];
 };
 
 export type ComposioConnectResult = {
@@ -44,10 +46,8 @@ export function composioClient(
 ) {
   const toolkitCache: { current: CachedToolkits | null } = { current: null };
   const authConfigBySlug = new Map<string, string>();
-  const pinnedGmailAuthConfigId = options.gmailAuthConfigId?.trim() || undefined;
-  if (pinnedGmailAuthConfigId) {
-    authConfigBySlug.set("gmail", pinnedGmailAuthConfigId);
-  }
+  const pinnedGmailAuthConfigId =
+    options.gmailAuthConfigId?.trim() || undefined;
 
   async function request(
     path: string,
@@ -225,9 +225,11 @@ export function composioClient(
         listToolkits(),
         listConnections(userId),
       ]);
+      const plugins = attachConnections(toolkits, connections);
       return {
         configured: true,
-        plugins: attachConnections(toolkits, connections),
+        plugins,
+        categories: topCategories(plugins),
       };
     },
 
@@ -244,7 +246,9 @@ export function composioClient(
         return { redirectUrl: null, alreadyConnected: true };
       }
       const authConfigId =
-        slug === "gmail" && pinnedGmailAuthConfigId
+        slug === "gmail" &&
+        pinnedGmailAuthConfigId &&
+        !isLoopbackCallback(callbackUrl)
           ? pinnedGmailAuthConfigId
           : await ensureAuthConfig(slug);
       const { ok, status, body } = await request("/connected_accounts/link", {
@@ -301,4 +305,23 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 
 function asString(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+/**
+ * A laptop callback cannot complete OAuth against a production Gmail auth config: that
+ * config's Google redirect is the deployed host, not localhost. Skip the pin so Composio
+ * managed auth can send the person back here.
+ */
+function isLoopbackCallback(callbackUrl: string): boolean {
+  try {
+    const host = new URL(callbackUrl).hostname;
+    return (
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host === "[::1]" ||
+      host === "::1"
+    );
+  } catch {
+    return false;
+  }
 }

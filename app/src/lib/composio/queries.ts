@@ -15,6 +15,7 @@ export type ComposioPlugin = {
 export type ComposioCatalog = {
   configured: boolean;
   plugins: ComposioPlugin[];
+  categories: string[];
 };
 
 export const composioKeys = {
@@ -29,7 +30,12 @@ export function composioCatalogQueryOptions() {
       const response = await client("/api/composio/catalog", {
         fallback: "The plugin catalogue could not be loaded.",
       });
-      return response.json();
+      const payload = (await response.json()) as ComposioCatalog;
+      return {
+        configured: payload.configured,
+        plugins: payload.plugins ?? [],
+        categories: payload.categories ?? [],
+      };
     },
   });
 }

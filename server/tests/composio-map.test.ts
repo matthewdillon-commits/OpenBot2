@@ -5,6 +5,7 @@ import {
   groupCatalog,
   parseConnection,
   parseToolkit,
+  topCategories,
 } from "../src/composio/map";
 
 function must<T>(value: T | null, label: string): T {
@@ -41,6 +42,40 @@ describe("the Composio catalogue mapper", () => {
     expect(grouped.featured).toHaveLength(Math.min(2, FEATURED_COUNT));
     expect(grouped.sections[0]?.name).toBe("Featured");
     expect(grouped.sections[1]?.name).toBe("Research");
+  });
+
+  test("keeps only the most populated categories for pills", () => {
+    const plugins = attachConnections(
+      [
+        must(
+          parseToolkit({
+            slug: "gmail",
+            name: "Gmail",
+            categories: ["email", "Featured"],
+          }),
+          "gmail",
+        ),
+        must(
+          parseToolkit({
+            slug: "outlook",
+            name: "Outlook",
+            categories: ["email"],
+          }),
+          "outlook",
+        ),
+        must(
+          parseToolkit({
+            slug: "slack",
+            name: "Slack",
+            categories: ["team chat"],
+          }),
+          "slack",
+        ),
+      ],
+      [],
+    );
+    expect(topCategories(plugins, 2)).toEqual(["email", "team chat"]);
+    expect(topCategories(plugins, 2)).not.toContain("Featured");
   });
 
   test("marks a toolkit connected only from this organisation's active grant", () => {

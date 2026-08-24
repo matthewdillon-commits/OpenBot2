@@ -46,6 +46,8 @@ export function PluginCatalog({
 
   const plugins = catalog.data?.plugins ?? [];
   const configured = catalog.data?.configured ?? true;
+  const popularCategories = catalog.data?.categories ?? [];
+  const searching = query.trim().length > 0;
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -80,12 +82,17 @@ export function PluginCatalog({
     }
     return [...seen.entries()].map(([name, items]) => ({ name, items }));
   }, [filtered]);
+  const popularSections = sections.filter((section) =>
+    popularCategories.some(
+      (name) => name.toLowerCase() === section.name.toLowerCase(),
+    ),
+  );
 
   const pills = [
     "All",
     "Featured",
     ...(plugins.some((plugin) => plugin.connected) ? ["Installed"] : []),
-    ...sections.map((section) => section.name),
+    ...popularCategories,
   ];
 
   const connected = plugins.filter((plugin) => plugin.connected);
@@ -190,44 +197,58 @@ export function PluginCatalog({
           </p>
         ) : (
           <div className="flex flex-col gap-8">
-            {(category === "All" || category === "Featured") &&
-            featured.length > 0 ? (
+            {searching ? (
               <CatalogSection
                 busySlug={connect.variables?.slug ?? null}
                 expanded
-                name="Featured"
-                onAdd={onAdd}
-                onToggle={() => undefined}
-                plugins={featured}
-              />
-            ) : null}
-            {category === "All" ? (
-              sections.map((section) => (
-                <CatalogSection
-                  busySlug={connect.variables?.slug ?? null}
-                  expanded={expanded[section.name] === true}
-                  key={section.name}
-                  name={section.name}
-                  onAdd={onAdd}
-                  onToggle={() =>
-                    setExpanded((current) => ({
-                      ...current,
-                      [section.name]: !current[section.name],
-                    }))
-                  }
-                  plugins={section.items}
-                />
-              ))
-            ) : category !== "Featured" ? (
-              <CatalogSection
-                busySlug={connect.variables?.slug ?? null}
-                expanded
-                name={category}
+                name="Results"
                 onAdd={onAdd}
                 onToggle={() => undefined}
                 plugins={filtered}
               />
-            ) : null}
+            ) : (
+              <>
+                {(category === "All" || category === "Featured") &&
+                featured.length > 0 ? (
+                  <CatalogSection
+                    busySlug={connect.variables?.slug ?? null}
+                    expanded
+                    name="Featured"
+                    onAdd={onAdd}
+                    onToggle={() => undefined}
+                    plugins={featured}
+                  />
+                ) : null}
+                {category === "All"
+                  ? popularSections.map((section) => (
+                      <CatalogSection
+                        busySlug={connect.variables?.slug ?? null}
+                        expanded={expanded[section.name] === true}
+                        key={section.name}
+                        name={section.name}
+                        onAdd={onAdd}
+                        onToggle={() =>
+                          setExpanded((current) => ({
+                            ...current,
+                            [section.name]: !current[section.name],
+                          }))
+                        }
+                        plugins={section.items}
+                      />
+                    ))
+                  : null}
+                {category !== "All" && category !== "Featured" ? (
+                  <CatalogSection
+                    busySlug={connect.variables?.slug ?? null}
+                    expanded
+                    name={category}
+                    onAdd={onAdd}
+                    onToggle={() => undefined}
+                    plugins={filtered}
+                  />
+                ) : null}
+              </>
+            )}
           </div>
         )}
       </div>

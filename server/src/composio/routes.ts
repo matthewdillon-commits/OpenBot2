@@ -35,7 +35,7 @@ export function createComposioRoutes(
   routes.get("/catalog", requireUser, async (context) =>
     withOrg(context, async (orgId) => {
       if (!client) {
-        return context.json({ configured: false, plugins: [] });
+        return context.json({ configured: false, plugins: [], categories: [] });
       }
       try {
         return context.json(await client.catalog(orgId));

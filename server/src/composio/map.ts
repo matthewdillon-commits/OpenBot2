@@ -31,6 +31,8 @@ export type ComposioSection = {
 };
 
 const FEATURED_COUNT = 8;
+/** How many Composio categories become filter pills. The rest stay reachable by search. */
+const PILL_CATEGORY_COUNT = 8;
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -182,4 +184,27 @@ export function groupCatalog(plugins: ComposioPlugin[]): {
   return { featured, sections };
 }
 
-export { FEATURED_COUNT };
+/**
+ * The category pills a catalogue page can show without becoming a tag cloud.
+ *
+ * Composio sends dozens of overlapping tags. Rank by how many toolkits carry each name, skip
+ * "Featured" (that slice has its own row), and keep a short list. Search still finds the rest.
+ */
+export function topCategories(
+  plugins: ComposioPlugin[],
+  limit = PILL_CATEGORY_COUNT,
+): string[] {
+  const counts = new Map<string, number>();
+  for (const plugin of plugins) {
+    for (const name of plugin.categories) {
+      if (name.toLowerCase() === "featured") continue;
+      counts.set(name, (counts.get(name) ?? 0) + 1);
+    }
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, limit)
+    .map(([name]) => name);
+}
+
+export { FEATURED_COUNT, PILL_CATEGORY_COUNT };

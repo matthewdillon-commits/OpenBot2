@@ -51,6 +51,7 @@ describe("the Composio client", () => {
     ]);
     expect(catalog.plugins[0]?.connected).toBe(true);
     expect(catalog.plugins[1]?.connected).toBe(false);
+    expect(catalog.categories).toEqual(["Productivity"]);
 
     const toolkitUrl = seen.find((entry) =>
       entry.url.includes("/toolkits"),
@@ -136,7 +137,7 @@ describe("the Composio client", () => {
     const result = await client.connect(
       "org_acme",
       "gmail",
-      "http://localhost:3010/plugins",
+      "https://os.limitlessai.ca/plugins",
     );
     expect(result.redirectUrl).toBe("https://connect.composio.dev/link/pinned");
     expect(seen.some((entry) => entry.url.includes("/auth_configs"))).toBe(
@@ -148,6 +149,51 @@ describe("the Composio client", () => {
     expect(link?.body).toEqual({
       user_id: "org_acme",
       auth_config_id: "ac_pinned",
+      callback_url: "https://os.limitlessai.ca/plugins",
+    });
+  });
+
+  test("skips a pinned Gmail auth config on localhost so OAuth can return here", async () => {
+    const seen: { url: string; body: unknown }[] = [];
+    const client = composioClient(
+      "ak_secret",
+      async (url, init) => {
+        const parsed = String(init?.body ?? "");
+        seen.push({
+          url: String(url),
+          body: parsed ? JSON.parse(parsed) : null,
+        });
+        const path = String(url);
+        if (path.includes("/connected_accounts?") && !path.includes("/link")) {
+          return Response.json({ items: [] });
+        }
+        if (path.includes("/auth_configs?") && init?.method !== "POST") {
+          return Response.json({ items: [] });
+        }
+        if (path.endsWith("/auth_configs") && init?.method === "POST") {
+          return Response.json({ id: "ac_managed" }, { status: 200 });
+        }
+        if (path.endsWith("/connected_accounts/link")) {
+          return Response.json({
+            redirect_url: "https://connect.composio.dev/link/local",
+          });
+        }
+        return new Response("unused", { status: 500 });
+      },
+      { gmailAuthConfigId: "ac_pinned" },
+    );
+
+    const result = await client.connect(
+      "org_acme",
+      "gmail",
+      "http://localhost:3010/plugins",
+    );
+    expect(result.redirectUrl).toBe("https://connect.composio.dev/link/local");
+    const link = seen.find((entry) =>
+      entry.url.endsWith("/connected_accounts/link"),
+    );
+    expect(link?.body).toMatchObject({
+      auth_config_id: "ac_managed",
       callback_url: "http://localhost:3010/plugins",
     });
   });
