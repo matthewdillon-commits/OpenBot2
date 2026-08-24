@@ -16,8 +16,7 @@ import { crmPersonQueryOptions } from "@/lib/crm/queries";
 
 /**
  * CRM is a table and a board. PageShell's prose column would wrap every row, so
- * this screen fills the main pane the way Agents fills it — header, then a
- * scannable index, with the record in DetailPanel. The OpenBot sidebar stays.
+ * this screen fills the main pane the way Agents fills it. The sidebar stays.
  */
 const crmSearchSchema = z.object({
   tab: z.preprocess((value) => {
@@ -44,43 +43,42 @@ export const Route = createFileRoute("/_authed/_app/crm")({
 });
 
 function CrmPage() {
-  const { tab: tabParam, stage: stageParam, person: personId } = Route.useSearch();
+  const { tab: tabParam, person: personId } = Route.useSearch();
   const navigate = Route.useNavigate();
   const mode: CrmObjectMode = tabParam ?? "people";
-  const stageFilter = stageParam?.trim() || "all";
   const [createOpen, setCreateOpen] = useState(false);
   const selected = useQuery({
     ...crmPersonQueryOptions(personId ?? ""),
     enabled: Boolean(personId),
   });
 
-  function setSearch(next: {
-    tab?: CrmObjectMode;
-    stage?: string;
-    person?: string;
-  }) {
+  function setSearch(next: { tab?: CrmObjectMode; person?: string }) {
     const tab = next.tab ?? mode;
-    const stage = next.stage ?? stageFilter;
     void navigate({
       search: {
         tab: tab === "people" ? undefined : tab,
-        stage: tab === "people" && stage !== "all" ? stage : undefined,
         person: next.person,
       },
     });
   }
 
+  const createLabel =
+    mode === "people"
+      ? "New person"
+      : mode === "companies"
+        ? "New company"
+        : mode === "opportunities"
+          ? "New opportunity"
+          : null;
+
   return (
     <DetailPanel
       detail={
         personId ? (
-          <ContactRecord
-            personId={personId}
-            onClose={() => setSearch({ person: undefined })}
-          />
+          <ContactRecord personId={personId} />
         ) : null
       }
-      detailWidth={440}
+      detailWidth={400}
       onClose={() => setSearch({ person: undefined })}
       open={Boolean(personId)}
       title={
@@ -93,35 +91,31 @@ function CrmPage() {
     >
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
         <Toaster position="bottom-right" />
-        <header className="shrink-0 px-4 pt-8 pb-4">
-          <div className="flex items-center justify-between gap-4">
-            <h1 className="font-bold text-2xl tracking-tight text-balance">
-              CRM
-            </h1>
-            {mode === "people" ? (
-              <Button
-                onClick={() => setCreateOpen(true)}
-                size="sm"
-                variant="ghost"
-              >
-                <IconPlus />
-                New person
-              </Button>
-            ) : null}
-          </div>
-          <p className="mt-2 max-w-prose text-pretty text-muted-foreground text-sm leading-relaxed">
-            People, companies, and deals this organization is working.
-          </p>
+        <header className="flex shrink-0 items-center justify-between gap-4 px-4 pt-8 pb-3">
+          <h1 className="font-bold text-2xl tracking-tight text-balance">
+            CRM
+          </h1>
+          {createLabel ? (
+            <Button
+              onClick={() => setCreateOpen(true)}
+              size="sm"
+              variant="ghost"
+            >
+              <IconPlus />
+              {createLabel}
+            </Button>
+          ) : null}
         </header>
         <CrmView
           createOpen={createOpen}
           mode={mode}
           personId={personId}
-          stageFilter={stageFilter}
           onCreateOpenChange={setCreateOpen}
-          onModeChange={(tab) => setSearch({ tab, person: personId })}
+          onModeChange={(tab) => {
+            setCreateOpen(false);
+            setSearch({ tab, person: personId });
+          }}
           onOpenPerson={(id) => setSearch({ person: id })}
-          onStageChange={(stage) => setSearch({ stage, person: personId })}
         />
       </div>
     </DetailPanel>

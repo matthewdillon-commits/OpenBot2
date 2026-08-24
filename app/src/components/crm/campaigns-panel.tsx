@@ -40,7 +40,6 @@ export function CampaignsPanel({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedListId, setSelectedListId] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
-  const [newGoal, setNewGoal] = useState("");
   const [newListName, setNewListName] = useState("");
 
   const campaigns = campaignsQuery.data?.items ?? [];
@@ -75,11 +74,9 @@ export function CampaignsPanel({
     try {
       const campaign = await createCampaign.mutateAsync({
         name: newName.trim(),
-        description: newGoal.trim() || null,
         status: "active",
       });
       setNewName("");
-      setNewGoal("");
       setSelectedId(campaign.id);
       toast.success("Campaign created");
     } catch {
@@ -127,29 +124,22 @@ export function CampaignsPanel({
   return (
     <div className="flex min-h-0 flex-1">
       <div className="flex w-64 shrink-0 flex-col border-e border-border">
-        <form className="flex flex-col gap-2 border-b border-border p-4" onSubmit={(event) => void saveCampaign(event)}>
-          <p className="font-bold text-sm tracking-tight">Start a campaign</p>
-          <p className="text-pretty text-muted-foreground text-xs leading-relaxed">
-            Group people into lists your agents can work.
-          </p>
+        <form
+          className="flex flex-col gap-2 border-b border-border p-4"
+          onSubmit={(event) => void saveCampaign(event)}
+        >
           <Input
             value={newName}
             onChange={(event) => setNewName(event.target.value)}
             placeholder="Campaign name"
             aria-label="Campaign name"
           />
-          <Input
-            value={newGoal}
-            onChange={(event) => setNewGoal(event.target.value)}
-            placeholder="What success looks like"
-            aria-label="Campaign goal"
-          />
           <Button
             disabled={createCampaign.isPending || !newName.trim()}
             size="sm"
             type="submit"
           >
-            {createCampaign.isPending ? "Creating…" : "Create campaign"}
+            {createCampaign.isPending ? "Creating…" : "Create"}
           </Button>
         </form>
         <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
@@ -191,13 +181,7 @@ export function CampaignsPanel({
 
       <div className="flex min-w-0 flex-1 flex-col">
         {!selected ? (
-          <div className="p-6">
-            <p className="font-medium text-sm">Pick a campaign</p>
-            <p className="mt-1 max-w-prose text-pretty text-muted-foreground text-sm">
-              Manage lists and members here. Agents add people; you decide when
-              emails go out.
-            </p>
-          </div>
+          <p className="p-6 text-muted-foreground text-sm">Select a campaign</p>
         ) : (
           <>
             <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
@@ -205,9 +189,11 @@ export function CampaignsPanel({
                 <h3 className="font-bold text-sm tracking-tight text-balance">
                   {selected.name}
                 </h3>
-                <p className="mt-0.5 text-pretty text-muted-foreground text-sm">
-                  {selected.description || selected.notes || "No goal set yet"}
-                </p>
+                {selected.description || selected.notes ? (
+                  <p className="mt-0.5 text-pretty text-muted-foreground text-sm">
+                    {selected.description || selected.notes}
+                  </p>
+                ) : null}
               </div>
               <label className="shrink-0">
                 <span className="sr-only">Campaign status</span>
@@ -296,9 +282,8 @@ export function CampaignsPanel({
                   <span className="tabular-nums">{memberTotal}</span>
                 </div>
                 {members.length === 0 ? (
-                  <p className="text-pretty px-4 py-3 text-muted-foreground text-sm">
-                    No members yet. Ask an agent to research people into this
-                    list.
+                  <p className="px-4 py-3 text-muted-foreground text-sm">
+                    No members
                   </p>
                 ) : (
                   <table className="crm-table">

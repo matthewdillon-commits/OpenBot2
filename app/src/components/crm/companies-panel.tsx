@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
-import { CrmAvatar, CrmEmpty, CrmError } from "@/components/crm/crm-ui";
+import { CrmEmpty, CrmError } from "@/components/crm/crm-ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createCrmCompanyMutationOptions } from "@/lib/crm/mutations";
@@ -54,7 +54,7 @@ export function CompaniesPanel({
     <div className="flex min-h-0 flex-1 flex-col">
       {showCreate ? (
         <form
-          className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2"
+          className="flex flex-wrap items-center gap-2 px-4 pb-3"
           onSubmit={(event) => {
             event.preventDefault();
             void saveCompany();
@@ -100,7 +100,6 @@ export function CompaniesPanel({
       ) : companies.length === 0 ? (
         <CrmEmpty
           title="No companies yet"
-          description="Add accounts you sell into. People and opportunities link here."
           actionLabel="New company"
           onAction={() => setShowCreate(true)}
         />
@@ -109,44 +108,20 @@ export function CompaniesPanel({
           <table className="crm-table">
             <thead>
               <tr>
-                <th>Company</th>
+                <th>Name</th>
                 <th>Website</th>
-                <th>Industry</th>
-                <th>Address</th>
-                <th>Added</th>
               </tr>
             </thead>
             <tbody>
               {companies.map((company) => (
                 <tr key={company.id} className="cursor-default">
                   <td>
-                    <span className="inline-flex min-w-0 items-center gap-2">
-                      <CrmAvatar name={company.name} />
-                      <span className="truncate font-medium" title={company.name}>
-                        {company.name}
-                      </span>
+                    <span className="truncate font-medium" title={company.name}>
+                      {company.name}
                     </span>
                   </td>
                   <td className="text-muted-foreground">
                     {company.domain || "—"}
-                  </td>
-                  <td className="text-muted-foreground">
-                    {company.industry || "—"}
-                  </td>
-                  <td className="max-w-56 truncate text-muted-foreground">
-                    {company.location || "—"}
-                  </td>
-                  <td className="whitespace-nowrap text-muted-foreground tabular-nums">
-                    {company.createdAt
-                      ? new Date(company.createdAt).toLocaleDateString(
-                          undefined,
-                          {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          },
-                        )
-                      : "—"}
                   </td>
                 </tr>
               ))}

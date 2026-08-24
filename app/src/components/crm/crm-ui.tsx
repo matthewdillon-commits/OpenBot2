@@ -3,33 +3,6 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { stageLabel, stageStyle } from "@/lib/crm/colors";
-import { avatarHue, personInitials } from "@/components/crm/crm-marks";
-import { cn } from "@/lib/utils";
-
-export function CrmAvatar({
-  name,
-  className,
-}: {
-  name: string;
-  className?: string;
-}) {
-  const hue = avatarHue(name);
-  return (
-    <span
-      aria-hidden
-      className={cn(
-        "inline-flex size-6 shrink-0 items-center justify-center rounded-md text-[0.65rem] font-medium",
-        className,
-      )}
-      style={{
-        background: `oklch(0.92 0.04 ${hue})`,
-        color: `oklch(0.38 0.08 ${hue})`,
-      }}
-    >
-      {personInitials(name)}
-    </span>
-  );
-}
 
 /** Stage is a label first. The dot is a second signal, not the only one. */
 export function CrmStage({ stageKey }: { stageKey: string }) {
@@ -48,22 +21,17 @@ export function CrmStage({ stageKey }: { stageKey: string }) {
 
 export function CrmEmpty({
   title,
-  description,
   actionLabel,
   onAction,
 }: {
   title: string;
-  description: string;
   actionLabel?: string;
   onAction?: () => void;
 }) {
   return (
-    <Empty className="h-full min-h-[12rem] border border-dashed">
+    <Empty className="h-full min-h-[12rem]">
       <EmptyHeader>
         <EmptyTitle className="text-muted-foreground">{title}</EmptyTitle>
-        <p className="max-w-prose text-pretty text-muted-foreground text-sm">
-          {description}
-        </p>
         {actionLabel && onAction ? (
           <Button className="mt-2" onClick={onAction} size="sm" variant="ghost">
             <IconPlus />

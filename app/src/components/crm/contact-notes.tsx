@@ -39,8 +39,8 @@ export function ContactNotes({ personId }: { personId: string }) {
       <Textarea
         value={draft}
         onChange={(event) => setDraft(event.target.value)}
-        placeholder="Add a note about this person…"
-        rows={3}
+        placeholder="Note"
+        rows={2}
         aria-label="New note"
         onKeyDown={(event) => {
           if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
@@ -49,15 +49,17 @@ export function ContactNotes({ personId }: { personId: string }) {
           }
         }}
       />
-      <div className="flex justify-end">
-        <Button
-          disabled={createNote.isPending || !draft.trim()}
-          onClick={() => void addNote()}
-          size="sm"
-        >
-          {createNote.isPending ? "Saving…" : "Save note"}
-        </Button>
-      </div>
+      {draft.trim() ? (
+        <div className="flex justify-end">
+          <Button
+            disabled={createNote.isPending}
+            onClick={() => void addNote()}
+            size="sm"
+          >
+            {createNote.isPending ? "Saving…" : "Save"}
+          </Button>
+        </div>
+      ) : null}
 
       {notes.isPending ? null : notes.error ? (
         <p className="text-muted-foreground text-sm">
@@ -70,9 +72,7 @@ export function ContactNotes({ personId }: { personId: string }) {
             Try again
           </button>
         </p>
-      ) : rows.length === 0 ? (
-        <p className="text-muted-foreground text-sm">No notes yet.</p>
-      ) : (
+      ) : rows.length === 0 ? null : (
         <ul className="m-0 flex list-none flex-col gap-2 p-0">
           {rows.map((note) => (
             <li key={note.id} className="rounded-lg bg-muted px-3.5 py-3">

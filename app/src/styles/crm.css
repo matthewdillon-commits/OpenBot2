@@ -1,12 +1,11 @@
 /*
  * CRM is a table and a board, so it cannot sit in PageShell's prose column.
- * These rules only cover scan layout Tailwind cannot express: sticky headers,
- * checkbox hit areas, and the deal-column width. Color, type, and radius come
- * from OpenBot tokens.
+ * Sticky headers and deal-column width are the only rules Tailwind cannot
+ * express. Color, type, and radius come from OpenBot tokens.
  */
 .crm-table {
   width: 100%;
-  min-width: 40rem;
+  min-width: 28rem;
   border-collapse: collapse;
   text-align: start;
 }
@@ -22,7 +21,6 @@
   color: var(--muted-foreground);
   font-size: 0.75rem;
   font-weight: 500;
-  letter-spacing: 0.01em;
   white-space: nowrap;
 }
 
@@ -52,21 +50,6 @@
 
 .crm-table tbody tr:focus-visible td {
   box-shadow: inset 0 0 0 2px color-mix(in oklch, var(--ring) 50%, transparent);
-}
-
-.crm-check {
-  position: relative;
-  display: inline-flex;
-  width: 1rem;
-  height: 1rem;
-  margin: 0;
-  accent-color: var(--foreground);
-}
-
-.crm-check::after {
-  content: "";
-  position: absolute;
-  inset: -0.75rem;
 }
 
 .crm-board-col {
