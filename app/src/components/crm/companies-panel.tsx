@@ -95,6 +95,7 @@ export function CompaniesPanel({
       {companiesQuery.isPending ? null : companiesQuery.error ? (
         <CrmError
           label="companies"
+          error={companiesQuery.error.message}
           onRetry={() => void companiesQuery.refetch()}
         />
       ) : companies.length === 0 ? (

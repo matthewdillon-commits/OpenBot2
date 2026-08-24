@@ -100,7 +100,11 @@ export function CrmView({
           onOpenContactRecord={onOpenPerson}
         />
       ) : people.isPending ? null : people.error ? (
-        <CrmError label="people" onRetry={() => void people.refetch()} />
+        <CrmError
+          label="people"
+          error={people.error.message}
+          onRetry={() => void people.refetch()}
+        />
       ) : rows.length === 0 ? (
         <CrmEmpty
           title={searchDebounced ? "No matches" : "No people yet"}

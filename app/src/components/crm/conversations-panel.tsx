@@ -75,6 +75,7 @@ export function ConversationsPanel({
     return (
       <CrmError
         label="conversations"
+        error={threads.error.message}
         onRetry={() => void threads.refetch()}
       />
     );

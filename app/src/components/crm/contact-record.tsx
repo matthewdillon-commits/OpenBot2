@@ -24,6 +24,7 @@ export function ContactRecord({ personId }: { personId: string }) {
     return (
       <CrmError
         label="this person"
+        error={personQuery.error?.message}
         onRetry={() => void personQuery.refetch()}
       />
     );

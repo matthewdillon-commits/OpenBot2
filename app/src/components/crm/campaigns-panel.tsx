@@ -116,6 +116,7 @@ export function CampaignsPanel({
     return (
       <CrmError
         label="campaigns"
+        error={campaignsQuery.error.message}
         onRetry={() => void campaignsQuery.refetch()}
       />
     );

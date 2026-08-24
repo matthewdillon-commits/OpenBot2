@@ -30,16 +30,30 @@ export type ClientOptions = {
 
 /** Every request in this app is authenticated, and every one of them is JSON or nothing. */
 async function send(path: string, options: ClientOptions): Promise<Response> {
-  return fetch(path, {
-    method: options.method,
-    credentials: "include",
-    headers:
-      options.body === undefined
-        ? undefined
-        : { "content-type": "application/json" },
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
-    ...(options.signal ? { signal: options.signal } : {}),
-  });
+  try {
+    return await fetch(path, {
+      method: options.method,
+      credentials: "include",
+      headers:
+        options.body === undefined
+          ? undefined
+          : { "content-type": "application/json" },
+      body:
+        options.body === undefined ? undefined : JSON.stringify(options.body),
+      ...(options.signal ? { signal: options.signal } : {}),
+    });
+  } catch (error) {
+    // A dropped tab, a dead proxy, or a server that is not listening: the browser
+    // throws TypeError "Failed to fetch" and nothing else. Name the server so the
+    // person is not left staring at an implementation phrase.
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw error;
+    }
+    if (error instanceof Error && error.name === "AbortError") {
+      throw error;
+    }
+    throw new Error("Couldn’t reach the server.");
+  }
 }
 
 /**

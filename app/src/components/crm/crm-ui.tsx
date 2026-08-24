@@ -46,9 +46,11 @@ export function CrmEmpty({
 export function CrmError({
   label,
   onRetry,
+  error,
 }: {
   label: string;
   onRetry: () => void;
+  error?: string;
 }) {
   return (
     <div className="flex flex-1 items-center justify-center px-4 py-12">
@@ -57,7 +59,7 @@ export function CrmError({
           Couldn’t load {label}.
         </p>
         <p className="mt-1.5 text-pretty text-muted-foreground text-sm">
-          Check your connection and try again.
+          {error ?? "Couldn’t reach the server."}
         </p>
         <Button className="mt-4" onClick={onRetry} size="sm" variant="outline">
           Try again

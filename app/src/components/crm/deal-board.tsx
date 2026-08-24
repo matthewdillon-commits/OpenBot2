@@ -153,6 +153,7 @@ export function DealBoard({
     return (
       <CrmError
         label="opportunities"
+        error={opportunities.error.message}
         onRetry={() => void opportunities.refetch()}
       />
     );
