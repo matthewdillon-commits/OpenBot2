@@ -1,16 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { Toaster } from "sonner";
 import { z } from "zod";
 import {
   type CrmObjectMode,
   migrateLegacyCrmMode,
 } from "@/components/crm/crm-object-nav";
 import { CrmView } from "@/components/crm/crm-view";
-import { CrmWorkbench } from "@/components/crm/crm-workbench";
 
 /**
- * LimitlessAI-2's Twenty CRM, full-viewport — same workbench chrome as Nick's
- * AppShell when the CRM tab is open. OpenBot's channel sidebar does not wrap
- * this screen; the request is to copy that CRM exactly.
+ * LimitlessAI-2's Twenty CRM, full-bleed in OpenBot's main pane.
+ *
+ * The sidebar stays AppSidebar (CRM above Skills). Only the stage changes.
  */
 const crmSearchSchema = z.object({
   tab: z.preprocess((value) => {
@@ -30,7 +30,7 @@ const crmSearchSchema = z.object({
   stage: z.string().optional(),
 });
 
-export const Route = createFileRoute("/_authed/crm")({
+export const Route = createFileRoute("/_authed/_app/crm")({
   validateSearch: crmSearchSchema,
   component: CrmPage,
 });
@@ -42,7 +42,8 @@ function CrmPage() {
   const stageFilter = stageParam?.trim() || "all";
 
   return (
-    <CrmWorkbench>
+    <div className="lai2-crm absolute inset-0 flex min-h-0 flex-col overflow-hidden bg-white">
+      <Toaster position="bottom-right" theme="light" />
       <CrmView
         mode={mode}
         stageFilter={stageFilter}
@@ -66,6 +67,6 @@ function CrmPage() {
           });
         }}
       />
-    </CrmWorkbench>
+    </div>
   );
 }
