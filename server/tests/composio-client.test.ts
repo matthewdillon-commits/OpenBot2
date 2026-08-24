@@ -168,7 +168,9 @@ describe("the Composio client", () => {
           return Response.json({ items: [] });
         }
         if (path.includes("/auth_configs?") && init?.method !== "POST") {
-          return Response.json({ items: [] });
+          return Response.json({
+            items: [{ id: "ac_pinned", toolkit: { slug: "gmail" } }],
+          });
         }
         if (path.endsWith("/auth_configs") && init?.method === "POST") {
           return Response.json({ id: "ac_managed" }, { status: 200 });

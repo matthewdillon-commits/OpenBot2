@@ -159,9 +159,12 @@ export function composioClient(
       .filter((entry) => !entry.userId || entry.userId === userId);
   }
 
-  async function findAuthConfigId(slug: string): Promise<string | null> {
+  async function findAuthConfigId(
+    slug: string,
+    excludeId?: string,
+  ): Promise<string | null> {
     const cached = authConfigBySlug.get(slug);
-    if (cached) return cached;
+    if (cached && cached !== excludeId) return cached;
     const params = new URLSearchParams({ toolkit: slug, limit: "10" });
     const { ok, body } = await request(`/auth_configs?${params}`);
     if (!ok) return null;
@@ -176,7 +179,7 @@ export function composioClient(
       if (toolkitSlug && toolkitSlug !== slug) continue;
       const id =
         asString(record.id) ?? asString(asRecord(record.auth_config)?.id);
-      if (id) {
+      if (id && id !== excludeId) {
         authConfigBySlug.set(slug, id);
         return id;
       }
@@ -215,8 +218,11 @@ export function composioClient(
     return id;
   }
 
-  async function ensureAuthConfig(slug: string): Promise<string> {
-    return (await findAuthConfigId(slug)) ?? createAuthConfig(slug);
+  async function ensureAuthConfig(
+    slug: string,
+    excludeId?: string,
+  ): Promise<string> {
+    return (await findAuthConfigId(slug, excludeId)) ?? createAuthConfig(slug);
   }
 
   return {
@@ -245,12 +251,16 @@ export function composioClient(
       if (existing && existing.status === "ACTIVE") {
         return { redirectUrl: null, alreadyConnected: true };
       }
+      const loopback = isLoopbackCallback(callbackUrl);
       const authConfigId =
-        slug === "gmail" &&
-        pinnedGmailAuthConfigId &&
-        !isLoopbackCallback(callbackUrl)
+        slug === "gmail" && pinnedGmailAuthConfigId && !loopback
           ? pinnedGmailAuthConfigId
-          : await ensureAuthConfig(slug);
+          : await ensureAuthConfig(
+              slug,
+              loopback && slug === "gmail"
+                ? pinnedGmailAuthConfigId
+                : undefined,
+            );
       const { ok, status, body } = await request("/connected_accounts/link", {
         method: "POST",
         body: JSON.stringify({
