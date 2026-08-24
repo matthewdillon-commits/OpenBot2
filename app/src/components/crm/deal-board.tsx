@@ -174,6 +174,7 @@ export function DealBoard({
             onChange={(event) => setNewName(event.target.value)}
             placeholder="Opportunity name"
             aria-label="Opportunity name"
+            autoFocus
             className="max-w-sm"
           />
           <Button

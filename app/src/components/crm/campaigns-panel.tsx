@@ -20,8 +20,12 @@ import { cn } from "@/lib/utils";
 import { queryClient } from "@/query-client";
 
 export function CampaignsPanel({
+  createOpen,
+  onCreateOpenChange,
   onSelectContact,
 }: {
+  createOpen?: boolean;
+  onCreateOpenChange?: (open: boolean) => void;
   onSelectContact?: (contactId: string) => void;
 }) {
   const campaignsQuery = useQuery(crmCampaignsQueryOptions());
@@ -41,6 +45,13 @@ export function CampaignsPanel({
   const [selectedListId, setSelectedListId] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [newListName, setNewListName] = useState("");
+  const [internalCreate, setInternalCreate] = useState(false);
+  const showCreate = createOpen ?? internalCreate;
+
+  function setShowCreate(open: boolean) {
+    if (onCreateOpenChange) onCreateOpenChange(open);
+    else setInternalCreate(open);
+  }
 
   const campaigns = campaignsQuery.data?.items ?? [];
   const selected =
@@ -56,6 +67,12 @@ export function CampaignsPanel({
   });
   const members = membersQuery.data?.items ?? [];
   const memberTotal = membersQuery.data?.total ?? 0;
+
+  useEffect(() => {
+    if (!selectedId && campaigns[0]) {
+      setSelectedId(campaigns[0].id);
+    }
+  }, [campaigns, selectedId]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -77,6 +94,7 @@ export function CampaignsPanel({
         status: "active",
       });
       setNewName("");
+      setShowCreate(false);
       setSelectedId(campaign.id);
       toast.success("Campaign created");
     } catch {
@@ -125,27 +143,40 @@ export function CampaignsPanel({
   return (
     <div className="flex min-h-0 flex-1">
       <div className="flex w-64 shrink-0 flex-col border-e border-border">
-        <form
-          className="flex flex-col gap-2 border-b border-border p-4"
-          onSubmit={(event) => void saveCampaign(event)}
-        >
-          <Input
-            value={newName}
-            onChange={(event) => setNewName(event.target.value)}
-            placeholder="Campaign name"
-            aria-label="Campaign name"
-          />
-          <Button
-            disabled={createCampaign.isPending || !newName.trim()}
-            size="sm"
-            type="submit"
+        {showCreate ? (
+          <form
+            className="flex flex-col gap-2 border-b border-border p-3"
+            onSubmit={(event) => void saveCampaign(event)}
           >
-            {createCampaign.isPending ? "Creating…" : "Create"}
-          </Button>
-        </form>
+            <Input
+              value={newName}
+              onChange={(event) => setNewName(event.target.value)}
+              placeholder="Campaign name"
+              aria-label="Campaign name"
+              autoFocus
+            />
+            <div className="flex gap-1.5">
+              <Button
+                disabled={createCampaign.isPending || !newName.trim()}
+                size="sm"
+                type="submit"
+              >
+                {createCampaign.isPending ? "Creating…" : "Save"}
+              </Button>
+              <Button
+                onClick={() => setShowCreate(false)}
+                size="sm"
+                type="button"
+                variant="ghost"
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        ) : null}
         <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
-          {campaigns.length === 0 ? (
-            <p className="text-pretty px-2.5 py-3 text-muted-foreground text-sm">
+          {campaigns.length === 0 && !showCreate ? (
+            <p className="px-2.5 py-3 text-muted-foreground text-sm">
               No campaigns yet.
             </p>
           ) : (

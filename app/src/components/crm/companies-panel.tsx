@@ -65,6 +65,7 @@ export function CompaniesPanel({
             onChange={(event) => setName(event.target.value)}
             placeholder="Company name"
             aria-label="Company name"
+            autoFocus
             className="min-w-40 flex-1"
           />
           <Input

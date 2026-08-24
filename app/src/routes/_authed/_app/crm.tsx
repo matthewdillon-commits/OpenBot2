@@ -1,4 +1,3 @@
-import { IconPlus } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
@@ -11,12 +10,12 @@ import {
 } from "@/components/crm/crm-object-nav";
 import { CrmView } from "@/components/crm/crm-view";
 import { DetailPanel } from "@/components/layout/detail-panel";
-import { Button } from "@/components/ui/button";
 import { crmPersonQueryOptions } from "@/lib/crm/queries";
 
 /**
  * CRM is a table and a board. PageShell's prose column would wrap every row, so
  * this screen fills the main pane the way Agents fills it. The sidebar stays.
+ * The sidebar already names the page; there is no second title.
  */
 const crmSearchSchema = z.object({
   tab: z.preprocess((value) => {
@@ -62,22 +61,9 @@ function CrmPage() {
     });
   }
 
-  const createLabel =
-    mode === "people"
-      ? "New person"
-      : mode === "companies"
-        ? "New company"
-        : mode === "opportunities"
-          ? "New opportunity"
-          : null;
-
   return (
     <DetailPanel
-      detail={
-        personId ? (
-          <ContactRecord personId={personId} />
-        ) : null
-      }
+      detail={personId ? <ContactRecord personId={personId} /> : null}
       detailWidth={400}
       onClose={() => setSearch({ person: undefined })}
       open={Boolean(personId)}
@@ -91,21 +77,6 @@ function CrmPage() {
     >
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
         <Toaster position="bottom-right" />
-        <header className="flex shrink-0 items-center justify-between gap-4 px-4 pt-8 pb-3">
-          <h1 className="font-bold text-2xl tracking-tight text-balance">
-            CRM
-          </h1>
-          {createLabel ? (
-            <Button
-              onClick={() => setCreateOpen(true)}
-              size="sm"
-              variant="ghost"
-            >
-              <IconPlus />
-              {createLabel}
-            </Button>
-          ) : null}
-        </header>
         <CrmView
           createOpen={createOpen}
           mode={mode}
