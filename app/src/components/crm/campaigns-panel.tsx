@@ -1,6 +1,9 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
+import { CrmError, crmControlClassName } from "@/components/crm/crm-ui";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { campaignStatusStyle, stageLabel, stageStyle } from "@/lib/crm/colors";
 import {
   createCrmCampaignListMutationOptions,
@@ -66,7 +69,8 @@ export function CampaignsPanel({
     setSelectedListId(lists[0]?.id ?? null);
   }, [lists, selectedId, selectedListId]);
 
-  async function saveCampaign() {
+  async function saveCampaign(event: FormEvent) {
+    event.preventDefault();
     if (!newName.trim()) return;
     try {
       const campaign = await createCampaign.mutateAsync({
@@ -110,41 +114,48 @@ export function CampaignsPanel({
     }
   }
 
+  if (campaignsQuery.isPending) return null;
+  if (campaignsQuery.error) {
+    return (
+      <CrmError
+        label="campaigns"
+        onRetry={() => void campaignsQuery.refetch()}
+      />
+    );
+  }
+
   return (
-    <div className="ui-crm-panes flex min-h-0 flex-1">
-      <div className="ui-crm-pane-fixed flex w-[260px] shrink-0 flex-col bg-[var(--bg-solid)] shadow-[inset_-1px_0_0_var(--hairline)]">
-        <div className="px-3 py-3 shadow-[inset_0_-1px_0_var(--hairline)]">
-          <div className="text-13 font-medium tracking-[-0.01em] text-[var(--text)]">
-            Start a campaign
-          </div>
-          <p className="mt-0.5 text-pretty text-12 text-[var(--text-muted)]">
+    <div className="flex min-h-0 flex-1">
+      <div className="flex w-64 shrink-0 flex-col border-e border-border">
+        <form className="flex flex-col gap-2 border-b border-border p-4" onSubmit={(event) => void saveCampaign(event)}>
+          <p className="font-bold text-sm tracking-tight">Start a campaign</p>
+          <p className="text-pretty text-muted-foreground text-xs leading-relaxed">
             Group people into lists your agents can work.
           </p>
-          <input
+          <Input
             value={newName}
             onChange={(event) => setNewName(event.target.value)}
             placeholder="Campaign name"
-            className="ui-field mt-3 h-9 min-h-9 w-full !rounded-[var(--radius-control)] text-13"
+            aria-label="Campaign name"
           />
-          <input
+          <Input
             value={newGoal}
             onChange={(event) => setNewGoal(event.target.value)}
-            placeholder="What success looks like (optional)"
-            className="ui-field mt-2 h-9 min-h-9 w-full !rounded-[var(--radius-control)] text-13"
+            placeholder="What success looks like"
+            aria-label="Campaign goal"
           />
-          <button
-            type="button"
+          <Button
             disabled={createCampaign.isPending || !newName.trim()}
-            onClick={() => void saveCampaign()}
-            className="ui-cta mt-3 !min-h-9 w-full text-12"
+            size="sm"
+            type="submit"
           >
             {createCampaign.isPending ? "Creating…" : "Create campaign"}
-          </button>
-        </div>
+          </Button>
+        </form>
         <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
-          {campaignsQuery.isPending ? null : campaigns.length === 0 ? (
-            <p className="text-pretty px-2.5 py-3 text-13 text-[var(--text-muted)]">
-              No campaigns yet. Create one above to organize outreach.
+          {campaigns.length === 0 ? (
+            <p className="text-pretty px-2.5 py-3 text-muted-foreground text-sm">
+              No campaigns yet.
             </p>
           ) : (
             campaigns.map((campaign) => {
@@ -155,19 +166,20 @@ export function CampaignsPanel({
                   type="button"
                   onClick={() => setSelectedId(campaign.id)}
                   className={cn(
-                    "flex w-full flex-col rounded-[var(--radius-control)] px-2.5 py-2 text-left transition-[background-color] duration-[var(--duration-quick)] ease-[var(--ease-apple)]",
+                    "flex w-full flex-col rounded-lg px-2.5 py-2 text-left",
+                    "focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
                     selectedId === campaign.id
-                      ? "bg-[var(--bg-muted)]"
-                      : "hover:bg-[var(--bg-hover)]",
+                      ? "bg-muted"
+                      : "hover:bg-muted/60",
                   )}
                 >
-                  <span className="text-13 font-medium tracking-[-0.01em] text-[var(--text)]">
-                    {campaign.name}
-                  </span>
-                  <span
-                    className="mt-1 w-fit rounded-[6px] px-1.5 py-0.5 text-[11px] font-medium"
-                    style={{ color: status.fg, background: status.bg }}
-                  >
+                  <span className="text-sm font-medium">{campaign.name}</span>
+                  <span className="mt-1 text-xs text-muted-foreground">
+                    <span
+                      aria-hidden
+                      className="me-1.5 inline-block size-1.5 rounded-full align-middle"
+                      style={{ background: status.fg }}
+                    />
                     {status.label}
                   </span>
                 </button>
@@ -179,74 +191,59 @@ export function CampaignsPanel({
 
       <div className="flex min-w-0 flex-1 flex-col">
         {!selected ? (
-          <div className="ui-prose p-6">
-            <p className="text-14 font-medium text-[var(--text)]">
-              Pick a campaign
-            </p>
-            <p className="mt-1 text-13 text-[var(--text-muted)]">
+          <div className="p-6">
+            <p className="font-medium text-sm">Pick a campaign</p>
+            <p className="mt-1 max-w-prose text-pretty text-muted-foreground text-sm">
               Manage lists and members here. Agents add people; you decide when
               emails go out.
             </p>
           </div>
         ) : (
           <>
-            <div className="px-4 py-3 shadow-[inset_0_-1px_0_var(--hairline)]">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-14 font-medium tracking-[-0.01em] text-[var(--text)]">
-                      {selected.name}
-                    </h3>
-                    <span
-                      className="rounded-[6px] px-1.5 py-0.5 text-[11px] font-medium"
-                      style={{
-                        color: campaignStatusStyle(selected.status).fg,
-                        background: campaignStatusStyle(selected.status).bg,
-                      }}
-                    >
-                      {campaignStatusStyle(selected.status).label}
-                    </span>
-                  </div>
-                  <p className="text-pretty mt-0.5 text-13 text-[var(--text-secondary)]">
-                    {selected.description ||
-                      selected.notes ||
-                      "No goal set yet"}
-                  </p>
-                </div>
-                <label className="shrink-0">
-                  <span className="sr-only">Campaign status</span>
-                  <select
-                    value={selected.status}
-                    onChange={(event) => {
-                      void updateCampaign
-                        .mutateAsync({
-                          id: selected.id,
-                          input: { status: event.target.value },
-                        })
-                        .catch(() => toast.error("Couldn’t update status"));
-                    }}
-                    className="ui-crm-select"
-                  >
-                    {(
-                      [
-                        ["draft", "Draft"],
-                        ["active", "Active"],
-                        ["paused", "Paused"],
-                        ["archived", "Archived"],
-                      ] as const
-                    ).map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+            <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
+              <div className="min-w-0">
+                <h3 className="font-bold text-sm tracking-tight text-balance">
+                  {selected.name}
+                </h3>
+                <p className="mt-0.5 text-pretty text-muted-foreground text-sm">
+                  {selected.description || selected.notes || "No goal set yet"}
+                </p>
               </div>
+              <label className="shrink-0">
+                <span className="sr-only">Campaign status</span>
+                <select
+                  value={selected.status}
+                  onChange={(event) => {
+                    void updateCampaign
+                      .mutateAsync({
+                        id: selected.id,
+                        input: { status: event.target.value },
+                      })
+                      .catch(() => toast.error("Couldn’t update status"));
+                  }}
+                  className={cn(crmControlClassName, "w-auto")}
+                >
+                  {(
+                    [
+                      ["draft", "Draft"],
+                      ["active", "Active"],
+                      ["paused", "Paused"],
+                      ["archived", "Archived"],
+                    ] as const
+                  ).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
 
-            <div className="ui-crm-panes flex min-h-0 flex-1">
-              <div className="ui-crm-pane-fixed flex w-[200px] shrink-0 flex-col shadow-[inset_-1px_0_0_var(--hairline)]">
-                <div className="ui-label px-3 py-2">Lists</div>
+            <div className="flex min-h-0 flex-1">
+              <div className="flex w-48 shrink-0 flex-col border-e border-border">
+                <p className="px-3 py-2 text-xs font-medium text-muted-foreground">
+                  Lists
+                </p>
                 <div className="min-h-0 flex-1 overflow-y-auto px-1">
                   {lists.map((list) => (
                     <button
@@ -254,100 +251,102 @@ export function CampaignsPanel({
                       type="button"
                       onClick={() => setSelectedListId(list.id)}
                       className={cn(
-                        "flex w-full items-center justify-between rounded-[var(--radius-control)] px-2.5 py-2 text-left text-13 transition-[background-color]",
+                        "flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-sm",
+                        "focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
                         selectedListId === list.id
-                          ? "bg-[var(--bg-muted)] font-medium"
-                          : "hover:bg-[var(--bg-muted)]/60",
+                          ? "bg-muted font-medium"
+                          : "hover:bg-muted/60",
                       )}
                     >
-                      <span className="truncate text-[var(--text)]">
-                        {list.name}
-                      </span>
-                      <span className="tabular text-12 text-[var(--text-muted)]">
+                      <span className="truncate">{list.name}</span>
+                      <span className="tabular-nums text-muted-foreground text-xs">
                         {list.memberCount}
                       </span>
                     </button>
                   ))}
                 </div>
-                <div className="border-t border-[var(--border)] p-2">
-                  <input
+                <form
+                  className="border-t border-border p-2"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void addList();
+                  }}
+                >
+                  <Input
                     value={newListName}
                     onChange={(event) => setNewListName(event.target.value)}
                     placeholder="New list name"
-                    className="ui-field w-full !min-h-9 text-12"
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") void addList();
-                    }}
+                    aria-label="New list name"
                   />
-                  <button
-                    type="button"
-                    onClick={() => void addList()}
+                  <Button
+                    className="mt-1.5 w-full"
                     disabled={!newListName.trim() || createList.isPending}
-                    className="ui-cta-secondary mt-1.5 !min-h-[var(--wb-chrome-control)] w-full text-12"
+                    size="sm"
+                    type="submit"
+                    variant="outline"
                   >
                     Add list
-                  </button>
-                </div>
+                  </Button>
+                </form>
               </div>
 
               <div className="min-w-0 flex-1 overflow-auto">
-                <div className="flex items-center justify-between px-4 py-2.5 text-12 text-[var(--text-muted)]">
+                <div className="flex items-center justify-between px-4 py-2.5 text-muted-foreground text-xs">
                   <span>Members</span>
-                  <span className="tabular">{memberTotal}</span>
+                  <span className="tabular-nums">{memberTotal}</span>
                 </div>
                 {members.length === 0 ? (
-                  <p className="text-pretty px-4 py-3 text-13 text-[var(--text-muted)]">
+                  <p className="text-pretty px-4 py-3 text-muted-foreground text-sm">
                     No members yet. Ask an agent to research people into this
-                    list, or add contacts from the board.
+                    list.
                   </p>
                 ) : (
-                  <table className="w-full text-left text-13">
-                    <thead className="sticky top-0 bg-[var(--bg)] text-12 text-[var(--text-muted)]">
-                      <tr className="border-b border-[var(--border)]">
-                        <th className="px-4 py-2 font-medium">Name</th>
-                        <th className="px-4 py-2 font-medium">Company</th>
-                        <th className="px-4 py-2 font-medium">Stage</th>
-                        <th className="px-4 py-2 font-medium" />
+                  <table className="crm-table">
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Company</th>
+                        <th>Stage</th>
+                        <th>
+                          <span className="sr-only">Actions</span>
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
                       {members.map((person) => {
                         const stage = stageStyle(person.stageKey);
                         return (
-                          <tr
-                            key={person.id}
-                            className="border-b border-[var(--border)]"
-                          >
-                            <td className="px-4 py-2">
+                          <tr key={person.id} className="cursor-default">
+                            <td>
                               <button
                                 type="button"
                                 onClick={() => onSelectContact?.(person.id)}
-                                className="font-medium text-[var(--text)] hover:underline"
+                                className="font-medium underline-offset-4 hover:underline"
                               >
                                 {person.name}
                               </button>
                             </td>
-                            <td className="px-4 py-2 text-[var(--text-secondary)]">
+                            <td className="text-muted-foreground">
                               {person.company?.name || "—"}
                             </td>
-                            <td className="px-4 py-2">
-                              <span className="inline-flex items-center gap-1.5 text-12 text-[var(--text-secondary)]">
+                            <td>
+                              <span className="inline-flex items-center gap-1.5 text-sm">
                                 <span
-                                  className="h-2 w-2 rounded-full"
+                                  className="size-1.5 rounded-full"
                                   style={{ background: stage.solid }}
                                   aria-hidden
                                 />
                                 {stageLabel(person.stageKey)}
                               </span>
                             </td>
-                            <td className="px-4 py-2 text-right">
-                              <button
-                                type="button"
+                            <td className="text-end">
+                              <Button
                                 onClick={() => void removeMember(person.id)}
-                                className="text-12 text-[var(--text-muted)] hover:text-[var(--danger)]"
+                                size="sm"
+                                variant="ghost"
                               >
                                 Remove
-                              </button>
+                              </Button>
                             </td>
                           </tr>
                         );

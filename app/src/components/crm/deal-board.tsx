@@ -1,6 +1,7 @@
 import {
   DndContext,
   DragOverlay,
+  KeyboardSensor,
   PointerSensor,
   closestCorners,
   useDraggable,
@@ -10,10 +11,14 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
+import { IconPlus } from "@tabler/icons-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
+import { useReducedMotion } from "motion/react";
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
+import { CrmEmpty, CrmError } from "@/components/crm/crm-ui";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   createCrmOpportunityMutationOptions,
   updateCrmOpportunityMutationOptions,
@@ -68,15 +73,19 @@ export function DealBoard({ className }: { className?: string }) {
   const updateOpportunity = useMutation(
     updateCrmOpportunityMutationOptions(queryClient),
   );
+  const shouldReduceMotion = useReducedMotion();
   const [activeId, setActiveId] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [showCreate, setShowCreate] = useState(false);
-  const [visibleStage, setVisibleStage] = useState<string>(STAGES[0] ?? "qualify");
+  const [visibleStage, setVisibleStage] = useState<string>(
+    STAGES[0] ?? "qualify",
+  );
   const boardRef = useRef<HTMLDivElement>(null);
   const jumpingTo = useRef<string | null>(null);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 3 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor),
   );
 
   const deals = (opportunities.data?.items ?? []).map(asDeal);
@@ -88,7 +97,9 @@ export function DealBoard({ className }: { className?: string }) {
       : DEFAULT_DEAL_STAGE;
     byStage.get(key)?.push(deal);
   }
-  const activeDeal = activeId ? deals.find((deal) => deal.id === activeId) : null;
+  const activeDeal = activeId
+    ? deals.find((deal) => deal.id === activeId)
+    : null;
 
   const onBoardScroll = useCallback(() => {
     if (jumpingTo.current) return;
@@ -121,7 +132,7 @@ export function DealBoard({ className }: { className?: string }) {
     jumpingTo.current = stage;
     board.scrollTo({
       left: column.offsetLeft - board.offsetLeft - 12,
-      behavior: "smooth",
+      behavior: shouldReduceMotion ? "auto" : "smooth",
     });
   }
 
@@ -165,90 +176,68 @@ export function DealBoard({ className }: { className?: string }) {
     }
   }
 
-  if (opportunities.isPending) return <div className={cn("min-h-0 flex-1", className)} />;
+  if (opportunities.isPending) {
+    return <div className={cn("min-h-0 flex-1", className)} />;
+  }
 
   if (opportunities.error) {
     return (
-      <div
-        className={cn(
-          "flex min-h-0 flex-1 items-center justify-center p-8",
-          className,
-        )}
-      >
-        <div className="max-w-sm text-center">
-          <p className="text-14 font-medium text-[var(--text)]">
-            Couldn’t load opportunities
-          </p>
-          <p className="mt-1.5 text-13 text-[var(--text-secondary)]">
-            Check your connection and try again.
-          </p>
-          <button
-            type="button"
-            onClick={() => void opportunities.refetch()}
-            className="ui-crm-retry mt-3"
-          >
-            Try again
-          </button>
-        </div>
-      </div>
+      <CrmError
+        label="opportunities"
+        onRetry={() => void opportunities.refetch()}
+      />
     );
   }
 
   return (
     <div className={cn("flex min-h-0 flex-1 flex-col", className)}>
-      <div className="flex items-center justify-end gap-2 border-b border-[var(--hairline)] px-3 py-2">
+      <div className="flex items-center justify-end gap-2 px-4 pb-3">
         {showCreate ? (
-          <div className="flex flex-1 items-center gap-2">
-            <input
+          <form
+            className="flex flex-1 items-center gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void createDeal();
+            }}
+          >
+            <Input
               value={newName}
               onChange={(event) => setNewName(event.target.value)}
               placeholder="Opportunity name"
-              className="ui-crm-search min-w-0 flex-1 px-2.5 text-13"
-              onKeyDown={(event) => {
-                if (event.key === "Enter") void createDeal();
-                if (event.key === "Escape") setShowCreate(false);
-              }}
+              aria-label="Opportunity name"
+              className="max-w-sm"
             />
-            <button
-              type="button"
+            <Button
               disabled={createOpportunity.isPending || !newName.trim()}
-              onClick={() => void createDeal()}
-              className="ui-btn h-8 !min-h-0 !rounded-[8px] !px-2.5 text-12"
+              size="sm"
+              type="submit"
             >
-              Save
-            </button>
-          </div>
+              {createOpportunity.isPending ? "Saving…" : "Save"}
+            </Button>
+            <Button
+              onClick={() => setShowCreate(false)}
+              size="sm"
+              type="button"
+              variant="ghost"
+            >
+              Cancel
+            </Button>
+          </form>
         ) : (
-          <button
-            type="button"
-            onClick={() => setShowCreate(true)}
-            className="ui-btn inline-flex h-8 !min-h-0 items-center gap-1.5 !rounded-[8px] !px-2.5 text-12"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            New
-          </button>
+          <Button onClick={() => setShowCreate(true)} size="sm" variant="ghost">
+            <IconPlus />
+            New opportunity
+          </Button>
         )}
       </div>
 
       {deals.length === 0 && !showCreate ? (
-        <div className="flex flex-1 items-center justify-center p-8">
-          <div className="max-w-sm text-center">
-            <p className="text-14 font-medium text-[var(--text)]">
-              No opportunities yet
-            </p>
-            <p className="mt-1.5 text-13 text-[var(--text-secondary)]">
-              Pipeline tracks money — drag cards across stages as deals move.
-            </p>
-            <button
-              type="button"
-              onClick={() => setShowCreate(true)}
-              className="ui-btn mt-3 inline-flex h-8 items-center gap-1.5 !rounded-[8px] !px-3 text-12"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              New opportunity
-            </button>
-          </div>
-        </div>
+        <CrmEmpty
+          title="No opportunities yet"
+          description="Pipeline tracks money. Drag a card across stages, or use the keyboard."
+          actionLabel="New opportunity"
+          onAction={() => setShowCreate(true)}
+        />
       ) : (
         <DndContext
           sensors={sensors}
@@ -257,19 +246,30 @@ export function DealBoard({ className }: { className?: string }) {
           onDragEnd={onDragEnd}
           onDragCancel={() => setActiveId(null)}
         >
-          <div className="ui-crm-board-pager" role="tablist" aria-label="Stages">
+          <div
+            className="flex shrink-0 gap-1 overflow-x-auto px-4 pb-2"
+            role="tablist"
+            aria-label="Stages"
+          >
             {DEAL_STAGE_DEFS.map((stage) => (
               <button
                 key={stage.key}
                 type="button"
                 role="tab"
                 aria-selected={visibleStage === stage.key}
-                data-active={visibleStage === stage.key}
                 onClick={() => scrollToStage(stage.key)}
-                className="ui-crm-board-pager-item"
+                className={cn(
+                  "rounded-lg px-2.5 py-1.5 text-sm",
+                  "focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
+                  visibleStage === stage.key
+                    ? "bg-muted text-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
               >
                 {stage.label}
-                <span>{(byStage.get(stage.key) || []).length}</span>
+                <span className="ms-1.5 tabular-nums text-muted-foreground">
+                  {(byStage.get(stage.key) || []).length}
+                </span>
               </button>
             ))}
           </div>
@@ -279,13 +279,7 @@ export function DealBoard({ className }: { className?: string }) {
             onPointerDown={() => {
               jumpingTo.current = null;
             }}
-            onTouchStart={() => {
-              jumpingTo.current = null;
-            }}
-            onWheel={() => {
-              jumpingTo.current = null;
-            }}
-            className="ui-crm-board flex min-h-0 flex-1 gap-3 overflow-x-auto px-3 pb-3 pt-2"
+            className="flex min-h-0 flex-1 gap-3 overflow-x-auto px-4 pb-4"
           >
             {DEAL_STAGE_DEFS.map((stage) => {
               const column = byStage.get(stage.key) || [];
@@ -304,7 +298,7 @@ export function DealBoard({ className }: { className?: string }) {
               );
             })}
           </div>
-          <DragOverlay dropAnimation={null}>
+          <DragOverlay dropAnimation={shouldReduceMotion ? null : undefined}>
             {activeDeal ? <DealCard deal={activeDeal} overlay /> : null}
           </DragOverlay>
         </DndContext>
@@ -330,19 +324,19 @@ function StageColumn({
     <section
       ref={setNodeRef}
       data-stage={stage}
-      className="ui-crm-board-col flex shrink-0 flex-col"
+      className="crm-board-col flex shrink-0 flex-col"
       aria-label={label}
     >
       <header className="mb-2 flex items-baseline justify-between gap-2 px-0.5">
         <div className="min-w-0">
-          <h3 className="truncate text-12 font-medium text-[var(--text)]">
+          <h3 className="truncate font-bold text-sm tracking-tight">
             {label}
-            <span className="ms-1.5 tabular-nums text-[var(--text-muted)]">
+            <span className="ms-1.5 font-normal tabular-nums text-muted-foreground">
               {deals.length}
             </span>
           </h3>
           {total > 0 ? (
-            <p className="mt-0.5 text-11 tabular-nums text-[var(--text-muted)]">
+            <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">
               {formatUsd(total)}
             </p>
           ) : null}
@@ -350,12 +344,12 @@ function StageColumn({
       </header>
       <ul
         className={cn(
-          "flex min-h-[160px] flex-1 flex-col gap-2 overflow-y-auto rounded-[12px] bg-[var(--bg-muted)] p-1.5 transition-colors",
-          isOver && "bg-[oklch(0.94_0.02_250)]",
+          "flex min-h-40 flex-1 flex-col gap-2 overflow-y-auto rounded-lg bg-muted p-1.5 transition-colors",
+          isOver && "bg-accent",
         )}
       >
         {deals.length === 0 ? (
-          <li className="flex flex-1 items-center justify-center px-2 py-6 text-12 text-[var(--text-muted)]">
+          <li className="flex flex-1 items-center justify-center px-2 py-6 text-muted-foreground text-sm">
             Drop here
           </li>
         ) : (
@@ -389,21 +383,19 @@ function DealCard({ deal, overlay }: { deal: Deal; overlay?: boolean }) {
       }
       {...(overlay ? {} : { ...listeners, ...attributes })}
       className={cn(
-        "list-none rounded-[10px] border border-[var(--hairline)] bg-[var(--bg-solid)] px-3 py-2.5 shadow-[0_1px_0_oklch(0_0_0/0.03)]",
+        "list-none rounded-lg border border-border bg-card px-3 py-2.5",
         !overlay && "cursor-grab active:cursor-grabbing",
-        isDragging && !overlay && "opacity-40",
+        isDragging && !overlay && "crm-deal-dragging opacity-40",
         overlay && "shadow-md",
       )}
     >
-      <p className="truncate text-13 font-medium tracking-[-0.01em] text-[var(--text)]">
-        {deal.name}
-      </p>
+      <p className="truncate text-sm font-medium">{deal.name}</p>
       <div className="mt-1 flex items-center justify-between gap-2">
-        <p className="text-12 tabular-nums font-medium text-[var(--text-secondary)]">
+        <p className="text-sm font-medium tabular-nums text-muted-foreground">
           {formatUsd(deal.amountCents)}
         </p>
         {deal.closeDate ? (
-          <p className="truncate text-11 text-[var(--text-muted)]">
+          <p className="truncate text-xs tabular-nums text-muted-foreground">
             {new Date(deal.closeDate).toLocaleDateString(undefined, {
               month: "short",
               day: "numeric",

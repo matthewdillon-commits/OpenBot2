@@ -4,7 +4,7 @@
 /* Composer chips/dropdown. Reads the shadcn tokens declared below, so it themes itself. */
 @import "prompt-area/tailwind.css";
 @import "@fontsource-variable/inter";
-@import "./styles/crm-twenty.css";
+@import "./styles/crm.css";
 
 /*
  * Streamdown draws a Bot's prose, and Tailwind only ships classes it can see used. Its markup lives

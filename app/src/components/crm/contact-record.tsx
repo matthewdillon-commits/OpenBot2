@@ -3,10 +3,8 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ContactNotes } from "@/components/crm/contact-notes";
 import { ContactThread } from "@/components/crm/contact-thread";
-import {
-  type RecordDetailField,
-  RecordPage,
-} from "@/components/crm/record-page";
+import { RecordPage } from "@/components/crm/record-page";
+import { crmControlClassName, CrmError } from "@/components/crm/crm-ui";
 import { stageLabel } from "@/lib/crm/colors";
 import {
   createCrmOpportunityMutationOptions,
@@ -14,26 +12,13 @@ import {
   updateCrmPersonMutationOptions,
 } from "@/lib/crm/mutations";
 import {
-  type CrmPerson,
   crmOpportunitiesQueryOptions,
+  crmPersonQueryOptions,
 } from "@/lib/crm/queries";
 import { CONTACT_STAGE_DEFS } from "@/lib/crm/stages";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { queryClient } from "@/query-client";
-
-function knownField(
-  key: string,
-  label: string,
-  value?: string | null,
-  inputType?: RecordDetailField["inputType"],
-): RecordDetailField {
-  return {
-    key,
-    label,
-    value: value ?? null,
-    inputType,
-    state: value ? "known" : "blank",
-  };
-}
 
 function isOpenDeal(stageKey: string): boolean {
   return stageKey !== "won" && stageKey !== "lost";
@@ -50,21 +35,20 @@ function formatUsd(amountCents?: number | null): string {
 }
 
 export function ContactRecord({
-  person,
-  fullscreen = false,
-  onClose,
+  personId,
 }: {
-  person: CrmPerson;
-  fullscreen?: boolean;
+  personId: string;
   onClose: () => void;
 }) {
+  const personQuery = useQuery(crmPersonQueryOptions(personId));
+  const person = personQuery.data;
   const updatePerson = useMutation(updateCrmPersonMutationOptions(queryClient));
   const createDeal = useMutation(
     createCrmOpportunityMutationOptions(queryClient),
   );
-  const deals = useQuery(crmOpportunitiesQueryOptions("", person.id));
+  const deals = useQuery(crmOpportunitiesQueryOptions("", personId));
   const [dealCreateOpen, setDealCreateOpen] = useState(false);
-  const [dealName, setDealName] = useState(person.company?.name || person.name);
+  const [dealName, setDealName] = useState("");
   const [movingStage, setMovingStage] = useState(false);
 
   const openDeals = useMemo(
@@ -95,74 +79,92 @@ export function ContactRecord({
     };
   }, [openDeals]);
 
+  if (personQuery.isPending) return null;
+  if (personQuery.error || !person) {
+    return (
+      <CrmError
+        label="this person"
+        onRetry={() => void personQuery.refetch()}
+      />
+    );
+  }
+  const record = person;
+
   const details = [
-    knownField("email", "Email", person.emails[0], "email"),
-    knownField("phone", "Phone", person.phones[0], "tel"),
-    knownField("title", "Title", person.jobTitle),
-    knownField("companyName", "Company", person.company?.name),
-    knownField("stageKey", "Stage", stageLabel(person.stageKey)),
-    knownField("location", "Location", person.location),
-    knownField("timezone", "Timezone", person.timezone),
-    knownField("source", "Source", person.source?.replace(/_/g, " ") ?? null),
-    knownField("linkedinUrl", "LinkedIn", person.linkedinUrl, "url"),
+    {
+      key: "email",
+      label: "Email",
+      value: record.emails[0] ?? null,
+      inputType: "email" as const,
+    },
+    {
+      key: "phone",
+      label: "Phone",
+      value: record.phones[0] ?? null,
+      inputType: "tel" as const,
+    },
+    { key: "title", label: "Title", value: record.jobTitle },
+    { key: "companyName", label: "Company", value: record.company?.name },
+    { key: "stageKey", label: "Stage", value: stageLabel(record.stageKey) },
+    { key: "location", label: "Location", value: record.location },
+    { key: "timezone", label: "Timezone", value: record.timezone },
+    {
+      key: "source",
+      label: "Source",
+      value: record.source?.replace(/_/g, " ") ?? null,
+    },
+    {
+      key: "linkedinUrl",
+      label: "LinkedIn",
+      value: record.linkedinUrl,
+      inputType: "url" as const,
+    },
   ];
 
   const subtitle =
-    [person.jobTitle, person.company?.name, person.location]
+    [record.jobTitle, record.company?.name, record.location]
       .filter(Boolean)
       .join(" · ") ||
-    person.emails[0] ||
+    record.emails[0] ||
     undefined;
 
-  const logoColor = useMemo(() => {
-    const seed = (person.company?.name || person.name || "?").trim();
-    let hash = 0;
-    for (let index = 0; index < seed.length; index += 1) {
-      hash = (hash * 31 + seed.charCodeAt(index)) >>> 0;
-    }
-    return `oklch(0.92 0.04 ${hash % 360})`;
-  }, [person.company?.name, person.name]);
-
-  const links = useMemo(() => {
-    const out: Array<{ label: string; href: string }> = [];
-    if (person.linkedinUrl) {
-      out.push({ label: "LinkedIn", href: person.linkedinUrl });
-    }
-    if (person.company?.domain) {
-      const href = person.company.domain.startsWith("http")
-        ? person.company.domain
-        : `https://${person.company.domain}`;
-      out.push({
-        label: person.company.domain.replace(/^https?:\/\//, ""),
-        href,
-      });
-    }
-    if (person.emails[0]) {
-      out.push({ label: "Email", href: `mailto:${person.emails[0]}` });
-    }
-    return out;
-  }, [person.company?.domain, person.emails, person.linkedinUrl]);
+  const links: Array<{ label: string; href: string }> = [];
+  if (record.linkedinUrl) {
+    links.push({ label: "LinkedIn", href: record.linkedinUrl });
+  }
+  if (record.company?.domain) {
+    const href = record.company.domain.startsWith("http")
+      ? record.company.domain
+      : `https://${record.company.domain}`;
+    links.push({
+      label: record.company.domain.replace(/^https?:\/\//, ""),
+      href,
+    });
+  }
+  if (record.emails[0]) {
+    links.push({ label: "Email", href: `mailto:${record.emails[0]}` });
+  }
 
   async function saveField(key: string, value: string) {
     if (key === "stageKey") return;
     try {
       if (key === "email") {
         await updatePerson.mutateAsync({
-          id: person.id,
+          id: record.id,
           input: { emails: value ? [value] : [] },
         });
         return;
       }
       if (key === "phone") {
         await updatePerson.mutateAsync({
-          id: person.id,
+          id: record.id,
           input: { phones: value ? [value] : [] },
         });
         return;
       }
       if (key === "title") {
         await updatePerson.mutateAsync({
-          id: person.id,
+          id: record.id,
           input: { jobTitle: value || null },
         });
         return;
@@ -170,14 +172,14 @@ export function ContactRecord({
       if (key === "companyName") {
         if (!value) {
           await updatePerson.mutateAsync({
-            id: person.id,
+            id: record.id,
             input: { companyId: null },
           });
           return;
         }
         const company = await findOrCreateCrmCompany(value);
         await updatePerson.mutateAsync({
-          id: person.id,
+          id: record.id,
           input: { companyId: company.id },
         });
         return;
@@ -189,7 +191,7 @@ export function ContactRecord({
         key === "linkedinUrl"
       ) {
         await updatePerson.mutateAsync({
-          id: person.id,
+          id: record.id,
           input: { [key]: value || null },
         });
       }
@@ -200,11 +202,11 @@ export function ContactRecord({
   }
 
   async function moveStage(stageKey: string) {
-    if (stageKey === person.stageKey) return;
+    if (stageKey === record.stageKey) return;
     setMovingStage(true);
     try {
       await updatePerson.mutateAsync({
-        id: person.id,
+        id: record.id,
         input: { stageKey, doNotContact: stageKey === "dnc" },
       });
     } catch (err) {
@@ -223,8 +225,8 @@ export function ContactRecord({
     try {
       await createDeal.mutateAsync({
         name,
-        personId: person.id,
-        companyId: person.companyId,
+        personId: record.id,
+        companyId: record.companyId,
       });
       setDealCreateOpen(false);
       toast.success("Deal created");
@@ -235,20 +237,16 @@ export function ContactRecord({
 
   return (
     <RecordPage
-      kind="contact"
-      id={person.id}
-      name={person.name}
+      name={record.name}
       subtitle={subtitle}
-      logoColor={logoColor}
       stats={stats}
       details={details}
-      about={person.notes}
+      about={record.notes}
       links={links}
-      compact={!fullscreen}
       tabCounts={{ deals: deals.data?.items.length }}
-      timeline={<ContactThread personId={person.id} />}
+      timeline={<ContactThread personId={record.id} />}
       onAddDeal={() => {
-        setDealName(person.company?.name || person.name);
+        setDealName(record.company?.name || record.name);
         setDealCreateOpen(true);
       }}
       dealsPanel={
@@ -267,17 +265,16 @@ export function ContactRecord({
           onCreate={() => void createOpportunity()}
         />
       }
-      notesPanel={<ContactNotes personId={person.id} />}
+      notesPanel={<ContactNotes personId={record.id} />}
       overviewFooter={
-        <label className="flex min-w-0 flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2">
-          <span className="ui-label-section shrink-0 !normal-case !tracking-normal">
-            Relationship
-          </span>
+        <label className="flex min-w-0 flex-col gap-1.5">
+          <span className="text-xs font-medium">Relationship</span>
           <select
-            className="ui-crm-select min-w-0 w-full flex-1 !min-h-9 !bg-[var(--bg-solid)]"
-            value={person.stageKey}
+            className={crmControlClassName}
+            value={record.stageKey}
             disabled={movingStage}
             onChange={(event) => void moveStage(event.target.value)}
+            aria-label="Relationship stage"
           >
             {CONTACT_STAGE_DEFS.map((stage) => (
               <option key={stage.key} value={stage.key}>
@@ -287,8 +284,6 @@ export function ContactRecord({
           </select>
         </label>
       }
-      onBack={onClose}
-      onClose={onClose}
       onSaveField={saveField}
     />
   );
@@ -319,81 +314,68 @@ function DealsPanel({
   if (createOpen) {
     return (
       <div className="flex flex-col gap-2">
-        <input
+        <Input
           value={name}
           onChange={(event) => onNameChange(event.target.value)}
           placeholder="Deal name"
-          className="ui-crm-search min-w-0 w-full px-2.5 text-13"
+          aria-label="Deal name"
           onKeyDown={(event) => {
             if (event.key === "Enter") onCreate();
             if (event.key === "Escape") onCreateOpenChange(false);
           }}
         />
         <div className="flex items-center gap-2">
-          <button
-            type="button"
+          <Button
             disabled={busy || !name.trim()}
             onClick={onCreate}
-            className="ui-btn h-8 !min-h-0 !rounded-[8px] !px-2.5 text-12"
+            size="sm"
           >
             {busy ? "Creating…" : "Save"}
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
             onClick={() => onCreateOpenChange(false)}
-            className="h-8 rounded-[8px] px-2.5 text-12 text-[var(--text-muted)] hover:text-[var(--text)]"
+            size="sm"
+            variant="ghost"
           >
             Cancel
-          </button>
+          </Button>
         </div>
-      </div>
-    );
-  }
-
-  if (deals.length === 0) {
-    return (
-      <div className="flex flex-col gap-3">
-        <p className="text-13 text-[var(--text-muted)]">No deals yet.</p>
-        <button
-          type="button"
-          onClick={() => onCreateOpenChange(true)}
-          className="self-start text-12 font-medium text-[var(--text)] hover:opacity-80 active:scale-[0.96]"
-        >
-          Add deal
-        </button>
       </div>
     );
   }
 
   return (
     <div className="flex flex-col gap-4">
-      <button
-        type="button"
+      <Button
+        className="self-start"
         onClick={() => onCreateOpenChange(true)}
-        className="self-start text-12 font-medium text-[var(--text)] hover:opacity-80 active:scale-[0.96]"
+        size="sm"
+        variant="ghost"
       >
         Add deal
-      </button>
-      <ul className="divide-y divide-[var(--hairline)]">
-        {deals.map((deal) => (
-          <li
-            key={deal.id}
-            className="flex items-baseline justify-between gap-3 py-2.5"
-          >
-            <div className="min-w-0">
-              <p className="truncate text-13 font-medium text-[var(--text)]">
-                {deal.name}
-              </p>
-              <p className="mt-0.5 text-12 capitalize text-[var(--text-muted)]">
-                {deal.stageKey}
-              </p>
-            </div>
-            <span className="shrink-0 text-13 tabular-nums text-[var(--text-secondary)]">
-              {formatUsd(deal.amountCents)}
-            </span>
-          </li>
-        ))}
-      </ul>
+      </Button>
+      {deals.length === 0 ? (
+        <p className="text-muted-foreground text-sm">No deals yet.</p>
+      ) : (
+        <ul className="divide-y divide-border">
+          {deals.map((deal) => (
+            <li
+              key={deal.id}
+              className="flex items-baseline justify-between gap-3 py-2.5"
+            >
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium">{deal.name}</p>
+                <p className="mt-0.5 capitalize text-muted-foreground text-xs">
+                  {deal.stageKey}
+                </p>
+              </div>
+              <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
+                {formatUsd(deal.amountCents)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

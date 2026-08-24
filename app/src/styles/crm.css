@@ -1,0 +1,85 @@
+/*
+ * CRM is a table and a board, so it cannot sit in PageShell's prose column.
+ * These rules only cover scan layout Tailwind cannot express: sticky headers,
+ * checkbox hit areas, and the deal-column width. Color, type, and radius come
+ * from OpenBot tokens.
+ */
+.crm-table {
+  width: 100%;
+  min-width: 40rem;
+  border-collapse: collapse;
+  text-align: start;
+}
+
+.crm-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  height: 2.25rem;
+  padding: 0 0.75rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--background);
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.crm-table td {
+  height: 2.75rem;
+  padding: 0 0.75rem;
+  border-bottom: 1px solid color-mix(in oklch, var(--border) 70%, transparent);
+  font-size: 0.875rem;
+  color: var(--foreground);
+}
+
+.crm-table tbody tr {
+  cursor: pointer;
+}
+
+.crm-table tbody tr:hover td {
+  background: color-mix(in oklch, var(--foreground) 3.5%, var(--background));
+}
+
+.crm-table tbody tr[aria-selected="true"] td {
+  background: color-mix(in oklch, var(--foreground) 6%, var(--background));
+}
+
+.crm-table tbody tr:focus-visible {
+  outline: none;
+}
+
+.crm-table tbody tr:focus-visible td {
+  box-shadow: inset 0 0 0 2px color-mix(in oklch, var(--ring) 50%, transparent);
+}
+
+.crm-check {
+  position: relative;
+  display: inline-flex;
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  accent-color: var(--foreground);
+}
+
+.crm-check::after {
+  content: "";
+  position: absolute;
+  inset: -0.75rem;
+}
+
+.crm-board-col {
+  width: 16rem;
+  min-width: 16rem;
+}
+
+.crm-deal-dragging {
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .crm-deal-dragging {
+    will-change: auto;
+  }
+}

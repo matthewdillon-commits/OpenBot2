@@ -1,4 +1,9 @@
-import { Eye, Mail, MousePointerClick, Reply } from "lucide-react";
+import {
+  IconArrowBackUp,
+  IconEye,
+  IconMail,
+  IconPointer,
+} from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 
 export type ChipState = "on" | "off" | "unknown" | "pending";
@@ -22,18 +27,22 @@ function Chip({
   title,
 }: {
   state: ChipState;
-  icon: typeof Mail;
+  icon: typeof IconMail;
   title: string;
 }) {
   return (
     <span
-      className={cn("ui-engage-chip")}
-      data-state={state}
+      className={cn(
+        "inline-flex size-6 items-center justify-center rounded-md",
+        state === "on" && "bg-foreground/8 text-foreground",
+        state === "off" && "text-muted-foreground/50",
+        state === "unknown" && "text-muted-foreground/35",
+        state === "pending" && "text-muted-foreground",
+      )}
       title={title}
       aria-label={title}
-      role="img"
     >
-      <Icon className="h-3 w-3" strokeWidth={2} aria-hidden />
+      <Icon className="size-3.5" aria-hidden />
     </span>
   );
 }
@@ -52,7 +61,7 @@ export function openTitle(engagement: Engagement): string {
       : real;
   }
   if (engagement.rawOpens > 0) {
-    return `${plural(engagement.rawOpens, "load", "loads")}, all automatic — Apple and scanners fetch images on delivery, so this is not a read`;
+    return `${plural(engagement.rawOpens, "load", "loads")}, all automatic`;
   }
   return "Not opened";
 }
@@ -86,35 +95,35 @@ export function EngagementChips({
 }) {
   if (pending) {
     return (
-      <span className={cn("ui-engage-row", className)}>
-        <Chip state="pending" icon={Mail} title="Queued to send" />
-        <Chip state="pending" icon={Eye} title="Not sent yet" />
-        <Chip state="pending" icon={MousePointerClick} title="Not sent yet" />
-        <Chip state="pending" icon={Reply} title="Not sent yet" />
+      <span className={cn("inline-flex items-center gap-0.5", className)}>
+        <Chip state="pending" icon={IconMail} title="Queued to send" />
+        <Chip state="pending" icon={IconEye} title="Not sent yet" />
+        <Chip state="pending" icon={IconPointer} title="Not sent yet" />
+        <Chip state="pending" icon={IconArrowBackUp} title="Not sent yet" />
       </span>
     );
   }
 
   return (
-    <span className={cn("ui-engage-row", className)}>
+    <span className={cn("inline-flex items-center gap-0.5", className)}>
       <Chip
         state={engagement.sent ? "on" : "off"}
-        icon={Mail}
+        icon={IconMail}
         title={engagement.bounced ? "Sent, then bounced" : "Sent"}
       />
       <Chip
         state={trackedState(engagement.opened, engagement.tracked)}
-        icon={Eye}
+        icon={IconEye}
         title={openTitle(engagement)}
       />
       <Chip
         state={trackedState(engagement.clicked, engagement.tracked)}
-        icon={MousePointerClick}
+        icon={IconPointer}
         title={clickTitle(engagement)}
       />
       <Chip
         state={engagement.replied ? "on" : "off"}
-        icon={Reply}
+        icon={IconArrowBackUp}
         title={engagement.replied ? "Replied" : "No reply yet"}
       />
     </span>

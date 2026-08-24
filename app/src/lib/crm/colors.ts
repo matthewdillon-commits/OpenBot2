@@ -1,6 +1,6 @@
 import { CONTACT_STAGE_DEFS, contactStageLabel } from "@/lib/crm/stages";
 
-/** Pipeline stage colors — copied from LimitlessAI-2 `src/lib/crm/colors.ts`. */
+/** Pipeline stage colors in OKLCH so hue shifts stay perceptually even. */
 export const STAGE_PALETTE: Record<
   string,
   { solid: string; soft: string; label: string }

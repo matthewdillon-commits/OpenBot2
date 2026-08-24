@@ -13,7 +13,7 @@ export function LinkedInMark({ className }: { className?: string }) {
 
 export function BotMark() {
   return (
-    <span className="ui-twenty-bot" aria-hidden>
+    <span className="inline-flex text-muted-foreground" aria-hidden>
       <svg viewBox="0 0 16 16" width="14" height="14" fill="none" aria-hidden>
         <rect
           x="2.5"

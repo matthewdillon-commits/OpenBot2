@@ -1,20 +1,14 @@
+import { IconX } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
-import {
-  Activity,
-  Building2,
-  Calendar,
-  Mail,
-  Maximize2,
-  MessagesSquare,
-  UserRound,
-  X,
-} from "lucide-react";
-import { useMemo, useState, type CSSProperties } from "react";
+import { motion, useReducedMotion } from "motion/react";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   EngagementChips,
   type Engagement,
 } from "@/components/crm/engagement-chips";
-import { personInitials } from "@/components/crm/crm-marks";
+import { CrmAvatar, CrmEmpty, CrmError } from "@/components/crm/crm-ui";
+import { Button } from "@/components/ui/button";
+import { SPRING_NO_BOUNCE } from "@/lib/motion";
 import { stageLabel, stageStyle } from "@/lib/crm/colors";
 import {
   type CrmThread,
@@ -37,18 +31,18 @@ type ConversationStatus =
   | "failed"
   | "discarded";
 
-const STATUS_COPY: Record<ConversationStatus, { label: string; tone: string }> = {
-  no_activity: { label: "No activity", tone: "muted" },
-  draft: { label: "Not sent", tone: "attention" },
-  scheduled: { label: "Scheduled", tone: "info" },
-  sending: { label: "Sending", tone: "info" },
-  sent: { label: "Sent", tone: "good" },
-  opened: { label: "Opened", tone: "good" },
-  clicked: { label: "Clicked", tone: "good" },
-  replied: { label: "Replied", tone: "good" },
-  bounced: { label: "Bounced", tone: "bad" },
-  failed: { label: "Failed", tone: "bad" },
-  discarded: { label: "Discarded", tone: "muted" },
+const STATUS_COPY: Record<ConversationStatus, string> = {
+  no_activity: "No activity",
+  draft: "Not sent",
+  scheduled: "Scheduled",
+  sending: "Sending",
+  sent: "Sent",
+  opened: "Opened",
+  clicked: "Clicked",
+  replied: "Replied",
+  bounced: "Bounced",
+  failed: "Failed",
+  discarded: "Discarded",
 };
 
 const THREAD_STATUS: Record<CrmThreadStatus, ConversationStatus> = {
@@ -64,32 +58,16 @@ const THREAD_STATUS: Record<CrmThreadStatus, ConversationStatus> = {
   no_answer: "sent",
 };
 
-function StatusPill({ status }: { status: ConversationStatus }) {
-  const copy = STATUS_COPY[status];
-  return (
-    <span className="ui-conv-status" data-tone={copy.tone}>
-      {copy.label}
-    </span>
-  );
-}
-
 function formatSent(value: string | null): string {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
-  const day = new Intl.DateTimeFormat("en-GB", {
-    day: "2-digit",
+  return new Intl.DateTimeFormat("en-US", {
     month: "short",
-  }).format(date);
-  const year = date.getFullYear();
-  const time = new Intl.DateTimeFormat("en-US", {
+    day: "numeric",
     hour: "numeric",
     minute: "2-digit",
-    hour12: true,
-  })
-    .format(date)
-    .toLowerCase();
-  return `${day}, ${year} ${time}`;
+  }).format(date);
 }
 
 function engagementOf(thread: CrmThread): Engagement {
@@ -97,7 +75,10 @@ function engagementOf(thread: CrmThread): Engagement {
   const status = thread.status;
   return {
     sent: Boolean(thread.latestSend) && status !== "draft" && status !== "queued",
-    opened: (tracking?.uniqueOpens ?? 0) > 0 || status === "opened" || status === "clicked",
+    opened:
+      (tracking?.uniqueOpens ?? 0) > 0 ||
+      status === "opened" ||
+      status === "clicked",
     clicked: (tracking?.uniqueClicks ?? 0) > 0 || status === "clicked",
     replied: status === "answered",
     bounced: false,
@@ -111,25 +92,6 @@ function engagementOf(thread: CrmThread): Engagement {
 
 function conversationStatus(thread: CrmThread): ConversationStatus {
   return THREAD_STATUS[thread.status] ?? "no_activity";
-}
-
-function IconColumnHeader({
-  icon: Icon,
-  label,
-  className,
-}: {
-  icon: typeof Mail;
-  label: string;
-  className?: string;
-}) {
-  return (
-    <th className={className}>
-      <span className="inline-flex items-center gap-1.5">
-        <Icon aria-hidden />
-        {label}
-      </span>
-    </th>
-  );
 }
 
 export function ConversationsPanel({
@@ -160,247 +122,137 @@ export function ConversationsPanel({
   }, [rows]);
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-row overflow-hidden">
+    <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <div className="ui-twenty-toolbar">
-          <div className="flex min-w-0 items-center gap-1.5">
-            <span className="ui-twenty-view-btn shrink-0">
-              <MessagesSquare className="h-3.5 w-3.5" strokeWidth={1.6} aria-hidden />
-              <span>All Conversations</span>
-              <span className="ui-twenty-count">
-                {threads.data?.total ?? 0}
-              </span>
-            </span>
-            <fieldset className="ui-conv-filters" aria-label="Filter by status">
-              {(
-                [
-                  ["all", "All"],
-                  ["draft", "Not sent"],
-                  ["sent", "Sent"],
-                  ["opened", "Opened"],
-                  ["replied", "Replied"],
-                  ["failed", "Bounced"],
-                ] as Array<[ConversationStatus | "all", string]>
-              ).map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  data-active={statusFilter === value}
-                  onClick={() => setStatusFilter(value)}
-                  className="ui-conv-filter"
-                >
-                  {label}
-                </button>
-              ))}
-            </fieldset>
-          </div>
+        <div className="flex flex-wrap items-center justify-between gap-2 px-4 pb-3">
+          <fieldset className="flex flex-wrap gap-1" aria-label="Filter by status">
+            {(
+              [
+                ["all", "All"],
+                ["draft", "Not sent"],
+                ["sent", "Sent"],
+                ["opened", "Opened"],
+                ["replied", "Replied"],
+                ["failed", "Failed"],
+              ] as Array<[ConversationStatus | "all", string]>
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setStatusFilter(value)}
+                className={cn(
+                  "rounded-lg px-2.5 py-1.5 text-sm",
+                  "focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
+                  statusFilter === value
+                    ? "bg-muted text-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </fieldset>
           {replyRate !== null ? (
-            <span className="shrink-0 text-11 text-[var(--text-muted)]">
+            <span className="text-muted-foreground text-xs tabular-nums">
               {replyRate}% replied of those contacted
             </span>
           ) : null}
         </div>
 
-        <div className="ui-crm-index-scroll min-h-0 min-w-0 flex-1 overflow-auto">
+        <div className="min-h-0 flex-1 overflow-auto px-4 pb-6">
           {threads.isPending ? null : threads.error ? (
-            <div className="px-5 py-16 text-center">
-              <p className="text-13 text-[var(--text-secondary)]">
-                Couldn’t load conversations
-              </p>
-            </div>
+            <CrmError
+              label="conversations"
+              onRetry={() => void threads.refetch()}
+            />
           ) : rows.length === 0 ? (
-            <div className="px-5 py-16 text-center">
-              <p className="text-13 text-[var(--text-secondary)]">
-                {search || statusFilter !== "all"
-                  ? "No conversations match that."
-                  : "No conversations yet."}
-              </p>
-              <p className="mt-1 text-11 text-[var(--text-muted)]">
-                Once an agent sends an email, it shows up here with how it landed.
-              </p>
-            </div>
+            <CrmEmpty
+              title={
+                search || statusFilter !== "all"
+                  ? "No matches"
+                  : "No conversations yet"
+              }
+              description="Once an agent sends an email, it shows up here with how it landed."
+            />
           ) : (
-            <table className="ui-crm-table ui-crm-table-twenty ui-conv-table">
+            <table className="crm-table">
               <thead>
                 <tr>
-                  <IconColumnHeader icon={UserRound} label="Contact" />
-                  <IconColumnHeader icon={Mail} label="Message" />
-                  <IconColumnHeader icon={Activity} label="Status" />
-                  <IconColumnHeader
-                    icon={Building2}
-                    label="Sent by"
-                    className="ui-crm-col-meta"
-                  />
-                  <IconColumnHeader
-                    icon={Calendar}
-                    label="Sent"
-                    className="ui-crm-col-aux"
-                  />
+                  <th>Contact</th>
+                  <th>Message</th>
+                  <th>Status</th>
+                  <th>Sent by</th>
+                  <th>Sent</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((thread) => {
-                  const stage = stageStyle(thread.person.stageKey);
                   const status = conversationStatus(thread);
                   const engagement = engagementOf(thread);
-                  const active = selected?.thread.person.id === thread.person.id;
                   const pending =
                     thread.latestSend?.status === "draft" ||
                     thread.latestSend?.status === "queued";
                   return (
-                    <tr key={thread.person.id} aria-selected={active || undefined}>
+                    <tr
+                      key={thread.person.id}
+                      aria-selected={
+                        selected?.thread.person.id === thread.person.id
+                      }
+                      onClick={() =>
+                        setSelected({ thread, tab: "messages" })
+                      }
+                    >
                       <td>
-                        <button
-                          type="button"
-                          onClick={() => setSelected({ thread, tab: "details" })}
-                          className="ui-crm-pill ui-crm-pill-name max-w-full"
-                          title={`Open ${thread.person.name}`}
-                        >
-                          <span
-                            className="ui-conv-avatar"
-                            style={{ background: stage.soft, color: stage.solid }}
-                            aria-hidden
-                          >
-                            {personInitials(thread.person.name)}
+                        <span className="inline-flex min-w-0 items-center gap-2">
+                          <CrmAvatar name={thread.person.name} />
+                          <span className="truncate font-medium">
+                            {thread.person.name}
                           </span>
-                          <span>{thread.person.name}</span>
-                        </button>
+                        </span>
                       </td>
-                      <td className="ui-conv-message-cell">
+                      <td>
                         {thread.latestSend ? (
-                          <button
-                            type="button"
-                            onClick={() => setSelected({ thread, tab: "messages" })}
-                            className="ui-conv-message"
-                            title="Open every message, text, and call"
-                          >
-                            <span className="ui-conv-subject">
+                          <span className="flex min-w-0 flex-col">
+                            <span className="truncate font-medium">
                               {thread.latestSend.subject || "(no subject)"}
                             </span>
-                            <span className="ui-conv-snippet">
+                            <span className="truncate text-muted-foreground text-xs">
                               {thread.latestSend.body || "No preview"}
                             </span>
-                          </button>
+                          </span>
                         ) : (
-                          <span className="text-11 text-[var(--text-muted)]">
+                          <span className="text-muted-foreground">
                             Nothing sent yet
                           </span>
                         )}
                       </td>
                       <td>
-                        <button
-                          type="button"
-                          onClick={() => setSelected({ thread, tab: "messages" })}
-                          className="flex items-center gap-2"
-                          title="Open the message tree"
-                        >
-                          {pending || status === "no_activity" ? (
-                            <StatusPill status={status} />
-                          ) : (
-                            <EngagementChips engagement={engagement} />
-                          )}
-                        </button>
-                      </td>
-                      <td className="ui-crm-col-meta">
-                        <span className="ui-crm-pill">
-                          <span>
-                            {thread.latestSend?.createdBy.name ||
-                              thread.latestSend?.toAddress ||
-                              "Unassigned"}
+                        {pending || status === "no_activity" ? (
+                          <span className="text-sm text-muted-foreground">
+                            {STATUS_COPY[status]}
                           </span>
-                        </span>
+                        ) : (
+                          <EngagementChips engagement={engagement} />
+                        )}
                       </td>
-                      <td className="ui-crm-col-aux">
-                        <span className="ui-twenty-date tabular">
-                          {formatSent(
-                            thread.latestSend?.sentAt ||
-                              thread.latestSend?.createdAt ||
-                              null,
-                          )}
-                        </span>
+                      <td className="text-muted-foreground">
+                        {thread.latestSend?.createdBy.name ||
+                          thread.latestSend?.toAddress ||
+                          "—"}
+                      </td>
+                      <td className="whitespace-nowrap text-muted-foreground tabular-nums">
+                        {formatSent(
+                          thread.latestSend?.sentAt ||
+                            thread.latestSend?.createdAt ||
+                            null,
+                        )}
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
-              <tfoot>
-                <tr>
-                  <td colSpan={5}>
-                    <div className="flex items-center gap-3">
-                      <span className="ui-crm-calc-stat">
-                        Showing <strong>{rows.length}</strong> of{" "}
-                        <strong>{threads.data?.total ?? rows.length}</strong>
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-              </tfoot>
             </table>
           )}
-          {!threads.isPending && rows.length ? (
-            <ul className="ui-crm-cards">
-              {rows.map((thread) => {
-                const stage = stageStyle(thread.person.stageKey);
-                const status = conversationStatus(thread);
-                const engagement = engagementOf(thread);
-                const pending =
-                  thread.latestSend?.status === "draft" ||
-                  thread.latestSend?.status === "queued";
-                return (
-                  <li
-                    key={thread.person.id}
-                    className="ui-crm-card"
-                    data-open={selected?.thread.person.id === thread.person.id}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setSelected({ thread, tab: "messages" })}
-                      className="ui-crm-card-open"
-                    >
-                      <span className="ui-crm-card-name">
-                        <span
-                          className="ui-conv-avatar"
-                          style={{ background: stage.soft, color: stage.solid }}
-                          aria-hidden
-                        >
-                          {personInitials(thread.person.name)}
-                        </span>
-                        <span>{thread.person.name}</span>
-                      </span>
-                      {thread.latestSend ? (
-                        <>
-                          <span className="ui-crm-card-line font-medium">
-                            {thread.latestSend.subject || "(no subject)"}
-                          </span>
-                          <span className="ui-crm-card-line ui-crm-card-empty">
-                            {thread.latestSend.body || "No preview"}
-                          </span>
-                        </>
-                      ) : (
-                        <span className="ui-crm-card-line ui-crm-card-empty">
-                          Nothing sent yet
-                        </span>
-                      )}
-                      <span className="ui-crm-card-meta">
-                        {pending || status === "no_activity" ? (
-                          <StatusPill status={status} />
-                        ) : (
-                          <EngagementChips engagement={engagement} />
-                        )}
-                        <span className="ui-twenty-date">
-                          {formatSent(
-                            thread.latestSend?.sentAt ||
-                              thread.latestSend?.createdAt ||
-                              null,
-                          )}
-                        </span>
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : null}
         </div>
       </div>
 
@@ -436,173 +288,167 @@ function ConversationRail({
   });
   const stage = stageStyle(thread.person.stageKey);
   const engagement = engagementOf(thread);
+  const shouldReduceMotion = useReducedMotion();
 
   return (
-    <>
-      <button
-        type="button"
-        aria-label="Close panel"
-        className="fixed inset-0 z-30 bg-[var(--scrim)] backdrop-blur-[2px] md:hidden"
-        onClick={onClose}
-      />
-      <aside
-        className={cn(
-          "ui-conv-rail flex h-full min-h-0 flex-col overflow-hidden",
-          "max-md:absolute max-md:inset-0 max-md:z-40 max-md:w-full",
-        )}
-        style={
-          {
-            flex: "0 0 380px",
-            width: 380,
-            minWidth: 0,
-            maxWidth: "min(48%, 460px)",
-          } as CSSProperties
-        }
-        aria-label={`${thread.person.name} conversation`}
-      >
-        <header className="flex items-start gap-2 border-b border-[var(--hairline)] px-3.5 py-3">
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-13 font-medium text-[var(--text)]">
-              {thread.person.name}
-            </p>
-            <p className="truncate text-11 text-[var(--text-muted)]">
-              {[thread.person.emails[0], thread.person.company?.name]
-                .filter(Boolean)
-                .join(" · ") || "No email on file"}
-            </p>
-          </div>
+    <aside
+      className="flex h-full w-[min(24rem,42%)] shrink-0 flex-col border-s border-border bg-sidebar"
+      aria-label={`${thread.person.name} conversation`}
+    >
+      <header className="flex items-start justify-between gap-2 px-3 py-3">
+        <div className="min-w-0">
+          <p className="truncate font-medium text-sm">{thread.person.name}</p>
+          <p className="truncate text-muted-foreground text-xs">
+            {[thread.person.emails[0], thread.person.company?.name]
+              .filter(Boolean)
+              .join(" · ") || "No email on file"}
+          </p>
+        </div>
+        <div className="flex shrink-0 gap-1">
           {onOpenContactRecord ? (
-            <button
-              type="button"
+            <Button
               onClick={() => onOpenContactRecord(thread.person.id)}
-              aria-label="Open full record"
-              title="Open full record"
-              className="ui-conv-icon-btn"
+              size="sm"
+              variant="ghost"
             >
-              <Maximize2 className="h-3.5 w-3.5" strokeWidth={1.75} />
-            </button>
+              Record
+            </Button>
           ) : null}
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="ui-conv-icon-btn"
-          >
-            <X className="h-3.5 w-3.5" strokeWidth={1.75} />
-          </button>
-        </header>
+          <Button aria-label="Close" onClick={onClose} size="icon" variant="ghost">
+            <IconX />
+          </Button>
+        </div>
+      </header>
 
-        <div className="ui-conv-tabs" role="tablist">
-          {(
-            [
-              ["details", "Details"],
-              ["messages", "Messages"],
-            ] as Array<["details" | "messages", string]>
-          ).map(([value, label]) => (
+      <div className="flex gap-1 px-3 pb-2" role="tablist" aria-label="Conversation">
+        {(
+          [
+            ["details", "Details"],
+            ["messages", "Messages"],
+          ] as const
+        ).map(([value, label]) => {
+          const active = tab === value;
+          return (
             <button
               key={value}
               type="button"
               role="tab"
-              aria-selected={tab === value}
-              data-active={tab === value}
+              aria-selected={active}
               onClick={() => onTab(value)}
-              className="ui-conv-tab"
+              className={cn(
+                "relative rounded-lg px-2.5 py-1.5 text-sm",
+                "focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
+                active
+                  ? "text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
             >
-              {label}
+              {active ? (
+                <motion.span
+                  layoutId="crm-conversation-tab"
+                  className="absolute inset-0 rounded-lg bg-muted"
+                  transition={
+                    shouldReduceMotion ? { duration: 0 } : SPRING_NO_BOUNCE
+                  }
+                />
+              ) : null}
+              <span className="relative">{label}</span>
             </button>
-          ))}
-        </div>
+          );
+        })}
+      </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          {tab === "details" ? (
-            <div className="px-3.5 py-3">
-              <div className="flex items-center gap-2 pb-2">
-                <span
-                  className="inline-flex items-center gap-1.5 rounded-[6px] px-2 py-0.5 text-11 font-medium"
-                  style={{ background: stage.soft, color: stage.solid }}
-                >
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+        {tab === "details" ? (
+          <dl className="divide-y divide-border">
+            <DetailRow
+              label="Stage"
+              value={
+                <span className="inline-flex items-center gap-1.5">
+                  <span
+                    className="size-1.5 rounded-full"
+                    style={{ background: stage.solid }}
+                    aria-hidden
+                  />
                   {stageLabel(thread.person.stageKey)}
                 </span>
-              </div>
-              <div className="divide-y divide-[var(--hairline)]">
-                <DetailRow label="Email" value={thread.person.emails[0] || "—"} />
-                <DetailRow
-                  label="Company"
-                  value={thread.person.company?.name || "—"}
-                />
-                <DetailRow
-                  label="Owner"
-                  value={thread.latestSend?.createdBy.name || "Unassigned"}
-                />
-                <DetailRow
-                  label="Emails sent"
-                  value={String(thread.outboundCount)}
-                />
-                <DetailRow
-                  label="Replies"
-                  value={thread.status === "answered" ? "1" : "0"}
-                />
-                <DetailRow
-                  label="Real opens"
-                  value={
-                    engagement.tracked
-                      ? `${engagement.realOpens} of ${engagement.rawOpens} loads`
-                      : "Not tracked"
-                  }
-                />
-                <DetailRow
-                  label="Clicks"
-                  value={
-                    engagement.tracked
-                      ? `${engagement.realClicks} of ${engagement.rawClicks} visits`
-                      : "Not tracked"
-                  }
-                />
-              </div>
-            </div>
-          ) : sends.isPending ? null : (
-            <ul className="ui-tree">
-              {(sends.data?.items ?? []).map((send) => (
-                <li key={send.id} className="ui-tree-node">
-                  <span className="ui-tree-branch" aria-hidden />
-                  <div
-                    className="ui-tree-card"
-                    data-pending={
-                      send.status === "draft" || send.status === "queued"
-                        ? ""
-                        : undefined
-                    }
-                  >
-                    <p className="text-12 font-medium text-[var(--text)]">
-                      {send.subject || send.kind}
-                    </p>
-                    <p className="mt-0.5 text-11 text-[var(--text-muted)]">
-                      {send.body || send.toAddress}
-                    </p>
-                    <p className="mt-1 text-11 text-[var(--text-muted)]">
-                      {formatSent(send.sentAt || send.createdAt)}
-                    </p>
-                  </div>
-                </li>
-              ))}
-              {(sends.data?.items ?? []).length === 0 ? (
-                <li className="px-2 py-6 text-12 text-[var(--text-muted)]">
-                  Nothing sent yet
-                </li>
-              ) : null}
-            </ul>
-          )}
-        </div>
-      </aside>
-    </>
+              }
+            />
+            <DetailRow label="Email" value={thread.person.emails[0] || "—"} />
+            <DetailRow
+              label="Company"
+              value={thread.person.company?.name || "—"}
+            />
+            <DetailRow
+              label="Owner"
+              value={thread.latestSend?.createdBy.name || "Unassigned"}
+            />
+            <DetailRow
+              label="Emails sent"
+              value={String(thread.outboundCount)}
+            />
+            <DetailRow
+              label="Replies"
+              value={thread.status === "answered" ? "1" : "0"}
+            />
+            <DetailRow
+              label="Real opens"
+              value={
+                engagement.tracked
+                  ? `${engagement.realOpens} of ${engagement.rawOpens} loads`
+                  : "Not tracked"
+              }
+            />
+            <DetailRow
+              label="Clicks"
+              value={
+                engagement.tracked
+                  ? `${engagement.realClicks} of ${engagement.rawClicks} visits`
+                  : "Not tracked"
+              }
+            />
+          </dl>
+        ) : sends.isPending ? null : (
+          <ul className="flex flex-col gap-3">
+            {(sends.data?.items ?? []).map((send) => (
+              <li
+                key={send.id}
+                className="rounded-lg border border-border px-3 py-2.5"
+              >
+                <p className="text-sm font-medium">
+                  {send.subject || send.kind}
+                </p>
+                <p className="mt-0.5 text-muted-foreground text-xs">
+                  {send.body || send.toAddress}
+                </p>
+                <p className="mt-1 text-muted-foreground text-xs tabular-nums">
+                  {formatSent(send.sentAt || send.createdAt)}
+                </p>
+              </li>
+            ))}
+            {(sends.data?.items ?? []).length === 0 ? (
+              <li className="py-6 text-muted-foreground text-sm">
+                Nothing sent yet
+              </li>
+            ) : null}
+          </ul>
+        )}
+      </div>
+    </aside>
   );
 }
 
-function DetailRow({ label, value }: { label: string; value: string }) {
+function DetailRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: string | ReactNode;
+}) {
   return (
-    <div className="flex items-baseline justify-between gap-3 py-1.5">
-      <span className="shrink-0 text-11 text-[var(--text-muted)]">{label}</span>
-      <span className="min-w-0 truncate text-12 text-[var(--text)]">{value}</span>
+    <div className="flex items-baseline justify-between gap-3 py-2">
+      <dt className="shrink-0 text-muted-foreground text-xs">{label}</dt>
+      <dd className="min-w-0 truncate text-sm">{value}</dd>
     </div>
   );
 }
