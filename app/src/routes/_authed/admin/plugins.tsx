@@ -4,6 +4,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import * as React from "react";
 import { useState } from "react";
 import { PageSection, PageShell } from "@/components/layout/page-shell";
+import { PluginCatalog } from "@/components/plugins/plugin-catalog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -146,26 +147,32 @@ function PluginsPage() {
               Plugins could not be loaded.
             </p>
           ) : tab === "catalogue" ? (
-            <Catalogue
-              added={new Set(data.servers.map((server) => server.id))}
-              items={data.catalogue}
-              onAdd={(key, instanceHost, token) =>
-                void addServerWithToken(
-                  (credentialId) =>
-                    addCurated.mutate({ key, instanceHost, credentialId }),
-                  key,
-                  token,
-                )
-              }
-              onAddCustom={(input) =>
-                void addServerWithToken(
-                  (credentialId) =>
-                    addCustom.mutate({ ...input, credentialId }),
-                  input.id,
-                  input.token,
-                )
-              }
-            />
+            <div className="space-y-10">
+              <PluginCatalog heading="Composio" />
+              <div>
+                <h2 className="mb-4 font-medium text-base">MCP servers</h2>
+                <Catalogue
+                  added={new Set(data.servers.map((server) => server.id))}
+                  items={data.catalogue}
+                  onAdd={(key, instanceHost, token) =>
+                    void addServerWithToken(
+                      (credentialId) =>
+                        addCurated.mutate({ key, instanceHost, credentialId }),
+                      key,
+                      token,
+                    )
+                  }
+                  onAddCustom={(input) =>
+                    void addServerWithToken(
+                      (credentialId) =>
+                        addCustom.mutate({ ...input, credentialId }),
+                      input.id,
+                      input.token,
+                    )
+                  }
+                />
+              </div>
+            </div>
           ) : tab === "yours" ? (
             <Yours
               bots={bots}

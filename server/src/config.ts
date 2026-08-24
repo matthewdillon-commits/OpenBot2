@@ -185,6 +185,11 @@ export type DeploymentConfig = {
    * capability that is not configured should be missing, not broken.
    */
   tavilyApiKey?: string;
+  /**
+   * Composio key. Absent means the plugin catalogue is empty rather than broken: a capability
+   * that is not configured should be missing, not a page of errors.
+   */
+  composioApiKey?: string;
 };
 
 type Environment = Record<string, string | undefined>;
@@ -659,6 +664,9 @@ export function loadConfig(
       : {}),
     ...(optional(environment, "TAVILY_API_KEY")
       ? { tavilyApiKey: optional(environment, "TAVILY_API_KEY") as string }
+      : {}),
+    ...(optional(environment, "COMPOSIO_API_KEY")
+      ? { composioApiKey: optional(environment, "COMPOSIO_API_KEY") as string }
       : {}),
   };
 }

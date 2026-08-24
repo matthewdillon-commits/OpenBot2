@@ -19,6 +19,7 @@ import { Route as AuthedAppBotRouteImport } from './routes/_authed/_app/bot'
 import { Route as AuthedAppCrmRouteImport } from './routes/_authed/_app/crm'
 import { Route as AuthedAppORouteImport } from './routes/_authed/_app/o'
 import { Route as AuthedAppPlatformRouteImport } from './routes/_authed/_app/platform'
+import { Route as AuthedAppPluginsRouteImport } from './routes/_authed/_app/plugins'
 import { Route as AuthedAppSkillsRouteImport } from './routes/_authed/_app/skills'
 import { Route as AuthedAdminIndexRouteImport } from './routes/_authed/admin/index'
 import { Route as AuthedAdminAuditRouteImport } from './routes/_authed/admin/audit'
@@ -88,6 +89,11 @@ const AuthedAppORoute = AuthedAppORouteImport.update({
 const AuthedAppPlatformRoute = AuthedAppPlatformRouteImport.update({
   id: '/platform',
   path: '/platform',
+  getParentRoute: () => AuthedAppRoute,
+} as any)
+const AuthedAppPluginsRoute = AuthedAppPluginsRouteImport.update({
+  id: '/plugins',
+  path: '/plugins',
   getParentRoute: () => AuthedAppRoute,
 } as any)
 const AuthedAppSkillsRoute = AuthedAppSkillsRouteImport.update({
@@ -217,6 +223,7 @@ export interface FileRoutesByFullPath {
   '/crm': typeof AuthedAppCrmRoute
   '/o': typeof AuthedAppORouteWithChildren
   '/platform': typeof AuthedAppPlatformRoute
+  '/plugins': typeof AuthedAppPluginsRoute
   '/skills': typeof AuthedAppSkillsRoute
   '/admin/audit': typeof AuthedAdminAuditRoute
   '/admin/boundaries': typeof AuthedAdminBoundariesRoute
@@ -247,6 +254,7 @@ export interface FileRoutesByTo {
   '/crm': typeof AuthedAppCrmRoute
   '/o': typeof AuthedAppORouteWithChildren
   '/platform': typeof AuthedAppPlatformRoute
+  '/plugins': typeof AuthedAppPluginsRoute
   '/skills': typeof AuthedAppSkillsRoute
   '/admin/audit': typeof AuthedAdminAuditRoute
   '/admin/boundaries': typeof AuthedAdminBoundariesRoute
@@ -281,6 +289,7 @@ export interface FileRoutesById {
   '/_authed/_app/crm': typeof AuthedAppCrmRoute
   '/_authed/_app/o': typeof AuthedAppORouteWithChildren
   '/_authed/_app/platform': typeof AuthedAppPlatformRoute
+  '/_authed/_app/plugins': typeof AuthedAppPluginsRoute
   '/_authed/_app/skills': typeof AuthedAppSkillsRoute
   '/_authed/admin/audit': typeof AuthedAdminAuditRoute
   '/_authed/admin/boundaries': typeof AuthedAdminBoundariesRoute
@@ -316,6 +325,7 @@ export interface FileRouteTypes {
     | '/crm'
     | '/o'
     | '/platform'
+    | '/plugins'
     | '/skills'
     | '/admin/audit'
     | '/admin/boundaries'
@@ -346,6 +356,7 @@ export interface FileRouteTypes {
     | '/crm'
     | '/o'
     | '/platform'
+    | '/plugins'
     | '/skills'
     | '/admin/audit'
     | '/admin/boundaries'
@@ -379,6 +390,7 @@ export interface FileRouteTypes {
     | '/_authed/_app/crm'
     | '/_authed/_app/o'
     | '/_authed/_app/platform'
+    | '/_authed/_app/plugins'
     | '/_authed/_app/skills'
     | '/_authed/admin/audit'
     | '/_authed/admin/boundaries'
@@ -479,6 +491,13 @@ declare module '@tanstack/react-router' {
       path: '/platform'
       fullPath: '/platform'
       preLoaderRoute: typeof AuthedAppPlatformRouteImport
+      parentRoute: typeof AuthedAppRoute
+    }
+    '/_authed/_app/plugins': {
+      id: '/_authed/_app/plugins'
+      path: '/plugins'
+      fullPath: '/plugins'
+      preLoaderRoute: typeof AuthedAppPluginsRouteImport
       parentRoute: typeof AuthedAppRoute
     }
     '/_authed/_app/skills': {
@@ -718,6 +737,7 @@ interface AuthedAppRouteChildren {
   AuthedAppCrmRoute: typeof AuthedAppCrmRoute
   AuthedAppORoute: typeof AuthedAppORouteWithChildren
   AuthedAppPlatformRoute: typeof AuthedAppPlatformRoute
+  AuthedAppPluginsRoute: typeof AuthedAppPluginsRoute
   AuthedAppSkillsRoute: typeof AuthedAppSkillsRoute
   AuthedAppIndexRoute: typeof AuthedAppIndexRoute
   AuthedAppChannelChannelIdRoute: typeof AuthedAppChannelChannelIdRoute
@@ -731,6 +751,7 @@ const AuthedAppRouteChildren: AuthedAppRouteChildren = {
   AuthedAppCrmRoute: AuthedAppCrmRoute,
   AuthedAppORoute: AuthedAppORouteWithChildren,
   AuthedAppPlatformRoute: AuthedAppPlatformRoute,
+  AuthedAppPluginsRoute: AuthedAppPluginsRoute,
   AuthedAppSkillsRoute: AuthedAppSkillsRoute,
   AuthedAppIndexRoute: AuthedAppIndexRoute,
   AuthedAppChannelChannelIdRoute: AuthedAppChannelChannelIdRoute,

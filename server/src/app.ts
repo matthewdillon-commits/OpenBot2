@@ -30,6 +30,7 @@ import { createComponentRoutes } from "./components/routes";
 import type { SandboxedStore } from "./components/sandboxed";
 import { createSandboxedRoutes } from "./components/sandboxed-routes";
 import type { ComponentStore } from "./components/store";
+import { createComposioRoutes } from "./composio/routes";
 import type { ComputerGateway } from "./computer/gateway";
 import { isBrowserEnabled } from "./computer/policy";
 import type { PolicyStore } from "./computer/policy-store";
@@ -37,11 +38,11 @@ import { createComputerRoutes } from "./computer/routes";
 import { configuredAuthProviders, type DeploymentConfig } from "./config";
 import type { ConnectorAdminService } from "./connectors";
 import type { CredentialAdminService, CredentialInput } from "./credentials";
+import { createCrmRoutes } from "./crm/routes";
+import type { CrmStore } from "./crm/store";
 import { LOCAL_ORGANIZATION_ID, orgIdOf } from "./orgs/constants";
 import { createOrganizationRoutes } from "./orgs/routes";
 import type { OrganizationStore } from "./orgs/store";
-import { createCrmRoutes } from "./crm/routes";
-import type { CrmStore } from "./crm/store";
 import type { PeopleStore } from "./people/store";
 import { REFUSAL_MARKER } from "./plugins/refusal";
 import type { PackageStatusReader } from "./tenant-package";
@@ -820,6 +821,13 @@ export function createApp(
   if (crmStore) {
     app.route("/api/crm", createCrmRoutes(crmStore, requireUser));
   }
+
+  // Always mounted: without a key the catalogue answers "not configured" rather than 404,
+  // so the Plugins page can say why it is empty.
+  app.route(
+    "/api/composio",
+    createComposioRoutes(config.composioApiKey, requireUser),
+  );
 
   if (pluginStore) {
     // Loaded here, not at module scope: `@modelcontextprotocol/sdk` pulls CJS EventSource

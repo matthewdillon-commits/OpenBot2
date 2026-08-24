@@ -61,8 +61,8 @@ Not everything crossing the wire is cached state, and the shape follows from whi
 
 The third kind still lives under `lib/`. It is not licence to call the server from a component.
 
-There are thirteen of these today — `agents`, `audit`, `auth`, `channels`, `components`, `computers`,
-`connectors`, `credentials`, `package`, `plugins`, `sandboxed`, `skills`, `copilot`. They all look the
+There are fourteen of these today — `agents`, `audit`, `auth`, `channels`, `components`, `computers`,
+`connectors`, `composio`, `credentials`, `package`, `plugins`, `sandboxed`, `skills`, `copilot`. They all look the
 same on purpose. `lib/agents/queries.ts` and `lib/agents/mutations.ts` are the reference pair; read them
 before writing a new one.
 

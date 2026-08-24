@@ -8,6 +8,7 @@ import {
   PageShell,
 } from "@/components/layout/page-shell";
 import { StaggerItem } from "@/components/layout/stagger";
+import { PluginCatalog } from "@/components/plugins/plugin-catalog";
 import { Button } from "@/components/ui/button";
 import {
   Item,
@@ -81,6 +82,9 @@ function ConnectorsPage() {
             ))}
           </PageRows>
         )}
+      </PageSection>
+      <PageSection title="Composio">
+        <PluginCatalog heading="From most used to least" />
       </PageSection>
     </PageShell>
   );

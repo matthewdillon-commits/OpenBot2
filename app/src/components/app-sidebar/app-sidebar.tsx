@@ -4,6 +4,7 @@ import {
   IconBox,
   IconBuilding,
   IconLogout,
+  IconPlug,
   IconPlus,
   IconSearch,
   IconSettings,
@@ -289,6 +290,25 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 <IconAddressBook />
               </div>
               <span className="text-sm tracking-tight">CRM</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              className="hover:bg-foreground/5 h-10"
+              render={(props) => (
+                <Link
+                  {...props}
+                  to="/plugins"
+                  activeProps={{
+                    className: "bg-foreground/5",
+                  }}
+                />
+              )}
+            >
+              <div className="flex size-7 items-center justify-center rounded-full border border-border">
+                <IconPlug className="size-3.5" />
+              </div>
+              <span className="text-sm tracking-tight">Plugins</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>

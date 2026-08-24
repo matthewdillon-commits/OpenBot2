@@ -510,6 +510,14 @@ describe("deployment configuration", () => {
     ).toBe("tvly-test");
   });
 
+  test("offers the Composio catalogue only when a Composio key is set", () => {
+    expect(loadConfig(baseEnvironment).composioApiKey).toBeUndefined();
+    expect(
+      loadConfig({ ...baseEnvironment, COMPOSIO_API_KEY: " ak_test " })
+        .composioApiKey,
+    ).toBe("ak_test");
+  });
+
   test.each([
     ["Docker", "COMPUTER_SUPERVISOR_URL"],
     ["shared", "AGENT_COMPUTER_URL"],
