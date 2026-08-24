@@ -52,7 +52,6 @@ import { useChannelEvents } from "@/lib/channels/use-channel-events";
 import { appConfig } from "@/lib/generated/application-config";
 import { EASE_OUT, ENTRANCE_SECONDS } from "@/lib/motion";
 import { Button } from "../ui/button";
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "../ui/empty";
 import { Channel } from "./channel";
 
 const appLinkOptions = { to: "/" } satisfies LinkOptions;
@@ -234,30 +233,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
              * holding a typo, a person reads their conversations as gone.
              */}
             {searching && visibleChannels.length === 0 ? (
-              <div className="py-4">
-                <Empty className="border border-dashed">
-                  <EmptyHeader>
-                    <EmptyTitle>No channels match your search</EmptyTitle>
-                    <EmptyDescription className="text-pretty">
-                      Nothing here is named “{search.trim()}”, and nobody has
-                      said it recently either.
-                    </EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
-              </div>
+              <p className="px-2 py-3 text-sm text-muted-foreground">
+                No channels match your search. Nothing here is named “
+                {search.trim()}”, and nobody has said it recently either.
+              </p>
             ) : null}
             {!searching && channels.data?.length === 0 ? (
-              <div className="py-4">
-                <Empty className="border border-dashed">
-                  <EmptyHeader>
-                    <EmptyTitle>You don't have channels yet</EmptyTitle>
-                    <EmptyDescription className="text-pretty">
-                      Start talking to agents and your channels will appear
-                      here.
-                    </EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
-              </div>
+              <p className="px-2 py-3 text-sm text-muted-foreground">
+                You don't have channels yet. Start talking to agents and your
+                channels will appear here.
+              </p>
             ) : null}
             <AnimatePresence initial={false}>
               {visibleChannels.map((channel) => (
