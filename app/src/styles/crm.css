@@ -10,6 +10,12 @@
   text-align: start;
 }
 
+@media (max-width: 639px) {
+  .crm-table {
+    min-width: 0;
+  }
+}
+
 .crm-table th {
   position: sticky;
   top: 0;

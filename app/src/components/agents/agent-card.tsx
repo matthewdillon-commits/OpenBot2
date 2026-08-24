@@ -3,7 +3,7 @@ import type { AgentProfile } from "@/lib/agents/queries";
 
 export function AgentCard({ agent }: { agent: AgentProfile }) {
   return (
-    <div className="h-[180px] bg-foreground/10 rounded-2xl w-[144px] relative overflow-hidden">
+    <div className="relative h-[180px] w-full overflow-hidden rounded-2xl bg-foreground/10">
       <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
         <Avatar name={agent.avatarSeed} size={250} />
       </div>

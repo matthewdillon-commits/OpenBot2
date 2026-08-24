@@ -78,7 +78,7 @@ function RouteComponent() {
           {!!explore?.length &&
             explore.map((agent) => (
               <Link
-                className="rounded-2xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                className="w-[144px] shrink-0 rounded-2xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
                 key={agent.id}
                 search={{
                   agent: agent.id,

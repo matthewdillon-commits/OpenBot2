@@ -210,7 +210,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
-      <SidebarContent className="scroll-fade-b">
+      <SidebarContent className="scroll-fade-b max-md:flex-none max-md:overflow-visible">
         <SidebarMenu>
           <SidebarGroup className="gap-px">
             <SidebarMenuItem>
@@ -235,7 +235,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
              */}
             {searching && visibleChannels.length === 0 ? (
               <div className="py-4">
-                <Empty className="border border-dashed min-h-[40dvh]">
+                <Empty className="border border-dashed">
                   <EmptyHeader>
                     <EmptyTitle>No channels match your search</EmptyTitle>
                     <EmptyDescription className="text-pretty">
@@ -248,7 +248,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             ) : null}
             {!searching && channels.data?.length === 0 ? (
               <div className="py-4">
-                <Empty className="border border-dashed min-h-[40dvh]">
+                <Empty className="border border-dashed">
                   <EmptyHeader>
                     <EmptyTitle>You don't have channels yet</EmptyTitle>
                     <EmptyDescription className="text-pretty">

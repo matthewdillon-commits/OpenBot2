@@ -1,7 +1,7 @@
 import { IconPlus } from "@tabler/icons-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { motion, useReducedMotion } from "motion/react";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { CampaignsPanel } from "@/components/crm/campaigns-panel";
 import { CompaniesPanel } from "@/components/crm/companies-panel";
@@ -29,9 +29,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { SPRING_NO_BOUNCE } from "@/lib/motion";
 import { createCrmPersonMutationOptions } from "@/lib/crm/mutations";
 import { type CrmPerson, crmPeopleQueryOptions } from "@/lib/crm/queries";
+import { SPRING_NO_BOUNCE } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { queryClient } from "@/query-client";
 
@@ -100,31 +100,33 @@ export function CrmView({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <h1 className="sr-only">CRM</h1>
-      <div className="flex shrink-0 items-center gap-2 px-4 pt-4 pb-3">
+      <div className="flex shrink-0 flex-col gap-2 px-4 pt-4 pb-3 sm:flex-row sm:items-center">
         <ObjectTabs mode={mode} onSelect={onModeChange} />
-        {showSearch ? (
-          <Input
-            ref={searchRef}
-            type="search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search"
-            aria-label={`Search ${crmModeLabel(mode).toLowerCase()}`}
-            aria-keyshortcuts="/"
-            className="w-44 shrink-0"
-          />
-        ) : null}
-        {createLabel ? (
-          <Button
-            onClick={() => onCreateOpenChange(true)}
-            size="sm"
-            variant="ghost"
-            className="shrink-0"
-          >
-            <IconPlus />
-            {createLabel}
-          </Button>
-        ) : null}
+        <div className="flex min-w-0 items-center gap-2">
+          {showSearch ? (
+            <Input
+              ref={searchRef}
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search"
+              aria-label={`Search ${crmModeLabel(mode).toLowerCase()}`}
+              aria-keyshortcuts="/"
+              className="min-w-0 flex-1 sm:w-44 sm:flex-none sm:shrink-0"
+            />
+          ) : null}
+          {createLabel ? (
+            <Button
+              onClick={() => onCreateOpenChange(true)}
+              size="sm"
+              variant="ghost"
+              className="shrink-0"
+            >
+              <IconPlus />
+              {createLabel}
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       {mode === "campaigns" ? (
@@ -205,7 +207,7 @@ function ObjectTabs({
 
   return (
     <div
-      className="flex min-w-0 flex-1 gap-1 overflow-x-auto"
+      className="flex w-full min-w-0 flex-1 gap-1 overflow-x-auto sm:w-auto"
       role="tablist"
       aria-label="CRM"
       onKeyDown={(event) => {
@@ -285,8 +287,8 @@ function PeopleIndex({
       <thead>
         <tr>
           <th>Name</th>
-          <th>Email</th>
-          <th>Company</th>
+          <th className="hidden sm:table-cell">Email</th>
+          <th className="hidden sm:table-cell">Company</th>
           <th>Stage</th>
         </tr>
       </thead>
@@ -310,7 +312,7 @@ function PeopleIndex({
                 {person.name}
               </span>
             </td>
-            <td>
+            <td className="hidden sm:table-cell">
               <span
                 className="truncate text-muted-foreground"
                 title={person.emails[0]}
@@ -318,7 +320,7 @@ function PeopleIndex({
                 {person.emails[0] || "—"}
               </span>
             </td>
-            <td>
+            <td className="hidden sm:table-cell">
               <span className="truncate">
                 {person.company?.name || (
                   <span className="text-muted-foreground">—</span>

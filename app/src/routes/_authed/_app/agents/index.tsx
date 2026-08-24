@@ -3,12 +3,11 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { z } from "zod";
 import { AgentCard } from "@/components/agents/agent-card";
-import { StaggerItem } from "@/components/layout/stagger";
 import { AgentProfile as AgentProfileDetail } from "@/components/agents/agent-profile";
 import { NewAgent } from "@/components/agents/new-agent";
 import { DetailPanel } from "@/components/layout/detail-panel";
+import { StaggerItem } from "@/components/layout/stagger";
 import { Button } from "@/components/ui/button";
-import { Empty, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { agentListQueryOptions } from "@/lib/agents/queries";
 
 /**
@@ -66,40 +65,33 @@ function AgentsScreen() {
               New agent
             </Button>
           </div>
-          <div className="flex flex-row mt-4">
-            {!!mine?.length && (
-              <div className="grid grid-cols-4 gap-4">
-                {mine.map((agent, index) => {
-                  return (
-                    <StaggerItem index={index} key={agent.id}>
-                      <Link
-                        className="rounded-2xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-                        search={{ agent: agent.id }}
-                        to="/agents"
-                      >
-                        <AgentCard agent={agent} />
-                      </Link>
-                    </StaggerItem>
-                  );
-                })}
-              </div>
-            )}
-            {!mine?.length && (
-              <Empty className="border border-dashed h-[180px]">
-                <EmptyHeader>
-                  <EmptyTitle className="text-muted-foreground">
-                    You don't have any agents created.
-                  </EmptyTitle>
-                </EmptyHeader>
-              </Empty>
-            )}
-          </div>
+          {mine?.length ? (
+            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {mine.map((agent, index) => {
+                return (
+                  <StaggerItem index={index} key={agent.id}>
+                    <Link
+                      className="rounded-2xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                      search={{ agent: agent.id }}
+                      to="/agents"
+                    >
+                      <AgentCard agent={agent} />
+                    </Link>
+                  </StaggerItem>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="mt-4 text-sm text-muted-foreground">
+              You don't have any agents created.
+            </p>
+          )}
         </div>
         <div className="mt-8 w-full max-w-2xl">
           <h2 className="font-bold text-lg tracking-tight text-balance">
             Explore agents
           </h2>
-          <div className="grid grid-cols-4 gap-4 mt-4">
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {!!explore?.length &&
               explore.map((agent, index) => {
                 return (
