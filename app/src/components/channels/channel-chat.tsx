@@ -267,16 +267,6 @@ export function ChannelChat({
    * wrapped in covers every way out of here, a throw included.
    */
   const deliver = async (trimmed: string, skillInstructions: string[]) => {
-    // Wait briefly for the runtime agent instance before adding the message.
-    if (!isReadyRef.current) {
-      await Promise.race([
-        readyGatePromise,
-        new Promise((resolve) =>
-          setTimeout(resolve, SEND_WITHOUT_JOIN_AFTER_MS),
-        ),
-      ]);
-    }
-
     setRunError(null);
     awaitingReply.current = true;
 
@@ -291,6 +281,9 @@ export function ChannelChat({
      *
      * `transcriptMessages` draws user and assistant turns, so this never appears on screen — the
      * chip is what says a skill was used, and it stays visible in the message they sent.
+     *
+     * Added before waiting for the runtime. The thinking line only appears under the person's
+     * own message; waiting first left a silent gap of up to a second and a half after send.
      */
     for (const instruction of skillInstructions) {
       agent.addMessage({
@@ -306,6 +299,16 @@ export function ChannelChat({
       role: "user",
     });
     report(trimmed, null);
+
+    // Wait briefly for the runtime agent instance before starting the run.
+    if (!isReadyRef.current) {
+      await Promise.race([
+        readyGatePromise,
+        new Promise((resolve) =>
+          setTimeout(resolve, SEND_WITHOUT_JOIN_AFTER_MS),
+        ),
+      ]);
+    }
 
     // Providers reject later turns if prior tool calls have no result; repair before sending.
     const repaired = repairUnansweredToolCalls(agent.messages);

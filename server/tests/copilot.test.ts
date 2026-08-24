@@ -1,6 +1,7 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import { HttpAgent } from "@ag-ui/client";
 import { BuiltInAgent } from "@copilotkit/runtime/v2";
+import { z } from "zod";
 import {
   buildAgents,
   builtInAgentConfiguration,
@@ -101,6 +102,40 @@ describe("registered Copilot agents", () => {
       prompt: "Be helpful.",
       apiKey: "openai-secret",
     });
+  });
+
+  test("hands tools to the built-in agent as cleaned JSON Schema, not Zod 4's draft URI", () => {
+    const tool = {
+      name: "search_web",
+      description: "Search the public web.",
+      parameters: z.object({ query: z.string() }),
+      execute: async () => "ok",
+    };
+    const configuration = builtInAgentConfiguration(
+      {
+        id: "general-assistant",
+        name: "General Assistant",
+        type: "built_in",
+        systemPrompt: "Be helpful.",
+      },
+      { provider: "openai", defaultModel: "gpt-4.1" },
+      "openai-secret",
+      [tool],
+    );
+    const json = (
+      configuration as {
+        tools: Array<{
+          parameters: {
+            "~standard": {
+              jsonSchema: { input: () => Record<string, unknown> };
+            };
+          };
+        }>;
+      }
+    ).tools[0]?.parameters["~standard"].jsonSchema.input();
+    expect(json?.$schema).toBeUndefined();
+    expect(json?.additionalProperties).toBeUndefined();
+    expect(json?.type).toBe("object");
   });
 
   test("appends computer guidance only when this deployment is offering a computer", () => {

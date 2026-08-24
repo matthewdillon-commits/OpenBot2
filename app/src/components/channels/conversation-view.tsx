@@ -117,7 +117,7 @@ export function ConversationView({
    * for the same fact.
    */
   const [running, setRunning] = useState(false);
-  const inFlight = pending || running;
+  const inFlight = pending || running || busy;
 
   /**
    * Every change to the queue goes through here, so the ref and the state can never disagree.
@@ -210,7 +210,14 @@ export function ConversationView({
          * conversation to change nothing.
          */}
         <ChatTranscript
-          busy={busy}
+          /*
+           * The turn, not the run on the wire. `busy` used to be `agent.isRunning` alone, which
+           * stays false until the runtime has opened a stream — often a second after send.
+           * `inFlight` is true from the moment the person pressed send (`running` / `pending`)
+           * and stays true while the run is on the wire (`busy`), which is when the thinking
+           * line has to appear or the transcript looks frozen.
+           */
+          busy={inFlight}
           commandNames={(commands ?? [])
             .map((command) => command.name)
             .join(",")}

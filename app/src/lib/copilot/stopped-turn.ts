@@ -29,7 +29,16 @@ export function stoppedReason(reported: unknown): string {
       : typeof reported === "string"
         ? reported
         : "";
-  return said.trim() || "The Bot stopped without saying why.";
+  const trimmed = said.trim();
+  if (!trimmed) return "The Bot stopped without saying why.";
+  /*
+   * FastAPI and some model gateways surface HTTP 422 as this status phrase and nothing else.
+   * A person looking at the transcript is owed a sentence about the turn, not a status code.
+   */
+  if (/\b422\b/i.test(trimmed) || /unprocessable entity/i.test(trimmed)) {
+    return "The Bot could not finish that step, so this turn ended. Ask again in a complete sentence.";
+  }
+  return trimmed;
 }
 
 /**

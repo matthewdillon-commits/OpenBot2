@@ -38,4 +38,11 @@ describe("the reason a turn ended", () => {
       "The Bot stopped without saying why.",
     );
   });
+
+  test("translates an HTTP 422 into a sentence about the turn", () => {
+    expect(stoppedReason("Unprocessable Entity")).toContain("could not finish");
+    expect(stoppedReason(new Error("422 Unprocessable Entity"))).toContain(
+      "complete sentence",
+    );
+  });
 });

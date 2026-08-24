@@ -65,8 +65,13 @@ export function webSearchTool(options: {
       }
 
       const query = parsed.data.query.trim();
-      if (!query) {
-        return "That search needs a query: a short phrase describing what to look up.";
+      /*
+       * Tavily refuses anything shorter than two characters (a lone "?" is 400). Answer here
+       * rather than calling, so the model can rephrase instead of the run dying on a vendor
+       * status line.
+       */
+      if (query.length < 2) {
+        return "That search needs a query of at least two characters: a short phrase describing what to look up.";
       }
 
       const context: PolicyContext = {

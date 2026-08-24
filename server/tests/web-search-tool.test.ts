@@ -160,6 +160,22 @@ describe("the web search tool", () => {
     expect(written).toHaveLength(0);
   });
 
+  test("does not call the vendor for a one-character query", async () => {
+    const { search, asked } = searchReturning(oneHit);
+    const { written, auditStore } = recorder();
+    const answer = await webSearchTool({
+      search,
+      auditStore,
+      policy: () => PERMISSIVE,
+      botId: "general-assistant",
+      actorId: "u_1",
+    }).execute({ query: "?" });
+
+    expect(answer).toContain("at least two characters");
+    expect(asked).toEqual([]);
+    expect(written).toHaveLength(0);
+  });
+
   test("a vendor that failed is not recorded as a search", async () => {
     const { written, auditStore } = recorder();
     const answer = await webSearchTool({

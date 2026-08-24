@@ -8,6 +8,11 @@ Newest first. `Unreleased` is what is on `main` and not yet tagged.
 
 ## Unreleased
 
+### Chat
+
+- **The thinking line appears as soon as a message is sent.** It used to wait until the runtime marked the run as started, so the first send sat still for a second or more with no sign the Bot had heard. The person's message is posted first; thinking follows immediately.
+- **Web search no longer dies on a one-character query.** Tavily refuses anything shorter than two characters, and CopilotKit Intelligence was turning a failed tool schema into a red "Unprocessable Entity". The tool now answers with a sentence the Bot can act on, tool schemas sent to the model are stripped of JSON Schema draft metadata some providers reject, and a 422 on the turn is explained in a sentence rather than a status phrase.
+
 ### Multi-tenant organizations
 
 A deployment can now hold more than one customer. People still sign in once; work is scoped to an organization. Existing data is backfilled into the `local` organization. Sales-led hosting sets `PLATFORM_SUPERADMINS` so someone can create an organization and invite its owner. `OPENBOT_EMAIL_AUTH=true` turns on email and password without an OAuth client; create-account asks for an organization name, and a signed-in person can also create a workspace they own. Stripe, seat quotas, per-org SSO, and Postgres RLS are not in this release.

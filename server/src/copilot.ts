@@ -6,11 +6,14 @@ import {
   CopilotRuntime,
 } from "@copilotkit/runtime/v2";
 import { createCopilotHonoHandler } from "@copilotkit/runtime/v2/hono";
-import { z } from "zod";
 import { COMPUTER_GUIDANCE } from "../../shared/bot-prompt";
 import type { AgentActor } from "./agents/profile-types";
 import type { StallGuard } from "./channels/stall-guard";
 import type { DeploymentConfig } from "./config";
+import {
+  jsonSchemaForLlmTool,
+  standardSchemaForLlmTool,
+} from "./plugins/llm-schema";
 import type { GrantedTool } from "./plugins/tools";
 
 /**
@@ -213,7 +216,22 @@ export function builtInAgentConfiguration(
      * bounds a model that would otherwise call tools in a circle. Interrupt tools, if any are ever
      * added here, require the default of one and must not be mixed in.
      */
-    ...(tools.length > 0 ? { tools, maxSteps: TOOL_STEPS } : {}),
+    ...(tools.length > 0
+      ? {
+          tools: tools.map((tool) => ({
+            name: tool.name,
+            description: tool.description,
+            parameters: standardSchemaForLlmTool(tool.parameters),
+            execute: tool.execute,
+          })),
+          maxSteps: TOOL_STEPS,
+          /*
+           * One tool at a time. A model that fires four `search_web` calls in parallel, then
+           * cannot continue, is how "Unprocessable Entity" showed up under a stack of searches.
+           */
+          providerOptions: { openai: { parallelToolCalls: false } },
+        }
+      : {}),
   };
 }
 
@@ -348,10 +366,7 @@ function remoteAgentWithStandingRole(
         ...tools.map((tool) => ({
           name: tool.name,
           description: tool.description,
-          parameters: z.toJSONSchema(tool.parameters) as Record<
-            string,
-            unknown
-          >,
+          parameters: jsonSchemaForLlmTool(tool.parameters),
         })),
       ],
       // Who the Bot is calling back as, so the audit row names it rather than "an agent".
