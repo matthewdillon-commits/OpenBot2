@@ -518,6 +518,16 @@ describe("deployment configuration", () => {
     ).toBe("ak_test");
   });
 
+  test("pins a Gmail auth config only when GMAIL_AUTH_CONFIG_ID is set", () => {
+    expect(loadConfig(baseEnvironment).gmailAuthConfigId).toBeUndefined();
+    expect(
+      loadConfig({
+        ...baseEnvironment,
+        GMAIL_AUTH_CONFIG_ID: " ac_gmail ",
+      }).gmailAuthConfigId,
+    ).toBe("ac_gmail");
+  });
+
   test.each([
     ["Docker", "COMPUTER_SUPERVISOR_URL"],
     ["shared", "AGENT_COMPUTER_URL"],

@@ -37,9 +37,17 @@ type CachedToolkits = {
   items: Omit<ComposioPlugin, "connected" | "connectionId">[];
 };
 
-export function composioClient(apiKey: string, fetchImpl: FetchLike = fetch) {
+export function composioClient(
+  apiKey: string,
+  fetchImpl: FetchLike = fetch,
+  options: { gmailAuthConfigId?: string } = {},
+) {
   const toolkitCache: { current: CachedToolkits | null } = { current: null };
   const authConfigBySlug = new Map<string, string>();
+  const pinnedGmailAuthConfigId = options.gmailAuthConfigId?.trim() || undefined;
+  if (pinnedGmailAuthConfigId) {
+    authConfigBySlug.set("gmail", pinnedGmailAuthConfigId);
+  }
 
   async function request(
     path: string,
@@ -235,7 +243,10 @@ export function composioClient(apiKey: string, fetchImpl: FetchLike = fetch) {
       if (existing && existing.status === "ACTIVE") {
         return { redirectUrl: null, alreadyConnected: true };
       }
-      const authConfigId = await ensureAuthConfig(slug);
+      const authConfigId =
+        slug === "gmail" && pinnedGmailAuthConfigId
+          ? pinnedGmailAuthConfigId
+          : await ensureAuthConfig(slug);
       const { ok, status, body } = await request("/connected_accounts/link", {
         method: "POST",
         body: JSON.stringify({

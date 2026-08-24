@@ -16,9 +16,12 @@ export function createComposioRoutes(
   apiKey: string | undefined,
   requireUser: MiddlewareHandler<{ Variables: AppVariables }>,
   fetchImpl: typeof fetch = fetch,
+  gmailAuthConfigId?: string,
 ) {
   const routes = new Hono<{ Variables: AppVariables }>();
-  const client = apiKey ? composioClient(apiKey, fetchImpl) : null;
+  const client = apiKey
+    ? composioClient(apiKey, fetchImpl, { gmailAuthConfigId })
+    : null;
 
   const withOrg = async (
     context: Context<{ Variables: AppVariables }>,

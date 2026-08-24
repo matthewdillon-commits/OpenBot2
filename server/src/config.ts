@@ -190,6 +190,12 @@ export type DeploymentConfig = {
    * that is not configured should be missing, not a page of errors.
    */
   composioApiKey?: string;
+  /**
+   * The Composio auth config to use when connecting Gmail. Absent, connect creates or reuses
+   * whatever Composio lists for the `gmail` toolkit. Set this when Gmail already has an auth
+   * config in the Composio dashboard and connect should use that one rather than minting another.
+   */
+  gmailAuthConfigId?: string;
 };
 
 type Environment = Record<string, string | undefined>;
@@ -667,6 +673,14 @@ export function loadConfig(
       : {}),
     ...(optional(environment, "COMPOSIO_API_KEY")
       ? { composioApiKey: optional(environment, "COMPOSIO_API_KEY") as string }
+      : {}),
+    ...(optional(environment, "GMAIL_AUTH_CONFIG_ID")
+      ? {
+          gmailAuthConfigId: optional(
+            environment,
+            "GMAIL_AUTH_CONFIG_ID",
+          ) as string,
+        }
       : {}),
   };
 }

@@ -826,7 +826,12 @@ export function createApp(
   // so the Plugins page can say why it is empty.
   app.route(
     "/api/composio",
-    createComposioRoutes(config.composioApiKey, requireUser),
+    createComposioRoutes(
+      config.composioApiKey,
+      requireUser,
+      fetch,
+      config.gmailAuthConfigId,
+    ),
   );
 
   if (pluginStore) {

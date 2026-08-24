@@ -108,4 +108,47 @@ describe("the Composio client", () => {
     expect(link?.headers.get("x-api-key")).toBe("ak_secret");
     expect(JSON.stringify(link?.body)).not.toContain("ak_secret");
   });
+
+  test("uses a pinned Gmail auth config instead of minting one", async () => {
+    const seen: { url: string; body: unknown }[] = [];
+    const client = composioClient(
+      "ak_secret",
+      async (url, init) => {
+        const parsed = String(init?.body ?? "");
+        seen.push({
+          url: String(url),
+          body: parsed ? JSON.parse(parsed) : null,
+        });
+        const path = String(url);
+        if (path.includes("/connected_accounts?") && !path.includes("/link")) {
+          return Response.json({ items: [] });
+        }
+        if (path.endsWith("/connected_accounts/link")) {
+          return Response.json({
+            redirect_url: "https://connect.composio.dev/link/pinned",
+          });
+        }
+        return new Response("unused", { status: 500 });
+      },
+      { gmailAuthConfigId: "ac_pinned" },
+    );
+
+    const result = await client.connect(
+      "org_acme",
+      "gmail",
+      "http://localhost:3010/plugins",
+    );
+    expect(result.redirectUrl).toBe("https://connect.composio.dev/link/pinned");
+    expect(seen.some((entry) => entry.url.includes("/auth_configs"))).toBe(
+      false,
+    );
+    const link = seen.find((entry) =>
+      entry.url.endsWith("/connected_accounts/link"),
+    );
+    expect(link?.body).toEqual({
+      user_id: "org_acme",
+      auth_config_id: "ac_pinned",
+      callback_url: "http://localhost:3010/plugins",
+    });
+  });
 });
