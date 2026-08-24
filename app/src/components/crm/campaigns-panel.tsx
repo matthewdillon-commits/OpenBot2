@@ -322,7 +322,7 @@ export function CampaignsPanel({
                     <thead>
                       <tr>
                         <th>Name</th>
-                        <th>Company</th>
+                        <th className="hidden sm:table-cell">Company</th>
                         <th>Stage</th>
                         <th>
                           <span className="sr-only">Actions</span>
@@ -343,7 +343,7 @@ export function CampaignsPanel({
                                 {person.name}
                               </button>
                             </td>
-                            <td className="text-muted-foreground">
+                            <td className="hidden text-muted-foreground sm:table-cell">
                               {person.company?.name || "—"}
                             </td>
                             <td>
