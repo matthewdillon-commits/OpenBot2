@@ -16,6 +16,7 @@ import {
   seedMessage,
   takeFirstMessage,
   transcriptMessages,
+  withOutgoingEcho,
 } from "@/components/channels/transcript-messages";
 import { agentListQueryOptions } from "@/lib/agents/queries";
 import { recordChannelActivityMutationOptions } from "@/lib/channels/mutations";
@@ -86,6 +87,14 @@ export function ChannelChat({
   const [composerDraft, setComposerDraft] = useState<ComposerDraft | null>(
     null,
   );
+  /**
+   * True while a new channel still has its first message on screen and has not yet been allowed
+   * to start the run. Join can take a second and a half; without this the seed sits there with
+   * no thinking line.
+   */
+  const [seedSending, setSeedSending] = useState(() => seed.message !== null);
+  /** Words just sent, until CopilotKit's message list includes them. */
+  const [outgoing, setOutgoing] = useState<Message | null>(null);
 
   useEffect(() => {
     onSpeakerChange?.(speaker);
@@ -293,11 +302,18 @@ export function ChannelChat({
       });
     }
 
-    agent.addMessage({
+    const userMessage: Message = {
       content: trimmed,
       id: newId(),
       role: "user",
-    });
+    };
+    /*
+     * Shown immediately. CopilotKit often keeps the same `messages` array and mutates it later,
+     * so React would otherwise re-render as busy with the previous turn still last — no bubble,
+     * no thinking line, and a composer that already emptied.
+     */
+    setOutgoing(userMessage);
+    agent.addMessage(userMessage);
     report(trimmed, null);
 
     // Wait briefly for the runtime agent instance before starting the run.
@@ -341,6 +357,7 @@ export function ChannelChat({
       await deliver(trimmed, skillInstructions);
     } finally {
       setTurnsInFlight((count) => count - 1);
+      setOutgoing(null);
     }
   };
 
@@ -412,15 +429,19 @@ export function ChannelChat({
     seedRef.current = null;
 
     void (async () => {
-      await Promise.race([
-        joinGatePromise,
-        new Promise((resolve) =>
-          setTimeout(resolve, SEND_WITHOUT_JOIN_AFTER_MS),
-        ),
-      ]);
-      await sayRef.current(
-        typeof pending.content === "string" ? pending.content : "",
-      );
+      try {
+        await Promise.race([
+          joinGatePromise,
+          new Promise((resolve) =>
+            setTimeout(resolve, SEND_WITHOUT_JOIN_AFTER_MS),
+          ),
+        ]);
+        await sayRef.current(
+          typeof pending.content === "string" ? pending.content : "",
+        );
+      } finally {
+        setSeedSending(false);
+      }
     })();
 
     // Keep `seed` in state; transcriptMessages hides it as soon as agent messages exist.
@@ -435,7 +456,10 @@ export function ChannelChat({
         commands={skillCommands}
         // Readiness is handled by `say`; deletion is the only disabled-chat state.
         disabled={!channel.active}
-        messages={transcriptMessages(agent.messages, seed.message)}
+        messages={withOutgoingEcho(
+          transcriptMessages(agent.messages, seed.message),
+          outgoing,
+        )}
         notice={
           channel.active ? null : (
             <p className="pb-2 text-sm text-muted-foreground" role="status">
@@ -496,7 +520,7 @@ export function ChannelChat({
          * middle of an answer: a second turn racing the first on one thread, with a fabricated
          * result stitched over a tool call that is still executing.
          */
-        pending={agent.isRunning || turnsInFlight > 0}
+        pending={agent.isRunning || turnsInFlight > 0 || seedSending}
         /*
          * A channel outlives its turns, so it is the screen where waiting is worth offering. A
          * correction typed mid-answer is held here, in this tab, and runs as one follow-up turn the

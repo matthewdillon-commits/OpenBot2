@@ -16,6 +16,34 @@ export function transcriptMessages(
   return [seed];
 }
 
+function userText(message: Message): string | null {
+  if (message.role !== "user") return null;
+  return typeof message.content === "string" ? message.content : null;
+}
+
+/**
+ * Keep the person's just-sent words on screen until the agent has them.
+ *
+ * CopilotKit mutates `agent.messages` in place and notifies later. The composer already cleared
+ * the draft, so without this the transcript is the previous turn with no sign anything was sent.
+ */
+export function withOutgoingEcho(
+  messages: readonly Message[],
+  echo: Message | null,
+): readonly Message[] {
+  if (!echo) return messages;
+  const text = userText(echo);
+  if (
+    messages.some(
+      (message) =>
+        message.id === echo.id || (text !== null && userText(message) === text),
+    )
+  ) {
+    return messages;
+  }
+  return [...messages, echo];
+}
+
 /** The person's message, in the shape the transcript and the agent both take. */
 export function seedMessage(text: string, id: string): Message {
   return { id, role: "user", content: text };

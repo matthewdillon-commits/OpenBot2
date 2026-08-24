@@ -4,6 +4,7 @@ import {
   stashFirstMessage,
   takeFirstMessage,
   transcriptMessages,
+  withOutgoingEcho,
 } from "../src/components/channels/transcript-messages";
 
 /**
@@ -28,6 +29,28 @@ describe("transcriptMessages", () => {
 
   test("is unaffected by a seed on an established channel", () => {
     expect(transcriptMessages([STORED], null)).toEqual([STORED]);
+  });
+});
+
+describe("withOutgoingEcho", () => {
+  test("appends the echo when the agent does not have it yet", () => {
+    const echo = seedMessage("hello", "echo-1");
+    expect(withOutgoingEcho([], echo)).toEqual([echo]);
+  });
+
+  test("does not duplicate once the agent has the same id", () => {
+    const echo = seedMessage("hello", "echo-1");
+    expect(withOutgoingEcho([echo], echo)).toEqual([echo]);
+  });
+
+  test("does not duplicate the seed that already shows the same words", () => {
+    const seed = seedMessage("hello", "seed-1");
+    const echo = seedMessage("hello", "echo-1");
+    expect(withOutgoingEcho([seed], echo)).toEqual([seed]);
+  });
+
+  test("leaves the list alone when there is nothing outgoing", () => {
+    expect(withOutgoingEcho([STORED], null)).toEqual([STORED]);
   });
 });
 
