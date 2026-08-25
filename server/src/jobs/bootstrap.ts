@@ -52,18 +52,18 @@ import {
   identifyActorFromContext,
 } from "./actor";
 import { startUnattendedRun } from "./run";
+import { startSpecialist } from "./specialist";
 import { createJobStore, type JobStore, type UnattendedJob } from "./store";
 import {
   createThreadIdleChecker,
   createThreadPersister,
   intelligenceUserForActor,
 } from "./thread";
-import { startSpecialist } from "./specialist";
 import { createLoadToolsForActor } from "./tools";
 import {
   createJobTriggerStore,
-  tickDueCrons,
   type JobTriggerStore,
+  tickDueCrons,
 } from "./triggers";
 
 export type UnattendedWorkerRuntime = {

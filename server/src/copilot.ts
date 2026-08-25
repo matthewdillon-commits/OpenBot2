@@ -14,13 +14,13 @@ import { COMPUTER_GUIDANCE } from "../../shared/bot-prompt";
 import type { AgentActor } from "./agents/profile-types";
 import type { StallGuard } from "./channels/stall-guard";
 import type { DeploymentConfig } from "./config";
+import type { ToolRunContext } from "./jobs/run-context";
 import { orgIdOf } from "./orgs/constants";
 import {
   jsonSchemaForLlmTool,
   standardSchemaForLlmTool,
 } from "./plugins/llm-schema";
 import type { GrantedTool } from "./plugins/tools";
-import type { ToolRunContext } from "./jobs/run-context";
 
 /**
  * The CopilotKit runtime, always in Intelligence mode.

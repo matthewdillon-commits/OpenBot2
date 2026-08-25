@@ -17,6 +17,7 @@ import {
   type SignRun,
   TOOL_STEPS,
 } from "../copilot";
+import { APPROVAL_WAIT_MARKER } from "../loop/types";
 import { orgIdOf } from "../orgs/constants";
 import { SpendCapError } from "../orgs/spend";
 import { REFUSAL_MARKER } from "../plugins/refusal";
@@ -26,6 +27,7 @@ import {
   identifyActorFromContext,
   identifyUserFromContext,
 } from "./actor";
+import { extractCrmRecordIds } from "./outcome";
 import type { ToolRunContext } from "./run-context";
 import {
   runUnattendedThroughRuntime,
@@ -39,8 +41,6 @@ import type {
   UnattendedMessage,
 } from "./thread";
 import { waitForThreadIdle } from "./thread";
-import { extractCrmRecordIds } from "./outcome";
-import { APPROVAL_WAIT_MARKER } from "../loop/types";
 import {
   gateUserOAuthTools,
   serverSideToolsOnly,
