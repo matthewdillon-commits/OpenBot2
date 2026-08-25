@@ -219,5 +219,58 @@ describe.skipIf(!postgresReachable)(
         .where(eq(channels.id, channel.id));
       expect(row?.lastMessage).toBe("Ada is at Acme.");
     });
+
+    test("markNeedsYou pauses a running job without finishing it", async () => {
+      await ensureLocalOrganization(database);
+      const actor: AgentActor = {
+        id: `${prefix}-hitl-user`,
+        role: "user",
+        orgId: "org_local",
+      };
+      await database.insert(users).values({
+        id: actor.id,
+        email: `${actor.id}@example.test`,
+        name: "HITL",
+      });
+      createdUserIds.push(actor.id);
+      await seedMembership(database, actor.id);
+      const agent = await profileStore.create(actor, {
+        name: "Browser",
+        title: "Browser",
+        roleDescription: "Use the computer.",
+        visibility: "public",
+        // create() is remote AG-UI unless a managed Bot is configured. CI has none.
+        endpoint: "http://127.0.0.1:9/ag-ui",
+      });
+      createdAgentIds.push(agent.id);
+      const channel = await channelStore.create(actor, [agent.id]);
+      createdChannelIds.push(channel.id);
+
+      const queued = await jobStore.enqueue({
+        orgId: "org_local",
+        channelId: channel.id,
+        coworkerId: agent.id,
+        actingUserId: actor.id,
+        threadId: channel.threadId,
+        prompt: "Open the bank and sign in.",
+      });
+      const claimed = await jobStore.claim();
+      expect(claimed?.id).toBe(queued.id);
+
+      const paused = await jobStore.markNeedsYou({
+        orgId: "org_local",
+        coworkerId: agent.id,
+        actingUserId: actor.id,
+        lastAction: "Needs you: Sign in on this page.",
+      });
+      expect(paused).toHaveLength(1);
+      expect(paused[0]?.id).toBe(queued.id);
+      expect(paused[0]?.status).toBe("running");
+      expect(paused[0]?.needsYou).toBe(true);
+      expect(paused[0]?.outcome?.status).toBe("Needs you");
+      expect(paused[0]?.outcome?.last_action).toBe(
+        "Needs you: Sign in on this page.",
+      );
+    });
   },
 );

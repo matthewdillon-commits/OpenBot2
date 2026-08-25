@@ -3,6 +3,7 @@ import type { AuditEventInput, AuditStore } from "../src/audit";
 import {
   ActionRefusedError,
   createComputerGateway,
+  SharedComputerIsolationError,
   WorkspaceRefusedError,
 } from "../src/computer/gateway";
 import type { ActionPolicy } from "../src/computer/policy";
@@ -39,6 +40,7 @@ const SNAPSHOT: SnapshotResult = {
 
 /** A computer that records which HTTP actions reached it. */
 function fakeComputer(options?: {
+  isolation?: "per-bot" | "shared";
   stopResult?: { wasRunning: boolean };
   resetResult?: { cleared: boolean };
   locations?: ComputerLocation[];
@@ -57,7 +59,7 @@ function fakeComputer(options?: {
   });
   const provider: ComputerProvider = {
     name: "test",
-    isolation: "per-bot",
+    isolation: options?.isolation ?? "per-bot",
     locate: async (botId) => {
       addressedAs.push(botId);
       return "http://agent-computer:4100";
@@ -962,5 +964,63 @@ describe("resolving a ref across replicas", () => {
       snapshotId: 7,
     });
     expect(afterReset.element).toBeUndefined();
+  });
+});
+
+describe("shared computer isolation", () => {
+  test("the first org may use a shared computer; a second org is refused", async () => {
+    const { provider, fetchImpl, calls } = fakeComputer({
+      isolation: "shared",
+    });
+    const { store } = fakeAudit();
+    const gateway = createComputerGateway({
+      provider,
+      fetchImpl,
+      auditStore: store,
+      policy: () => PERMISSIVE,
+    });
+
+    await gateway.navigate(
+      "bot-1",
+      { id: "user-a", orgId: "org_one" },
+      "https://example.com/",
+    );
+    expect(calls).toContain("navigate");
+
+    await expect(
+      gateway.navigate(
+        "bot-1",
+        { id: "user-b", orgId: "org_two" },
+        "https://example.com/",
+      ),
+    ).rejects.toThrow(SharedComputerIsolationError);
+
+    await gateway.navigate(
+      "bot-1",
+      { id: "user-a", orgId: "org_one" },
+      "https://example.com/",
+    );
+  });
+
+  test("per-bot isolation does not refuse a second org", async () => {
+    const { provider, fetchImpl } = fakeComputer({ isolation: "per-bot" });
+    const { store } = fakeAudit();
+    const gateway = createComputerGateway({
+      provider,
+      fetchImpl,
+      auditStore: store,
+      policy: () => PERMISSIVE,
+    });
+
+    await gateway.navigate(
+      "bot-1",
+      { id: "user-a", orgId: "org_one" },
+      "https://example.com/",
+    );
+    await gateway.navigate(
+      "bot-1",
+      { id: "user-b", orgId: "org_two" },
+      "https://example.com/",
+    );
   });
 });

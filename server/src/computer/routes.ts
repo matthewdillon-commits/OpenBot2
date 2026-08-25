@@ -11,6 +11,7 @@ import {
   ComputerUnavailableError,
   ElementNotFoundError,
   NavigationRefusedError,
+  SharedComputerIsolationError,
   StaleSnapshotError,
   WorkspaceRefusedError,
   WorkspaceRequestError,
@@ -138,6 +139,9 @@ export function createComputerRoutes(
       // Collapsing it into the same 5xx as an unreachable computer would send somebody looking for
       // an outage that is not happening.
       if (error instanceof NavigationRefusedError) {
+        return context.json({ error: error.message }, 403);
+      }
+      if (error instanceof SharedComputerIsolationError) {
         return context.json({ error: error.message }, 403);
       }
       return context.json({ error: describe(error) }, statusFor(error));
@@ -557,6 +561,9 @@ async function act(
     if (error instanceof WorkspaceRefusedError) {
       return context.json({ error: error.message }, 403);
     }
+    if (error instanceof SharedComputerIsolationError) {
+      return context.json({ error: error.message }, 403);
+    }
     // A 400, deliberately, NOT a 403. The surface treats 403 as "a boundary refused you" and renders
     // it as Blocked, so returning it for "there is no file at notes.md" told both the person and the
     // model that a policy had intervened when none had.
@@ -603,7 +610,8 @@ function describe(error: unknown): string {
  * not running (an operator fixes it), the refs are stale (the model fixes it by snapshotting again),
  * and everything else. Navigation established this; the acting routes follow it.
  */
-function statusFor(error: unknown): 409 | 500 | 503 {
+function statusFor(error: unknown): 403 | 409 | 500 | 503 {
+  if (error instanceof SharedComputerIsolationError) return 403;
   if (error instanceof StaleSnapshotError) return 409;
   // The same answer as a stale snapshot, because it is the same instruction: the refs are wrong, take
   // another snapshot. Not 503, which says the computer is unavailable and sends an operator hunting a

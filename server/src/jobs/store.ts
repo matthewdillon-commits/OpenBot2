@@ -111,6 +111,16 @@ export type JobStore = {
     channelId: string,
     limit?: number,
   ) => Promise<UnattendedJob[]>;
+  /**
+   * Phase 2 HITL: mark running jobs for this coworker as waiting on a person.
+   * Does not finish the job. The skinny outcome becomes Needs you.
+   */
+  markNeedsYou: (input: {
+    orgId: string;
+    coworkerId: string;
+    actingUserId: string;
+    lastAction: string;
+  }) => Promise<UnattendedJob[]>;
 };
 
 function collectPayloadTexts(payload: JobPayload): string[] {
@@ -334,6 +344,47 @@ export function createJobStore(database: Database): JobStore {
         .orderBy(desc(jobs.createdAt))
         .limit(Math.min(Math.max(limit, 1), 50));
       return rows.map(toJob);
+    },
+
+    async markNeedsYou(input) {
+      const orgId = orgIdOf({ orgId: input.orgId });
+      const existing = await database
+        .select()
+        .from(jobs)
+        .where(
+          and(
+            eq(jobs.orgId, orgId),
+            eq(jobs.coworkerId, input.coworkerId),
+            eq(jobs.actingUserId, input.actingUserId),
+            eq(jobs.status, "running"),
+          ),
+        );
+      const now = new Date();
+      const updated: UnattendedJob[] = [];
+      for (const row of existing) {
+        const outcome = buildJobOutcome({
+          status: "running",
+          at: now,
+          goalId: row.goalId,
+          channelId: row.channelId,
+          agentId: row.coworkerId,
+          orgId: row.orgId,
+          actingUserId: row.actingUserId,
+          needsYou: true,
+          assistantText: input.lastAction,
+        });
+        const [next] = await database
+          .update(jobs)
+          .set({
+            needsYou: true,
+            outcome,
+            updatedAt: now,
+          })
+          .where(eq(jobs.id, row.id))
+          .returning();
+        if (next) updated.push(toJob(next));
+      }
+      return updated;
     },
   };
 }

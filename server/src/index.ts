@@ -32,6 +32,7 @@ import {
   createComputerProvider,
   describeComputerIsolation,
 } from "./computer/provider";
+import { createSharedComputerClaimStore } from "./computer/shared-claim";
 import { createSnapshotStore } from "./computer/snapshot-store";
 import { loadConfig } from "./config";
 import { createConnectorAdminService } from "./connectors";
@@ -289,6 +290,9 @@ const computerGateway = computerProvider
       snapshots: createSnapshotStore(database),
       allowPrivateHosts: config.computer?.allowPrivateHosts,
       token: config.computer?.token,
+      ...(computerProvider.isolation === "shared"
+        ? { sharedClaim: createSharedComputerClaimStore(database) }
+        : {}),
     })
   : undefined;
 
@@ -416,6 +420,7 @@ const webSearch = config.tavilyApiKey
  * search or a key to spend, not when an administrator ticked a grant. A framework Bot calls the
  * same list back through `/api/agent-tools/call`.
  */
+const jobStore = createJobStore(database);
 const loadToolsForActor = createLoadToolsForActor({
   pluginStore,
   knowledgeSearch,
@@ -424,9 +429,13 @@ const loadToolsForActor = createLoadToolsForActor({
   policyFor: (orgId) => policyStore.get(orgId),
   crmGateway,
   publicOrigin: config.auth?.baseUrl,
+  jobStore,
+  recordActivity: async ({ actor, channelId, activity }) => {
+    await channelStore.recordActivity(actor, channelId, activity);
+  },
   ...(webSearch ? { webSearch } : {}),
+  ...(computerGateway ? { computerGateway } : {}),
 });
-const jobStore = createJobStore(database);
 
 const app = createApp(
   config,

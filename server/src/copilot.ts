@@ -610,11 +610,11 @@ export function mountCopilotRuntime(
       signRunForActor,
       /*
        * Only when a computer exists, and only while the administrator has left the browser on.
-       * The tools themselves are registered by the surface, so a Bot is offered them without this
-       * and the guidance is what tells it how they go together: snapshot before acting, and ask a
-       * person to take the wheel at a sign-in rather than reporting the task as impossible. Absent
-       * computer, or the browser switched off, absent guidance: a Bot is not told about hands it
-       * has not got.
+       * The tools themselves execute on the server (and are offered to remote Bots by name);
+       * the surface only renders. The guidance is what tells a Bot how they go together:
+       * snapshot before acting, and ask a person to take the wheel at a sign-in rather than
+       * reporting the task as impossible. Absent computer, or the browser switched off, absent
+       * guidance: a Bot is not told about hands it has not got.
        */
       computerGuidance ?? (config.computer ? COMPUTER_GUIDANCE : undefined),
     ) as never,
