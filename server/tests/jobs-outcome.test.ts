@@ -4,6 +4,7 @@ import {
   buildJobOutcome,
   extractCrmRecordIds,
   firstSentence,
+  ownerStatusFor,
   summarizeJobResult,
 } from "../src/jobs/outcome";
 
@@ -39,12 +40,17 @@ describe("skinny job outcome", () => {
     ).toEqual(["p_ada", "c_acme", "o_1"]);
   });
 
-  test("writes status, ids, finishedAt, and summary onto the outcome object", () => {
+  test("maps the job onto Active | Needs you | Done with last_action", () => {
+    expect(ownerStatusFor("queued")).toBe("Active");
+    expect(ownerStatusFor("running")).toBe("Active");
+    expect(ownerStatusFor("succeeded")).toBe("Done");
+    expect(ownerStatusFor("failed")).toBe("Needs you");
     const finishedAt = new Date("2026-08-25T04:00:00.000Z");
     expect(
       buildJobOutcome({
         status: "succeeded",
-        finishedAt,
+        at: finishedAt,
+        goalId: "channel_1",
         channelId: "channel_1",
         agentId: "researcher",
         orgId: "org_local",
@@ -53,8 +59,12 @@ describe("skinny job outcome", () => {
           "Created person p_ada: Ada Lovelace. Next I will email her.",
       }),
     ).toEqual({
-      status: "succeeded",
+      status: "Done",
+      last_action: "Created person p_ada: Ada Lovelace.",
+      last_action_at: "2026-08-25T04:00:00.000Z",
+      jobStatus: "succeeded",
       finishedAt: "2026-08-25T04:00:00.000Z",
+      goalId: "channel_1",
       channelId: "channel_1",
       agentId: "researcher",
       orgId: "org_local",

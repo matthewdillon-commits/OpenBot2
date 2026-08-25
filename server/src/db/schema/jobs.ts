@@ -41,6 +41,12 @@ export const jobs = pgTable(
       .notNull()
       .references(() => channels.id, { onDelete: "cascade" }),
     /**
+     * The owner-facing unit is a goal. In this tree a goal is the existing channel plus its
+     * Intelligence thread — the same conversation, not a second transcript. Stored so
+     * startUnattendedRun can take goalId without inventing a Goals table this phase.
+     */
+    goalId: text("goal_id").notNull(),
+    /**
      * The coworker that should speak this job. Named on the row so a room of several does not
      * guess, and so a later audit read can say which Bot ran without joining the channel.
      */

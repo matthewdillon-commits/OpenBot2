@@ -189,15 +189,17 @@ company knowledge, MCP, and computer actions are the same rule.
 Conversations are durable. CopilotKit Intelligence holds the thread. Reopening
 a channel shows what was said, including after a process restart.
 
-**Send-and-go** starts an unattended job on that same channel. The API inserts a
-`jobs` row; the `worker` claims it with `FOR UPDATE SKIP LOCKED` and runs the
-coworker with server tools only (CRM, `search_web`, knowledge, granted MCP). The
-mapped Intelligence thread is reused — a second thread is not minted. A missing
+**Send-and-go** starts an unattended job on that same channel. The owner-facing
+unit is a goal: in this tree a goal is the existing channel plus its
+Intelligence thread. `startUnattendedRun` may take `goalId`; it must be that
+channel. A second transcript is not minted. The API inserts a `jobs` row; the
+`worker` claims it with `FOR UPDATE SKIP LOCKED` and runs the coworker with
+server tools only (CRM, `search_web`, knowledge, granted MCP). A missing
 mapping or missing thread is a refuse. Persist writes that same thread; if the
-write fails the job is failed. Computer tools still need the tab. When the job
-finishes, the row stores a skinny outcome: status, finished time, channel,
-coworker, org, acting user, a one-sentence summary, and any CRM record ids the
-write already returned. That is not an approval card.
+write fails the job is failed. Computer tools still need the tab. The job row
+stores a skinny outcome: status Active | Needs you | Done, `last_action` (one
+sentence), `last_action_at`, plus who ran and any CRM record ids the write
+already returned. That is not an approval card. There is no Goals home UI.
 
 ### How a coworker actually runs
 
@@ -306,10 +308,11 @@ other two have not:
    shared state.” `/platform` is sales-led provisioning, not a checkout.
 3. **The UX contract and the loop.** Home is not Composer + Goals. A person
    still picks a coworker from a roster (General Assistant, Knowledge, an
-   optional Risk Analyst). There is no goal object, no skinny status + last
-   action, no “See the work,” no approval cards. Observe / understand /
-   prioritize / act can be *performed by a person talking to a Bot*. Measure
-   and improve are not product surfaces. There are no outcome events.
+   optional Risk Analyst). A goal in this tree is the existing channel plus
+   its thread; the job row can hold Active | Needs you | Done and last
+   action. There is no Goals home, no “See the work,” and no approval cards.
+   Observe / understand / prioritize / act can be *performed by a person
+   talking to a Bot*. Measure and improve are not product surfaces.
 
 When a pull request claims one of those, it is done only when Part B of this
 file can say so with a file citation. Until then the honest sentence is the

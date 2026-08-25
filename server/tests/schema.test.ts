@@ -430,6 +430,7 @@ describe("OpenBot database schema", () => {
       expect.arrayContaining([
         "orgId",
         "channelId",
+        "goalId",
         "coworkerId",
         "actingUserId",
         "trigger",
@@ -452,6 +453,7 @@ describe("OpenBot database schema", () => {
     expect(migration).toContain(`"org_id" text DEFAULT 'org_local' NOT NULL`);
     expect(migration).toContain(`jobs_one_running_per_thread`);
     expect(migration).toContain(`"needs_you"`);
+    expect(migration).toContain(`"goal_id"`);
     expect(migration).toContain(`"outcome" jsonb`);
   });
 

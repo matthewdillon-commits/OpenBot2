@@ -99,6 +99,9 @@ const THREAD_MISSING =
 const PERSIST_FAILED =
   "The mapped Intelligence thread could not be updated. The job is not treated as finished.";
 
+const GOAL_MISMATCH =
+  "A goal maps to the existing channel and its Intelligence thread. This goal is not that channel.";
+
 function newMessageId(prefix: string) {
   return `${prefix}_${crypto.randomUUID()}`;
 }
@@ -199,6 +202,8 @@ export async function startUnattendedRun(input: {
   threadId: string;
   prompt: string;
   coworkerId: string;
+  /** Owner-facing unit. In this tree the goal is the channel; a different id is a refuse. */
+  goalId?: string;
   skillInstructions?: string[];
   deps: UnattendedRunDeps;
 }): Promise<UnattendedRunResult> {
@@ -208,6 +213,10 @@ export async function startUnattendedRun(input: {
     ...input.actor,
     orgId,
   });
+  const goalId = input.goalId?.trim() || input.channelId;
+  if (goalId !== input.channelId) {
+    return emptyResult("refused", GOAL_MISMATCH);
+  }
 
   const mapping = await input.deps.lookupMapping({
     userId: input.actor.id,
@@ -435,4 +444,5 @@ export const UNATTENDED_REFUSALS = {
   THREAD_MISMATCH,
   THREAD_MISSING,
   PERSIST_FAILED,
+  GOAL_MISMATCH,
 } as const;

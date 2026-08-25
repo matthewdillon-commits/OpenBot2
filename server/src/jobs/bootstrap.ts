@@ -187,6 +187,7 @@ export async function createUnattendedWorkerRuntime(
       threadId: job.threadId,
       prompt: job.payload.prompt,
       coworkerId: job.coworkerId,
+      goalId: job.goalId,
       skillInstructions: job.payload.skillInstructions,
       deps: {
         lookupMapping: async ({ userId, channelId, orgId }) => {

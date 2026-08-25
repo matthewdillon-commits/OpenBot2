@@ -27,6 +27,7 @@ function job(overrides: Partial<UnattendedJob> = {}): UnattendedJob {
     id: "job_1",
     orgId: "org_local",
     channelId: "channel_1",
+    goalId: "channel_1",
     coworkerId: "researcher",
     actingUserId: "user-1",
     trigger: "manual",
@@ -110,7 +111,23 @@ describe("job routes", () => {
       job: ReturnType<typeof publicJob>;
     };
     expect(body.job.threadId).toBe("thread-existing");
+    expect(body.job.goalId).toBe("channel_1");
     expect(enqueued[0]?.threadId).toBe("thread-existing");
+  });
+
+  test("refuses a goalId that is not the existing channel", async () => {
+    const { jobStore } = recordingStore();
+    const app = mount(jobStore, presentChannel);
+    const refused = await app.request("http://openbot.test/api/jobs", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        channelId: "channel_1",
+        goalId: "goal_other",
+        prompt: "Research Ada.",
+      }),
+    });
+    expect(refused.status).toBe(409);
   });
 
   test("refuses a channel the acting user cannot see", async () => {

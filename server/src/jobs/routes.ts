@@ -24,6 +24,7 @@ export type JobRoutesOptions = {
 export type PublicJob = {
   id: string;
   channelId: string;
+  goalId: string;
   coworkerId: string;
   threadId: string;
   status: UnattendedJob["status"];
@@ -41,13 +42,18 @@ export function publicJob(job: UnattendedJob): PublicJob {
   return {
     id: job.id,
     channelId: job.channelId,
+    goalId: job.goalId,
     coworkerId: job.coworkerId,
     threadId: job.threadId,
     status: job.status,
     trigger: job.trigger,
     prompt: job.payload.prompt,
     error: job.error,
-    resultText: job.payload.result?.text ?? job.outcome?.summary ?? null,
+    resultText:
+      job.payload.result?.text ??
+      job.outcome?.last_action ??
+      job.outcome?.summary ??
+      null,
     outcome: job.outcome,
     createdAt: job.createdAt.toISOString(),
     startedAt: job.startedAt?.toISOString() ?? null,
@@ -65,6 +71,7 @@ export function createJobRoutes(options: JobRoutesOptions) {
     const orgId = orgIdOf(actor);
     let body: {
       channelId?: unknown;
+      goalId?: unknown;
       prompt?: unknown;
       text?: unknown;
       agentId?: unknown;
@@ -75,8 +82,12 @@ export function createJobRoutes(options: JobRoutesOptions) {
     } catch {
       return context.json({ error: "Send a JSON body." }, 400);
     }
-    const channelId =
+    const requestedChannel =
       typeof body.channelId === "string" ? body.channelId.trim() : "";
+    const requestedGoal =
+      typeof body.goalId === "string" ? body.goalId.trim() : "";
+    const channelId = requestedChannel || requestedGoal;
+    const goalId = requestedGoal || channelId;
     const prompt =
       typeof body.prompt === "string"
         ? body.prompt.trim()
@@ -111,6 +122,15 @@ export function createJobRoutes(options: JobRoutesOptions) {
         409,
       );
     }
+    if (goalId !== channel.id) {
+      return context.json(
+        {
+          error:
+            "A goal maps to the existing channel and its Intelligence thread. This goal is not that channel.",
+        },
+        409,
+      );
+    }
     const requested =
       typeof body.agentId === "string" ? body.agentId.trim() : "";
     const coworkerId = requested || channel.agentIds[0] || "";
@@ -130,6 +150,7 @@ export function createJobRoutes(options: JobRoutesOptions) {
     const job = await jobStore.enqueue({
       orgId,
       channelId: channel.id,
+      goalId: channel.id,
       coworkerId,
       actingUserId: actor.id,
       threadId: channel.threadId,

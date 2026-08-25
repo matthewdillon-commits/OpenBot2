@@ -4,13 +4,17 @@ import { client } from "@/lib/client";
 /**
  * An unattended coworker job as the browser sees it.
  *
- * Status is the server's verdict. The prompt is what the person sent; `resultText` is what the
- * worker wrote back onto the channel when the job finished. `outcome` is the skinny durable
- * measure on the job row — not an approval card.
+ * Status is the server's worker verdict. The owner-facing unit is a goal: in this tree that
+ * is the existing channel plus its Intelligence thread. `outcome` is Active | Needs you |
+ * Done plus last_action — not an approval card.
  */
 export type UnattendedJobOutcome = {
-  status: "succeeded" | "failed" | "cancelled";
-  finishedAt: string;
+  status: "Active" | "Needs you" | "Done";
+  last_action: string;
+  last_action_at: string;
+  jobStatus?: "succeeded" | "failed" | "cancelled";
+  finishedAt?: string;
+  goalId: string;
   channelId: string;
   agentId: string;
   orgId: string;
@@ -22,6 +26,7 @@ export type UnattendedJobOutcome = {
 export type UnattendedJobRecord = {
   id: string;
   channelId: string;
+  goalId: string;
   coworkerId: string;
   threadId: string;
   status: "queued" | "running" | "succeeded" | "failed" | "cancelled";

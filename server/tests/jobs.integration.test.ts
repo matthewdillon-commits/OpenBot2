@@ -195,9 +195,14 @@ describe.skipIf(!postgresReachable)(
         toolSuccessCount: result.toolSuccessCount,
       });
       expect(finished?.status).toBe("succeeded");
+      expect(finished?.goalId).toBe(channel.id);
       expect(finished?.outcome).toEqual({
-        status: "succeeded",
+        status: "Done",
+        last_action: "Ada is at Acme.",
+        last_action_at: finished?.finishedAt?.toISOString(),
+        jobStatus: "succeeded",
         finishedAt: finished?.finishedAt?.toISOString(),
+        goalId: channel.id,
         channelId: channel.id,
         agentId: agent.id,
         orgId: "org_local",

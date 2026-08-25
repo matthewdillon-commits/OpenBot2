@@ -39,6 +39,7 @@ export type UnattendedJob = {
   id: string;
   orgId: string;
   channelId: string;
+  goalId: string;
   coworkerId: string;
   actingUserId: string;
   trigger: string;
@@ -57,6 +58,7 @@ export type UnattendedJob = {
 export type EnqueueJobInput = {
   orgId: string;
   channelId: string;
+  goalId?: string;
   coworkerId: string;
   actingUserId: string;
   threadId: string;
@@ -154,6 +156,7 @@ function toJob(row: typeof jobs.$inferSelect): UnattendedJob {
     id: row.id,
     orgId: row.orgId,
     channelId: row.channelId,
+    goalId: row.goalId,
     coworkerId: row.coworkerId,
     actingUserId: row.actingUserId,
     trigger: row.trigger,
@@ -190,6 +193,7 @@ export function createJobStore(database: Database): JobStore {
   return {
     async enqueue(input) {
       const id = `job_${crypto.randomUUID()}`;
+      const goalId = input.goalId?.trim() || input.channelId;
       const payload: JobPayload = {
         prompt: input.prompt,
         ...(input.skillInstructions && input.skillInstructions.length > 0
@@ -197,18 +201,30 @@ export function createJobStore(database: Database): JobStore {
           : {}),
         agentId: input.coworkerId,
       };
+      const outcome = buildJobOutcome({
+        status: "queued",
+        at: new Date(),
+        goalId,
+        channelId: input.channelId,
+        agentId: input.coworkerId,
+        orgId: orgIdOf({ orgId: input.orgId }),
+        actingUserId: input.actingUserId,
+        assistantText: input.prompt,
+      });
       const [row] = await database
         .insert(jobs)
         .values({
           id,
           orgId: orgIdOf({ orgId: input.orgId }),
           channelId: input.channelId,
+          goalId,
           coworkerId: input.coworkerId,
           actingUserId: input.actingUserId,
           trigger: input.trigger ?? "manual",
           payload,
           status: "queued",
           threadId: input.threadId,
+          outcome,
         })
         .returning();
       if (!row) {
@@ -258,11 +274,13 @@ export function createJobStore(database: Database): JobStore {
       const sourceTexts = collectPayloadTexts(payload);
       const outcome = buildJobOutcome({
         status,
-        finishedAt,
+        at: finishedAt,
+        goalId: existing.goalId,
         channelId: existing.channelId,
         agentId: existing.coworkerId,
         orgId: existing.orgId,
         actingUserId: existing.actingUserId,
+        needsYou: existing.needsYou,
         assistantText: payload.result?.text,
         error: update.error ?? existing.error,
         toolSuccessCount: update.toolSuccessCount,

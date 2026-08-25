@@ -87,6 +87,79 @@ describe("startUnattendedRun", () => {
     expect(result.error).toBe(UNATTENDED_REFUSALS.THREAD_BUSY);
   });
 
+  test("accepts goalId when it is the existing channel, and refuses a different id", async () => {
+    const ok = await startUnattendedRun({
+      actor,
+      orgId: actor.orgId,
+      channelId: "channel_1",
+      threadId: "thread-1",
+      prompt: "Find Ada.",
+      coworkerId: "researcher",
+      goalId: "channel_1",
+      deps: {
+        lookupMapping: async () => ({
+          threadId: "thread-1",
+          channelId: "channel_1",
+          userId: actor.id,
+        }),
+        waitForThread: async () => "idle",
+        persistThread: async () => true,
+        recordActivity: async () => undefined,
+        loadAgents: async () => [
+          {
+            id: "researcher",
+            name: "Researcher",
+            type: "built_in",
+            systemPrompt: "Research people.",
+          },
+        ],
+        loadTools: () => async () => [],
+        resolveModelApiKey: async () => "unused",
+        model: { provider: "openai", defaultModel: "gpt-4.1" },
+        timeoutMs: 5_000,
+        runCoworker: async ({ messages }) => ({
+          text: "Ada is at Acme.",
+          messages: [
+            ...messages,
+            { id: "a1", role: "assistant", content: "Ada is at Acme." },
+          ],
+        }),
+      },
+    });
+    expect(ok.outcome).toBe("succeeded");
+
+    const refused = await startUnattendedRun({
+      actor,
+      orgId: actor.orgId,
+      channelId: "channel_1",
+      threadId: "thread-1",
+      prompt: "Find Ada.",
+      coworkerId: "researcher",
+      goalId: "goal_other",
+      deps: {
+        lookupMapping: async () => ({
+          threadId: "thread-1",
+          channelId: "channel_1",
+          userId: actor.id,
+        }),
+        waitForThread: async () => "idle",
+        persistThread: async () => {
+          throw new Error("must not persist a mismatched goal");
+        },
+        recordActivity: async () => {
+          throw new Error("must not record activity on a refused run");
+        },
+        loadAgents: async () => [],
+        loadTools: () => async () => [],
+        resolveModelApiKey: async () => null,
+        model: { provider: "openai", defaultModel: "gpt-4.1" },
+        timeoutMs: 5_000,
+      },
+    });
+    expect(refused.outcome).toBe("refused");
+    expect(refused.error).toBe(UNATTENDED_REFUSALS.GOAL_MISMATCH);
+  });
+
   test("refuses when the mapped Intelligence thread is missing", async () => {
     const result = await startUnattendedRun({
       actor,

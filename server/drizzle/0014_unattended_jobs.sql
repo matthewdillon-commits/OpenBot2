@@ -3,6 +3,7 @@ CREATE TABLE "jobs" (
 	"id" text PRIMARY KEY NOT NULL,
 	"org_id" text DEFAULT 'org_local' NOT NULL,
 	"channel_id" text NOT NULL,
+	"goal_id" text NOT NULL,
 	"coworker_id" text NOT NULL,
 	"acting_user_id" text NOT NULL,
 	"trigger" text DEFAULT 'manual' NOT NULL,
