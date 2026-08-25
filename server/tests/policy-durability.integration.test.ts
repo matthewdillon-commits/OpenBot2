@@ -6,6 +6,7 @@ import {
 } from "../src/computer/policy-store";
 import { createDatabase } from "../src/db/client";
 import { actionPolicy } from "../src/db/schema";
+import { LOCAL_ORGANIZATION_ID } from "../src/orgs/constants";
 import { TEST_POOL } from "./support/database";
 
 /**
@@ -31,8 +32,18 @@ const rule = 'intent == "activate" && contains(element.name, "submit")';
 
 afterEach(async () => {
   await database.delete(actionPolicy).where(eq(actionPolicy.id, "current"));
-  await database.delete(actionPolicy).where(eq(actionPolicy.id, "org_local"));
+  await database
+    .delete(actionPolicy)
+    .where(eq(actionPolicy.id, LOCAL_ORGANIZATION_ID));
 });
+
+async function localRow() {
+  const rows = await database
+    .select()
+    .from(actionPolicy)
+    .where(eq(actionPolicy.id, LOCAL_ORGANIZATION_ID));
+  return rows;
+}
 
 describe("a boundary set while running", () => {
   test("is still there after a restart", async () => {
@@ -50,7 +61,9 @@ describe("a boundary set while running", () => {
 
   test("a deployment that never set one gets its configured default", async () => {
     const store = createPolicyStore(configured, database);
-    expect(await store.load()).toBe("configuration");
+    await store.load();
+    // Other organizations may already have a row. This org has none, so it still
+    // enforces what configuration says.
     expect(store.get()).toEqual(configured);
   });
 
@@ -62,7 +75,8 @@ describe("a boundary set while running", () => {
     // The saved row is removed rather than overwritten, so changing what configuration says then
     // changes what is enforced, which is what an operator expects a reset to mean.
     const after = createPolicyStore(configured, database);
-    expect(await after.load()).toBe("configuration");
+    await after.load();
+    expect(after.get()).toEqual(configured);
     expect(after.get().deny).toEqual([]);
   });
 
@@ -71,8 +85,8 @@ describe("a boundary set while running", () => {
     await store.set({ mode: "enforce", deny: ["first"], allow: ["true"] });
     await store.set({ mode: "dry-run", deny: ["second"], allow: ["true"] });
 
-    const rows = await database.select().from(actionPolicy);
-    // One boundary per deployment, by construction. Two rows would mean something has to choose.
+    const rows = await localRow();
+    // One boundary per organization, by construction. Two rows would mean something has to choose.
     expect(rows).toHaveLength(1);
     expect(rows[0]?.mode).toBe("dry-run");
     expect(rows[0]?.deny).toEqual(["second"]);
@@ -85,7 +99,7 @@ describe("a boundary set while running", () => {
       "admin@example.test",
     );
 
-    const [row] = await database.select().from(actionPolicy);
+    const [row] = await localRow();
     expect(row?.updatedBy).toBe("admin@example.test");
   });
 

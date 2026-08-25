@@ -228,13 +228,14 @@ describe("model credential store lookup", () => {
       ...ignoredIds,
     ];
     credentialIds.push(...allIds);
+    const keyId = "openai-api-key-tie-break";
 
     await database.insert(credentials).values([
       {
         id: matchingOldId,
         kind: "model",
         provider: "openai",
-        keyId: "openai-api-key",
+        keyId,
         encryptedValue: "old-matching-value",
         metadata: {},
         createdAt: new Date("2026-01-01T00:00:00.000Z"),
@@ -243,7 +244,7 @@ describe("model credential store lookup", () => {
         id: matchingLowerId,
         kind: "model",
         provider: "openai",
-        keyId: "openai-api-key",
+        keyId,
         encryptedValue: "lower-id-value",
         metadata: {},
         createdAt: new Date("2026-02-01T00:00:00.000Z"),
@@ -252,7 +253,7 @@ describe("model credential store lookup", () => {
         id: matchingHigherId,
         kind: "model",
         provider: "openai",
-        keyId: "openai-api-key",
+        keyId,
         encryptedValue: "higher-id-value",
         metadata: {},
         createdAt: new Date("2026-02-01T00:00:00.000Z"),
@@ -261,7 +262,7 @@ describe("model credential store lookup", () => {
         id: ignoredIds[0]!,
         kind: "connector",
         provider: "openai",
-        keyId: "openai-api-key",
+        keyId,
         encryptedValue: "wrong-kind-value",
         metadata: {},
         createdAt: new Date("2026-03-01T00:00:00.000Z"),
@@ -270,7 +271,7 @@ describe("model credential store lookup", () => {
         id: ignoredIds[1]!,
         kind: "model",
         provider: "other",
-        keyId: "openai-api-key",
+        keyId,
         encryptedValue: "wrong-provider-value",
         metadata: {},
         createdAt: new Date("2026-03-01T00:00:00.000Z"),
@@ -288,7 +289,7 @@ describe("model credential store lookup", () => {
         id: ignoredIds[3]!,
         kind: "model",
         provider: "openai",
-        keyId: "openai-api-key",
+        keyId,
         encryptedValue: "revoked-value",
         metadata: {},
         revokedAt: new Date("2026-03-01T00:00:00.000Z"),
@@ -299,7 +300,7 @@ describe("model credential store lookup", () => {
     await expect(
       createCredentialStore(database).readModelSecret({
         provider: "openai",
-        keyId: "openai-api-key",
+        keyId,
       }),
     ).resolves.toEqual({ encryptedValue: "higher-id-value" });
   });
