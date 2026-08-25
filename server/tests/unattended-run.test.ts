@@ -87,6 +87,89 @@ describe("startUnattendedRun", () => {
     expect(result.error).toBe(UNATTENDED_REFUSALS.THREAD_BUSY);
   });
 
+  test("refuses when the mapped Intelligence thread is missing", async () => {
+    const result = await startUnattendedRun({
+      actor,
+      orgId: actor.orgId,
+      channelId: "channel_1",
+      threadId: "thread-1",
+      prompt: "Follow up.",
+      coworkerId: "researcher",
+      deps: {
+        lookupMapping: async () => ({
+          threadId: "thread-1",
+          channelId: "channel_1",
+          userId: actor.id,
+        }),
+        waitForThread: async () => "missing",
+        persistThread: async () => {
+          throw new Error("must not persist when the thread is missing");
+        },
+        recordActivity: async () => {
+          throw new Error("must not record activity on a refused run");
+        },
+        loadAgents: async () => [],
+        loadTools: () => async () => [],
+        resolveModelApiKey: async () => null,
+        model: { provider: "openai", defaultModel: "gpt-4.1" },
+        timeoutMs: 5_000,
+      },
+    });
+
+    expect(result.outcome).toBe("refused");
+    expect(result.error).toBe(UNATTENDED_REFUSALS.THREAD_MISSING);
+    expect(result.persisted).toBeUndefined();
+  });
+
+  test("a persist failure is not a success", async () => {
+    const result = await startUnattendedRun({
+      actor,
+      orgId: actor.orgId,
+      channelId: "channel_1",
+      threadId: "thread-1",
+      prompt: "Find Ada.",
+      coworkerId: "researcher",
+      deps: {
+        lookupMapping: async () => ({
+          threadId: "thread-1",
+          channelId: "channel_1",
+          userId: actor.id,
+        }),
+        waitForThread: async () => "idle",
+        persistThread: async () => false,
+        recordActivity: async () => undefined,
+        loadAgents: async () => [
+          {
+            id: "researcher",
+            name: "Researcher",
+            type: "built_in",
+            systemPrompt: "Research people.",
+          },
+        ],
+        loadTools: () => async () => [],
+        resolveModelApiKey: async () => "unused",
+        model: { provider: "openai", defaultModel: "gpt-4.1" },
+        timeoutMs: 5_000,
+        runCoworker: async ({ messages }) => ({
+          text: "Ada is at Acme.",
+          messages: [
+            ...messages,
+            {
+              id: "assistant-1",
+              role: "assistant",
+              content: "Ada is at Acme.",
+            },
+          ],
+        }),
+      },
+    });
+
+    expect(result.outcome).toBe("failed");
+    expect(result.persisted).toBe(false);
+    expect(result.error).toBe(UNATTENDED_REFUSALS.PERSIST_FAILED);
+    expect(result.text).toBe("Ada is at Acme.");
+  });
+
   test("runs a built-in coworker that executes a server tool without a Request", async () => {
     const calls: unknown[] = [];
     const crmSearch: GrantedTool = {

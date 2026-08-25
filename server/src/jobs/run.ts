@@ -93,6 +93,12 @@ const THREAD_BUSY =
 const THREAD_MISMATCH =
   "The job named a different Intelligence thread than the one mapped to this channel.";
 
+const THREAD_MISSING =
+  "This channel’s Intelligence thread is gone. Unattended runs attach to the existing mapping and do not mint a thread.";
+
+const PERSIST_FAILED =
+  "The mapped Intelligence thread could not be updated. The job is not treated as finished.";
+
 function newMessageId(prefix: string) {
   return `${prefix}_${crypto.randomUUID()}`;
 }
@@ -223,13 +229,29 @@ export async function startUnattendedRun(input: {
             timeoutMs: input.deps.threadWaitMs ?? 15_000,
             pollMs: 500,
           })
-      : async () => "idle" as const);
-  const threadState = await wait({
-    threadId: mapping.threadId,
-    userId: intelligenceUser.id,
-  });
+      : undefined);
+  if (!wait) {
+    return emptyResult("refused", THREAD_MISSING);
+  }
+  let threadState: ThreadRunState;
+  try {
+    threadState = await wait({
+      threadId: mapping.threadId,
+      userId: intelligenceUser.id,
+    });
+  } catch (error) {
+    return emptyResult(
+      "failed",
+      error instanceof Error
+        ? error.message
+        : "The Intelligence thread could not be checked.",
+    );
+  }
   if (threadState === "busy") {
     return emptyResult("refused", THREAD_BUSY);
+  }
+  if (threadState === "missing") {
+    return emptyResult("refused", THREAD_MISSING);
   }
 
   const registered = await input.deps.loadAgents(actor);
@@ -325,16 +347,41 @@ export async function startUnattendedRun(input: {
       ...observedTools.texts,
     );
     let persisted = false;
-    if (input.deps.persistThread) {
+    try {
+      persisted = input.deps.persistThread
+        ? await input.deps.persistThread({
+            threadId: mapping.threadId,
+            userId: intelligenceUser.id,
+            messages: transcript.filter((message) => message.role !== "system"),
+            agentId: input.coworkerId,
+          })
+        : false;
+    } catch {
+      persisted = false;
+    }
+    if (!persisted) {
       try {
-        persisted = await input.deps.persistThread({
-          threadId: mapping.threadId,
-          userId: intelligenceUser.id,
-          messages: transcript.filter((message) => message.role !== "system"),
+        await input.deps.recordActivity({
+          actor,
+          channelId: input.channelId,
+          activity: {
+            text: PERSIST_FAILED,
+            agentId: input.coworkerId,
+            at: new Date(),
+          },
         });
       } catch {
-        persisted = false;
+        // Roster update is best-effort; the job row still records the failure.
       }
+      return {
+        outcome: "failed",
+        error: PERSIST_FAILED,
+        text,
+        persisted: false,
+        messages: transcript,
+        toolSuccessCount: observedTools.toolSuccessCount,
+        crmRecordIds,
+      };
     }
     if (text) {
       await input.deps.recordActivity({
@@ -350,7 +397,7 @@ export async function startUnattendedRun(input: {
     return {
       outcome: "succeeded",
       text,
-      persisted,
+      persisted: true,
       messages: transcript,
       toolSuccessCount: observedTools.toolSuccessCount,
       crmRecordIds,
@@ -386,4 +433,6 @@ export const UNATTENDED_REFUSALS = {
   MISSING_MAPPING,
   THREAD_BUSY,
   THREAD_MISMATCH,
+  THREAD_MISSING,
+  PERSIST_FAILED,
 } as const;

@@ -5,8 +5,9 @@
  * (acting user, channel) is the source of truth; a job that cannot find that row is refused.
  *
  * Intelligence WebSocket is for replay to an open tab. Persistence is a write to that same
- * thread (duck-typed SDK or HTTP), plus the job payload, plus channel `lastMessage`. A second
- * chat store must not become the source of truth.
+ * mapped thread (runtime `updateThread` or HTTP append). Persist failure is not success.
+ * A missing mapping or missing thread is a refuse — do not mint one. A second chat store
+ * must not become the source of truth.
  */
 import { identifyUserFromContext } from "./actor";
 
@@ -44,6 +45,7 @@ export type ThreadPersister = {
     threadId: string;
     userId: string;
     messages: UnattendedMessage[];
+    agentId?: string;
   }) => Promise<boolean>;
 };
 
@@ -65,9 +67,8 @@ function isBusyShape(value: unknown): boolean {
 /**
  * Ask Intelligence whether this thread already has a run.
  *
- * 404 is idle-enough: the mapping exists and the first persist will create history. 409, or a
- * running shape, is busy. Anything else is rethrown so a timeout is not silently treated as
- * "go ahead and start a second run".
+ * 404 is missing: refuse, do not mint. 409, or a running shape, is busy. Anything else is
+ * rethrown so a timeout is not silently treated as "go ahead and start a second run".
  */
 export function createThreadIdleChecker(intelligence: {
   getThread: (params: { threadId: string; userId: string }) => Promise<unknown>;
@@ -110,11 +111,11 @@ export async function waitForThreadIdle(
 }
 
 /**
- * Best-effort write of the unattended transcript onto the mapped Intelligence thread.
+ * Write the unattended transcript onto the mapped Intelligence thread.
  *
- * Tries duck-typed client methods first, then a conventional HTTP append. Returns whether
- * something accepted the write. The caller still stores the transcript on the job and updates
- * channel lastMessage either way.
+ * Confirms the thread exists, then tries the runtime write path (`updateThread` / append
+ * methods) and finally HTTP POST `/api/threads/:id/messages`. Returns whether that same
+ * thread accepted the write. Never calls createThread / getOrCreateThread.
  */
 export function createThreadPersister(options: {
   intelligence?: Record<string, unknown>;
@@ -124,9 +125,23 @@ export function createThreadPersister(options: {
 }): ThreadPersister {
   const fetchImpl = options.fetchImpl ?? fetch;
   return {
-    async append({ threadId, userId, messages }) {
+    async append({ threadId, userId, messages, agentId }) {
       const client = options.intelligence;
       if (client) {
+        const getThread = client.getThread;
+        if (typeof getThread === "function") {
+          try {
+            await (
+              getThread as (input: {
+                threadId: string;
+                userId: string;
+              }) => Promise<unknown>
+            ).call(client, { threadId, userId });
+          } catch (error) {
+            if (statusOf(error) === 404) return false;
+            throw error;
+          }
+        }
         for (const method of [
           "appendMessages",
           "addMessages",
@@ -140,16 +155,24 @@ export function createThreadPersister(options: {
                 userId: string;
                 messages: UnattendedMessage[];
               }) => Promise<unknown>
-            ).call(client, { threadId, userId, messages });
+            ).call(client, {
+              threadId,
+              userId,
+              messages,
+              ...(agentId ? { agentId } : {}),
+            });
             return true;
           }
         }
       }
       const apiUrl = options.apiUrl?.replace(/\/$/, "");
       if (!apiUrl || !options.apiKey) return false;
-      const response = await fetchImpl(
-        `${apiUrl}/threads/${threadId}/messages`,
-        {
+      const paths = [
+        `${apiUrl}/api/threads/${encodeURIComponent(threadId)}/messages`,
+        `${apiUrl}/threads/${encodeURIComponent(threadId)}/messages`,
+      ];
+      for (const path of paths) {
+        const response = await fetchImpl(path, {
           method: "POST",
           headers: {
             "content-type": "application/json",
@@ -157,9 +180,11 @@ export function createThreadPersister(options: {
             "x-user-id": userId,
           },
           body: JSON.stringify({ userId, messages }),
-        },
-      );
-      return response.ok;
+        });
+        if (response.status === 404) return false;
+        if (response.ok) return true;
+      }
+      return false;
     },
   };
 }
