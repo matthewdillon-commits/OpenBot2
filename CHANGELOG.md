@@ -17,6 +17,8 @@ Newest first. `Unreleased` is what is on `main` and not yet tagged.
 - **A tool loop now finishes on OpenAI-compatible hosts.** CopilotKit's `openai/<id>` string uses the Responses API, which emits `item_reference` on the second step. Hosts such as xAI reject that as Unprocessable Entity after the search has already run, so the answer never arrives. When `OPENAI_BASE_URL` is set, built-in Bots use Chat Completions instead. Real OpenAI, with no base URL, still uses Responses.
 - **A tenant chat no longer 500s its computer or 404s home.** Package agent ids are already org-scoped; prefixing them again overflowed the computer's 64-character id limit and failed every control poll. The limit is 128, already-scoped ids are left alone, and the home page no longer polls grants for the `"default"` placeholder. A brand-new channel also skips restoring a thread Intelligence has not created yet.
 
+- **A coworker can take more than eight tool steps.** A follow-up that reads two people, finds two websites, and updates four CRM rows used to stop after the eighth call with no closing sentence. The loop now allows twenty steps so a Bot sent off to do a job can finish both people and say what it did.
+
 ### CRM
 
 - **A person create can name the employer.** Passing `company_name` finds or creates that company and links it in the same write, so a research add does not leave Company blank. The People list shows job title and location under the name.

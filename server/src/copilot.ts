@@ -261,10 +261,12 @@ export function builtInAgentConfiguration(
 /**
  * How many turns of the tool loop one run may take.
  *
- * Enough for a Bot to search, read what came back, search again on a better term, and answer.
- * Beyond that a model is not making progress, and every extra step is somebody's money.
+ * Eight was enough to search twice and answer. A coworker sent to do a job — find two people,
+ * write them to the CRM, then update both with a stage and a company website — burns eight
+ * calls before it has finished the first person, and the run ends on a tool with no closing
+ * sentence. Twenty covers that shape of work. A model going in a circle is still bounded.
  */
-const TOOL_STEPS = 8;
+const TOOL_STEPS = 20;
 
 /**
  * Build the built-in and remote AG-UI agent map the runtime serves.
