@@ -186,9 +186,9 @@ no in-process Map). `/platform` remains for superadmins; checkout is the
 owner path. Home is still Composer + Goals. Rooms stay behind See the work.
 Approval cards stay on the goal.
 
-Honest leftovers, still in Part C: persist onto the Intelligence thread
-fails closed; one `TENANT_PACKAGE_DIR` for the process; a shared Chromium
-refuses a second org until `COMPUTER_SUPERVISOR_URL`.
+Honest leftovers, still in Part C: one `TENANT_PACKAGE_DIR` for the process;
+a shared Chromium refuses a second org until `COMPUTER_SUPERVISOR_URL`.
+Unattended persist is `CopilotRuntime.runner.run` (Part B).
 
 ---
 

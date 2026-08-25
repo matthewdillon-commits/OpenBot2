@@ -14,13 +14,13 @@ import { COMPUTER_GUIDANCE } from "../../shared/bot-prompt";
 import type { AgentActor } from "./agents/profile-types";
 import type { StallGuard } from "./channels/stall-guard";
 import type { DeploymentConfig } from "./config";
+import type { ToolRunContext } from "./jobs/run-context";
 import { orgIdOf } from "./orgs/constants";
 import {
   jsonSchemaForLlmTool,
   standardSchemaForLlmTool,
 } from "./plugins/llm-schema";
 import type { GrantedTool } from "./plugins/tools";
-import type { ToolRunContext } from "./jobs/run-context";
 
 /**
  * The CopilotKit runtime, always in Intelligence mode.
@@ -698,4 +698,24 @@ export function mountCopilotRuntime(
   });
 
   return createCopilotHonoHandler({ runtime, basePath });
+}
+
+/**
+ * The same CopilotRuntime Intelligence construction a tab turn uses, without the
+ * Hono handler. The worker calls `runtime.runner.run` on the existing mapped
+ * thread. identifyUser must be the Intelligence `org:user` already mapped to
+ * that thread — a hardcoded "unattended" identity would write into a different
+ * thread space.
+ */
+export function createUnattendedCopilotRuntime(
+  intelligence: CopilotKitIntelligence,
+  licenseToken: string | undefined,
+  identifyUser: IdentifyUser,
+): CopilotRuntime {
+  return new CopilotRuntime({
+    identifyUser,
+    intelligence,
+    licenseToken,
+    agents: {},
+  });
 }

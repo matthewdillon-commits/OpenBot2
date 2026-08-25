@@ -392,7 +392,8 @@ X-OpenBot-Trigger-Secret: <secret>
 ```
 
 A missing Intelligence thread is a refuse. The trigger does not mint one. Persist onto that thread
-still fails closed on this tree.
+is `CopilotRuntime.runner.run` — true only when `getThread` / `getThreadMessages` include the prompt
+and the result.
 
 ## Change workflow
 

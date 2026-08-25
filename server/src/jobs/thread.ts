@@ -4,14 +4,13 @@
  * Do not mint a thread. Intelligence user ids are already `org:user`. The mapping row for
  * (acting user, channel) is the source of truth; a job that cannot find that row is refused.
  *
- * Tab turns persist through the CopilotRuntime Intelligence runner while the browser is on the
- * turn. This path is not that runner. The client this tree already uses for thread reads is
- * `CopilotKitIntelligence.getThread` (see `intelligence-client.ts` and `channels/thread-status.ts`).
- * That class has no method that appends chat messages. Persist therefore confirms the mapped
- * thread with `getThread` and fails closed. Never probe guessed names, never POST a speculative
- * `/api/threads/:id/messages`, never treat `updateThread` (metadata) as a transcript write, and
- * never call `createThread` / `getOrCreateThread`. Persist false or throw is FAILED, never
- * succeeded. The job row is not a second transcript.
+ * The write is `CopilotRuntime.runner.run` (IntelligenceAgentRunner) during the
+ * unattended turn — the same runner a tab turn uses. This file does not write.
+ * After the run, persist is true only when `getThread` / `getThreadMessages` on
+ * that same mapped thread include the user prompt and the assistant result.
+ * `getThread` alone is a read, not a write. Never mint a thread. Never probe
+ * guessed append names or POST `/api/threads/:id/messages`. Persist false or
+ * throw is FAILED. The job row is not a second transcript.
  */
 import { identifyUserFromContext } from "./actor";
 
@@ -54,13 +53,18 @@ export type ThreadPersister = {
 };
 
 /**
- * The Intelligence methods this tree may call for an unattended persist attempt.
- *
- * Matches `createThreadReader` / `createThreadIdleChecker`: `getThread` only. Mint methods are
- * typed so a test can prove they are never invoked, not so this file can call them.
+ * Reads used after `CopilotRuntime.runner.run` to confirm the mapped thread
+ * now holds this turn. `getThread` is existence (and messages when the
+ * client puts them there). `getThreadMessages` is the transcript read on
+ * CopilotKitIntelligence. Mint methods are typed so a test can prove they
+ * are never invoked, not so this file can call them.
  */
 export type IntelligenceThreadClient = {
   getThread: (params: { threadId: string; userId: string }) => Promise<unknown>;
+  getThreadMessages?: (params: {
+    threadId: string;
+    userId: string;
+  }) => Promise<unknown>;
   createThread?: (...args: never[]) => unknown;
   getOrCreateThread?: (...args: never[]) => unknown;
 };
@@ -126,27 +130,59 @@ export async function waitForThreadIdle(
   return last;
 }
 
+function textsFrom(value: unknown): string[] {
+  if (!value || typeof value !== "object") return [];
+  const record = value as Record<string, unknown>;
+  const list = Array.isArray(record.messages)
+    ? record.messages
+    : Array.isArray(value)
+      ? value
+      : [];
+  const texts: string[] = [];
+  for (const item of list) {
+    if (!item || typeof item !== "object") continue;
+    const content = (item as { content?: unknown }).content;
+    if (typeof content === "string" && content.trim()) texts.push(content);
+  }
+  return texts;
+}
+
 /**
- * Confirm the mapped Intelligence thread still exists, then fail closed.
- *
- * `CopilotKitIntelligence` in this deployment exposes `getThread` for that check — the same
- * method `createThreadReader` uses. It does not expose a chat-message write. Returning false
- * here is the honest answer; the job becomes FAILED. Do not invent a REST append.
+ * After `runtime.runner.run`, confirm the mapped thread still exists and now
+ * holds this turn. `getThread` is the existence read. `getThreadMessages` is
+ * how this client exposes the transcript. Persist is true only when both the
+ * user prompt and the assistant result are on that same thread.
  */
 export function createThreadPersister(options: {
   intelligence?: IntelligenceThreadClient;
 }): ThreadPersister {
   return {
-    async append({ threadId, userId }) {
+    async append({ threadId, userId, messages }) {
       const client = options.intelligence;
       if (!client || typeof client.getThread !== "function") return false;
+      let thread: unknown;
       try {
-        await client.getThread({ threadId, userId });
+        thread = await client.getThread({ threadId, userId });
       } catch (error) {
         if (statusOf(error) === 404) return false;
         throw error;
       }
-      return false;
+      const history =
+        typeof client.getThreadMessages === "function"
+          ? await client.getThreadMessages({ threadId, userId })
+          : thread;
+      const texts = [...textsFrom(thread), ...textsFrom(history)];
+      const prompt = messages.find(
+        (message) => message.role === "user",
+      )?.content;
+      const result = [...messages]
+        .reverse()
+        .find((message) => message.role === "assistant")?.content;
+      if (!prompt?.trim() || !result?.trim()) return false;
+      return (
+        texts.some((text) => text.includes(prompt)) &&
+        texts.some((text) => text.includes(result))
+      );
     },
   };
 }

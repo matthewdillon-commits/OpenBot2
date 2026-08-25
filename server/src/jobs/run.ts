@@ -17,6 +17,7 @@ import {
   type SignRun,
   TOOL_STEPS,
 } from "../copilot";
+import { APPROVAL_WAIT_MARKER } from "../loop/types";
 import { orgIdOf } from "../orgs/constants";
 import { SpendCapError } from "../orgs/spend";
 import { REFUSAL_MARKER } from "../plugins/refusal";
@@ -26,7 +27,12 @@ import {
   identifyActorFromContext,
   identifyUserFromContext,
 } from "./actor";
+import { extractCrmRecordIds } from "./outcome";
 import type { ToolRunContext } from "./run-context";
+import {
+  runUnattendedThroughRuntime,
+  type UnattendedCopilotRuntime,
+} from "./runtime-run";
 import type {
   ThreadIdleChecker,
   ThreadLookup,
@@ -35,8 +41,6 @@ import type {
   UnattendedMessage,
 } from "./thread";
 import { waitForThreadIdle } from "./thread";
-import { extractCrmRecordIds } from "./outcome";
-import { APPROVAL_WAIT_MARKER } from "../loop/types";
 import {
   gateUserOAuthTools,
   serverSideToolsOnly,
@@ -92,7 +96,14 @@ export type UnattendedRunDeps = {
   /** Model spend for this org. Crossing the cap refuses the run. */
   assertSpend?: (orgId: string) => Promise<void>;
   /**
-   * Test seam. Production builds the coworker through `buildAgents` and calls `runAgent`.
+   * Production: the CopilotRuntime whose `runner.run` is the Intelligence persist
+   * path. Tests may inject a recording runner. `runCoworker` still short-circuits
+   * the agent call for fixtures that do not need the runner.
+   */
+  runtime?: UnattendedCopilotRuntime;
+  /**
+   * Test seam. Production builds the coworker through `buildAgents` and
+   * `CopilotRuntime.runner.run`.
    */
   runCoworker?: (input: {
     agent: AbstractAgent;
@@ -361,7 +372,17 @@ export async function startUnattendedRun(input: {
     },
   ];
 
-  const run = input.deps.runCoworker ?? defaultRunCoworker;
+  const run =
+    input.deps.runCoworker ??
+    (input.deps.runtime
+      ? (args: { agent: AbstractAgent; messages: UnattendedMessage[] }) =>
+          runUnattendedThroughRuntime({
+            runtime: input.deps.runtime as UnattendedCopilotRuntime,
+            agent: args.agent,
+            threadId: mapping.threadId,
+            messages: args.messages,
+          })
+      : defaultRunCoworker);
   let timedOut = false;
   const timeout = new Promise<never>((_, reject) => {
     setTimeout(() => {

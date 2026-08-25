@@ -174,8 +174,8 @@ improve closed on the **same goal object**: a high-risk permit waits as an
 approval card; the owner keep / revise / revert; the goal stores
 expected_impact and outcome; the next orchestrator turn sees that decision.
 Self-serve SaaS exists (RLS, Stripe seats, invite email, per-org SSO, spend
-caps, traces). Persist onto the Intelligence thread still fails closed. How
-we climb the rest is [roadmap.md](roadmap.md).
+caps, traces). Unattended persist is `CopilotRuntime.runner.run` on the
+existing mapped thread. How we climb the rest is [roadmap.md](roadmap.md).
 
 ---
 
@@ -203,13 +203,12 @@ granted MCP, and computer tools when the gateway is configured and the
 browser is on. **Cron**, **webhook**, and **inbound email** enqueue that same
 row from a standing org-scoped config (actor, goal/channel, thread, coworker,
 prompt). Missing mapping or missing thread is a refuse — they do not mint a
-thread. Persist must write that same mapped thread. The client this tree
-already uses for thread reads is `CopilotKitIntelligence.getThread`
-(`server/src/intelligence-client.ts`,
-`server/src/channels/thread-status.ts`). That class has no method that appends
-chat messages — tab turns persist through the CopilotRuntime runner, which
-this path does not use. Persist therefore fails closed and the job is failed,
-never succeeded. The job row is not a second transcript: prompt plus a skinny
+thread. The worker starts the coworker through `CopilotRuntime.runner.run` —
+the same Intelligence runner a tab turn uses — on the existing mapped thread.
+After the run, persist is true only when `getThread` / `getThreadMessages`
+on that same thread include the user prompt and the assistant result. Persist
+false or throw is failed, never succeeded. The job row is not a second
+transcript: prompt plus a skinny
 `resultText` / outcome only. The job row stores a skinny outcome: status
 Active | Needs you | Done, `last_action` (one
 sentence), `last_action_at`, plus who ran and any CRM record ids the write
@@ -273,9 +272,9 @@ the CRM” with Send-and-go, close the tab, and the worker still runs those
 server tools — including the computer. A standing cron, a signed webhook POST,
 or an inbound email to a mapped mailbox starts the same job after the tab is
 closed. A login or secret pauses as Needs you; the ask stays on the computer
-if the tab is closed. The turn is not written onto the Intelligence thread, so
-coming back does not yet show that result on the same mapped thread. Reopen
-the channel: the job is honestly failed if persist is still fail-closed.
+if the tab is closed. Persist is `CopilotRuntime.runner.run` on the existing
+mapped thread — close-tab / come-back shows the result when that write is
+confirmed.
 
 ### Organizations
 
@@ -331,8 +330,10 @@ What that is not:
   A second organization is refused until `COMPUTER_SUPERVISOR_URL` is how
   computers are made — one computer per org×bot. The supervisor needs a Docker
   socket, which the shippable image does not include.
-- **Not a durable unattended transcript.** Persist onto the Intelligence
-  thread still fails closed (`getThread` only).
+- **Not a durable unattended transcript unless persist confirmed.** Persist is
+  `CopilotRuntime.runner.run` on the existing mapped thread. Persist false or
+  throw is FAILED (`getThread` / `getThreadMessages` must include the prompt
+  and the result). The job row is still not a second transcript.
 
 ### What to run it as
 
@@ -344,17 +345,20 @@ computer when the supervisor is actually running beside it. Home is still
 Composer + Goals. Rooms stay behind See the work. Approval cards stay on the
 goal.
 
-**Not a durable unattended transcript.** Send-and-go, cron, webhook, inbound
+**Unattended persist is `CopilotRuntime.runner.run`.** Send-and-go, cron, webhook, inbound
 email, and specialist spawn all enqueue the same job and the worker runs it after
-the tab closes, including computer tools when the gateway is on. Persist onto
-the Intelligence thread still fails closed — close-tab / come-back on the same
-mapped thread is not true yet unless persist is later given a write.
+the tab closes, including computer tools when the gateway is on. Persist writes
+onto the existing Intelligence thread through the same runner a tab turn uses.
+Close-tab / come-back on the same mapped thread is true when
+`getThread` / `getThreadMessages` include the prompt and the result. Persist
+false is failed, never succeeded.
 
 **The self-improving loop is closed on the goal.** High-risk actions wait as
 an approval card on that goal. The owner keep / revise / revert. Outcome
 (worked / didn't / unknown) is stored on the same object. The next
-orchestrator turn sees that decision. Persist still fails closed. There is
-no Measure or Approvals nav, and no second runner.
+orchestrator turn sees that decision. Persist is
+`CopilotRuntime.runner.run`. There is no Measure or Approvals nav, and no
+second runner.
 
 ### Code that says this
 
@@ -389,7 +393,7 @@ no Measure or Approvals nav, and no second runner.
 | Cmd-K Rooms | `app/src/components/command-palette.tsx` |
 | Cron standing row and due claim | `server/src/jobs/triggers.ts` `CLAIM_DUE_CRON_SQL`, `tickDueCrons`; `job_triggers` |
 | Webhook and inbound email | `server/src/jobs/inbound.ts` `POST /api/inbound/webhook/:id`, `POST /api/inbound/email` |
-| Unattended persist fails closed | `server/src/jobs/thread.ts` `createThreadPersister` (`getThread` only) |
+| Unattended persist via runtime runner | `server/src/jobs/runtime-run.ts` `runUnattendedThroughRuntime` (`CopilotRuntime.runner.run`) |
 | Shared computer without supervisor | `docs/deployment.md`, `COMPUTER_SUPERVISOR_URL` |
 | Composio keyed by org | `server/src/composio/client.ts` |
 | High-risk wait as an approval card | `server/src/loop/wait.ts` `createHighRiskWait`; `server/src/crm/gateway.ts`; `server/src/computer/gateway.ts`; `server/src/plugins/store.ts` |
@@ -403,26 +407,21 @@ no Measure or Approvals nav, and no second runner.
 
 ## C. What it is not yet
 
-Three things people will assume from Part A. The two doors have landed;
-the loop is closed on the goal; self-serve SaaS has landed; persist has not:
+Two things people will assume from Part A. The two doors have landed;
+the loop is closed on the goal; self-serve SaaS has landed; unattended persist
+is in Part B:
 
-1. **A durable unattended transcript.** Send-and-go, cron, webhook, inbound
-   email, and specialist spawn exist (Part B), including computer tools on the
-   server and a `needs_you` pause. Persist onto the Intelligence thread still
-   fails closed — close-tab / come-back on the same mapped thread is not true
-   yet.
-2. **Self-serve SaaS leftovers.** RLS, Stripe checkout and seats, invite
+1. **Self-serve SaaS leftovers.** RLS, Stripe checkout and seats, invite
    email, per-org SSO, spend caps, OpenTelemetry, and a stated multi-replica
    story (Postgres / Stripe / OTel, no in-process Map) exist (Part B). Still
-   true: persist fails closed; `TENANT_PACKAGE_DIR` is one package for the
+   true: `TENANT_PACKAGE_DIR` is one package for the
    process; a shared Chromium refuses a second org until
    `COMPUTER_SUPERVISOR_URL`. `/platform` remains for superadmins; checkout is
    the owner path.
-3. **The rest of Stage 4 compounding.** Approval cards, expected impact,
+2. **The rest of Stage 4 compounding.** Approval cards, expected impact,
    outcome, and keep / revise / revert live on the same goal (Part B). Home is
    still Composer + Goals. See the work still opens that goal’s room. There is
-   no experimentation platform, no Measure / Approvals nav, and persist onto
-   the Intelligence thread still fails closed.
+   no experimentation platform and no Measure / Approvals nav.
 
 When a pull request claims one of those, it is done only when Part B of this
 file can say so with a file citation. Until then the honest sentence is the
