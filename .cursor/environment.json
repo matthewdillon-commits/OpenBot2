@@ -1,0 +1,23 @@
+{
+  "name": "LimitlessAI",
+  "install": "bash scripts/cloud-install.sh",
+  "start": "bash scripts/cloud-start.sh",
+  "terminals": [
+    {
+      "name": "server",
+      "description": "LimitlessAI API on port 3001. Reads ../.env. OPENBOT_SINGLE_USER=true admits every request as the local administrator.",
+      "command": "cd /workspace; until [ -f scripts/run-api.sh ]; do sleep 1; done; bash scripts/run-api.sh"
+    },
+    {
+      "name": "app",
+      "description": "Vite UI on port 3010, proxying /api to the server. Bound to 0.0.0.0 so Cloud Agent port forwarding can reach it.",
+      "command": "cd /workspace; until [ -f scripts/run-app.sh ]; do sleep 1; done; bash scripts/run-app.sh"
+    },
+    {
+      "name": "worker",
+      "description": "Claims unattended jobs (Send-and-go, cron, webhook, inbound email).",
+      "command": "cd /workspace; until [ -f scripts/run-worker.sh ]; do sleep 1; done; bash scripts/run-worker.sh"
+    }
+  ],
+  "ports": [{ "name": "app", "port": 3010 }, { "name": "api", "port": 3001 }]
+}

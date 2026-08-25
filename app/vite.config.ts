@@ -14,6 +14,8 @@ export default defineConfig({
   server: {
     port: Number.parseInt(process.env.APP_PORT ?? "3010", 10),
     strictPort: true,
+    // Cloud Agent preview URLs are not localhost. Without this Vite 7 answers 403.
+    allowedHosts: true,
     proxy: {
       // `ws: true` is required for the live screen. Without it Vite answers the upgrade request with
       // the app's HTML and the socket fails with an opaque error that looks like a server problem.
