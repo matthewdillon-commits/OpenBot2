@@ -19,6 +19,7 @@ import {
   withOutgoingEcho,
 } from "@/components/channels/transcript-messages";
 import { agentListQueryOptions } from "@/lib/agents/queries";
+import { currentUserQueryOptions } from "@/lib/auth/queries";
 import { recordChannelActivityMutationOptions } from "@/lib/channels/mutations";
 import type { AgentChannel } from "@/lib/channels/queries";
 import { useActiveBot } from "@/lib/copilot/active-bot";
@@ -28,6 +29,12 @@ import { stoppedReason } from "@/lib/copilot/stopped-turn";
 import { readThreadMessages } from "@/lib/copilot/thread-messages";
 import { enqueueJobMutationOptions } from "@/lib/jobs/mutations";
 import { jobQueryOptions } from "@/lib/jobs/queries";
+import {
+  agentIsOrchestrator,
+  coworkerDisplayName,
+  pickOrchestratorId,
+} from "@/lib/orchestrator";
+import { appConfig } from "@/lib/generated/application-config";
 import { useSkillCommands } from "@/lib/plugins/skill-commands";
 import { queryClient } from "@/query-client";
 import { newId } from "../../lib/new-id";
@@ -64,6 +71,8 @@ export function ChannelChat({
   // The core attaches the frontend tool registry; direct agent runs do not.
   const { copilotkit } = useCopilotKit();
   const { data: agentProfiles } = useQuery(agentListQueryOptions());
+  const { data: currentUser } = useQuery(currentUserQueryOptions());
+  const productName = appConfig.brand.productName;
   /**
    * First-message seed from the compose screen. It is taken once per mount and retained until the
    * agent has its own messages because joining a fresh thread can temporarily empty the agent.
@@ -83,9 +92,15 @@ export function ChannelChat({
     };
   });
 
-  const leadId = channel.agentIds[0] ?? "";
+  const leadId =
+    pickOrchestratorId(agentProfiles, channel.agentIds) ??
+    channel.agentIds[0] ??
+    "";
   const [speaker, setSpeaker] = useState(
-    () => resolveSpeaker(channel.agentIds, seed.speakerId) ?? leadId,
+    () =>
+      resolveSpeaker(channel.agentIds, seed.speakerId) ??
+      pickOrchestratorId(undefined, channel.agentIds) ??
+      leadId,
   );
   const [composerDraft, setComposerDraft] = useState<ComposerDraft | null>(
     null,
@@ -491,10 +506,27 @@ export function ChannelChat({
     // Keep `seed` in state; transcriptMessages hides it as soon as agent messages exist.
   }, [joinGatePromise]);
 
+  const mentionProfiles =
+    currentUser?.canSeeTheWork === true
+      ? agentProfiles?.filter((profile) =>
+          channel.agentIds.includes(profile.id),
+        )
+      : agentProfiles?.filter(
+          (profile) =>
+            channel.agentIds.includes(profile.id) &&
+            agentIsOrchestrator(profile),
+        );
+  const mentionAgents = toAgentOptions(
+    mentionProfiles?.map((profile) => ({
+      ...profile,
+      name: coworkerDisplayName(profile, productName),
+    })),
+  );
+
   return (
     <ConversationProvider ask={askFromComponent}>
       <ConversationView
-        agents={toAgentOptions(agentProfiles)}
+        agents={mentionAgents}
         busy={agent.isRunning}
         // The `/` menu follows who will speak — a mentioned member, else the current speaker.
         commands={skillCommands}

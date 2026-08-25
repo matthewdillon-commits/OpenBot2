@@ -12,12 +12,14 @@ export const Channel = memo(function Channel({
   name,
   lastMessage,
   lastMessageAt,
+  goalStatus,
 }: {
   channelId: string;
   participantIds: string[];
   name: string;
   lastMessage?: string;
   lastMessageAt?: string;
+  goalStatus?: "Active" | "Needs you" | "Done";
 }) {
   return (
     <Link
@@ -40,6 +42,11 @@ export const Channel = memo(function Channel({
           </div>
         </div>
         <div className="mt-px flex h-4 items-center gap-1.5">
+          {goalStatus ? (
+            <span className="shrink-0 text-[12px] leading-4 text-muted-foreground">
+              {goalStatus}
+            </span>
+          ) : null}
           <span className="min-w-0 flex-1 truncate text-[12px] leading-4 text-muted-foreground">
             {lastMessage}
           </span>

@@ -29,6 +29,13 @@ import { type GrantedTool, grantedTools } from "../plugins/tools";
 import type { WebSearch } from "../web-search/tavily";
 import { webSearchTool } from "../web-search/tool";
 import type { JobStore } from "./store";
+import type { ToolRunContext } from "./run-context";
+import {
+  type StartSpecialistInput,
+  type StartSpecialistResult,
+} from "./specialist";
+import { startSpecialistTool } from "./specialist-tool";
+import { agentIsOrchestrator } from "../orchestrator";
 
 export type UserOAuthLookup = {
   hasConnection: (input: {
@@ -59,6 +66,13 @@ export type LoadToolsForActorDeps = {
     channelId: string;
     activity: ChannelActivity;
   }) => Promise<void>;
+  /**
+   * Orchestrator-only: start a finite specialist on this goal. Absent leaves
+   * no start_specialist tool — leftover specialists do not spawn each other.
+   */
+  startSpecialist?: (
+    input: StartSpecialistInput,
+  ) => Promise<StartSpecialistResult>;
 };
 
 const FRONTEND_ONLY_TOOL = /^gallery/;
@@ -105,99 +119,114 @@ export async function gateUserOAuthTools(
  * browser is on. The gateway still decides every acting call.
  */
 export function createLoadToolsForActor(deps: LoadToolsForActorDeps) {
-  return (actorId: string, orgId?: string) => async (botId: string) => {
-    const scoped = orgIdOf({ orgId });
-    const granted = await grantedTools({
-      store: deps.pluginStore,
-      botId,
-      actorId,
-      orgId: scoped,
-    });
-    const extra: GrantedTool[] = [];
-    if (await deps.knowledgeSearch.anyDocuments(scoped)) {
-      extra.push(
-        knowledgeSearchTool({
-          search: deps.knowledgeSearch,
-          auditStore: deps.auditStore,
-          asker: await askerFor(deps.database, actorId),
-          botId,
-          orgId: scoped,
-        }),
-      );
-    }
-    if (deps.webSearch) {
-      extra.push(
-        webSearchTool({
-          search: deps.webSearch,
-          auditStore: deps.auditStore,
-          policy: () => deps.policyFor(scoped),
-          botId,
-          actorId,
-          actorUserId: actorId,
-          orgId: scoped,
-        }),
-      );
-    }
-    extra.push(
-      ...crmTools({
-        crm: deps.crmGateway,
+  return (actorId: string, orgId?: string, runContext?: ToolRunContext) =>
+    async (botId: string) => {
+      const scoped = orgIdOf({ orgId });
+      const granted = await grantedTools({
+        store: deps.pluginStore,
         botId,
-        actor: {
-          id: actorId,
-          role: "user",
-          orgId: scoped,
-        } satisfies AgentActor,
-        publicOrigin: deps.publicOrigin,
-      }),
-    );
-    if (deps.computerGateway && isBrowserEnabled(deps.policyFor(scoped))) {
+        actorId,
+        orgId: scoped,
+      });
+      const extra: GrantedTool[] = [];
+      if (await deps.knowledgeSearch.anyDocuments(scoped)) {
+        extra.push(
+          knowledgeSearchTool({
+            search: deps.knowledgeSearch,
+            auditStore: deps.auditStore,
+            asker: await askerFor(deps.database, actorId),
+            botId,
+            orgId: scoped,
+          }),
+        );
+      }
+      if (deps.webSearch) {
+        extra.push(
+          webSearchTool({
+            search: deps.webSearch,
+            auditStore: deps.auditStore,
+            policy: () => deps.policyFor(scoped),
+            botId,
+            actorId,
+            actorUserId: actorId,
+            orgId: scoped,
+          }),
+        );
+      }
       extra.push(
-        ...computerTools({
-          computer: deps.computerGateway,
+        ...crmTools({
+          crm: deps.crmGateway,
           botId,
           actor: {
             id: actorId,
             role: "user",
             orgId: scoped,
-          },
-          onNeedsYou: async (event) => {
-            if (!deps.jobStore) return;
-            const lastAction = lastActionForNeedsYou(event);
-            const paused = await deps.jobStore.markNeedsYou({
-              orgId: scoped,
-              coworkerId: botId,
-              actingUserId: actorId,
-              lastAction,
-            });
-            if (!deps.recordActivity) return;
-            for (const job of paused) {
-              try {
-                await deps.recordActivity({
-                  actor: {
-                    id: actorId,
-                    role: "user",
-                    orgId: scoped,
-                  },
-                  channelId: job.channelId,
-                  activity: {
-                    text: lastAction,
-                    agentId: botId,
-                    at: new Date(),
-                  },
-                });
-              } catch {
-                // Roster notify is best-effort; the computer still holds the ask.
-              }
-            }
-          },
+          } satisfies AgentActor,
+          publicOrigin: deps.publicOrigin,
         }),
       );
-    }
-    const combined = extra.length === 0 ? granted : [...granted, ...extra];
-    return gateUserOAuthTools(
-      combined,
-      { id: actorId, orgId: scoped },
-      deps.userOAuth,
-    );
-  };
+      if (deps.computerGateway && isBrowserEnabled(deps.policyFor(scoped))) {
+        extra.push(
+          ...computerTools({
+            computer: deps.computerGateway,
+            botId,
+            actor: {
+              id: actorId,
+              role: "user",
+              orgId: scoped,
+            },
+            onNeedsYou: async (event) => {
+              if (!deps.jobStore) return;
+              const lastAction = lastActionForNeedsYou(event);
+              const paused = await deps.jobStore.markNeedsYou({
+                orgId: scoped,
+                coworkerId: botId,
+                actingUserId: actorId,
+                lastAction,
+              });
+              if (!deps.recordActivity) return;
+              for (const job of paused) {
+                try {
+                  await deps.recordActivity({
+                    actor: {
+                      id: actorId,
+                      role: "user",
+                      orgId: scoped,
+                    },
+                    channelId: job.channelId,
+                    activity: {
+                      text: lastAction,
+                      agentId: botId,
+                      at: new Date(),
+                    },
+                  });
+                } catch {
+                  // Roster notify is best-effort; the computer still holds the ask.
+                }
+              }
+            },
+          }),
+        );
+      }
+      if (deps.startSpecialist && agentIsOrchestrator({ id: botId }, scoped)) {
+        extra.push(
+          startSpecialistTool({
+            actor: {
+              id: actorId,
+              role: "user",
+              orgId: scoped,
+            },
+            parentCoworkerId: botId,
+            runContext,
+            start: deps.startSpecialist,
+          }),
+        );
+      }
+      const combined = extra.length === 0 ? granted : [...granted, ...extra];
+      return gateUserOAuthTools(
+        combined,
+        { id: actorId, orgId: scoped },
+        deps.userOAuth,
+      );
+    };
 }

@@ -72,6 +72,7 @@ describe("server authorization", () => {
         image: "https://example.test/member.png",
         role: "user",
         platformSuperadmin: false,
+        canSeeTheWork: false,
       },
       organizations: [],
     });

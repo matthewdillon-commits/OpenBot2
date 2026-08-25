@@ -19,6 +19,7 @@ import {
   standardSchemaForLlmTool,
 } from "./plugins/llm-schema";
 import type { GrantedTool } from "./plugins/tools";
+import type { ToolRunContext } from "./jobs/run-context";
 
 /**
  * The CopilotKit runtime, always in Intelligence mode.
@@ -518,7 +519,11 @@ export function createRequestAgents(
    */
   stallGuard?: StallGuard,
   /** What each Bot may call, resolved for whoever is asking. Absent means no tools. */
-  loadToolsForActor?: (actorId: string, orgId?: string) => LoadToolsForBot,
+  loadToolsForActor?: (
+    actorId: string,
+    orgId?: string,
+    runContext?: ToolRunContext,
+  ) => LoadToolsForBot,
   /** Resolved per request, because what it signs is who this request turned out to be. */
   signRunForActor?: (actorId: string, orgId?: string) => SignRun,
   /**
@@ -529,15 +534,26 @@ export function createRequestAgents(
    * deployment has no computer, or the caller has already decided not to mention one.
    */
   computerGuidance?: string | ((orgId?: string) => string | undefined),
+  /**
+   * The goal this CopilotKit turn is on. Looked up from the Intelligence thread;
+   * a missing mapping means start_specialist refuses rather than minting one.
+   */
+  resolveRunContext?: (
+    actor: AgentActor,
+    request: Request,
+  ) => Promise<ToolRunContext | undefined>,
 ) {
   return async ({ request }: { request: Request }) => {
     const actor = await identifyActor(request);
+    const runContext = resolveRunContext
+      ? await resolveRunContext(actor, request)
+      : undefined;
     return resolveRuntimeAgents(
       () => loadAgents(actor),
       model,
       resolveModelApiKey,
       stallGuard,
-      loadToolsForActor?.(actor.id, actor.orgId),
+      loadToolsForActor?.(actor.id, actor.orgId, runContext),
       signRunForActor?.(actor.id, actor.orgId),
       typeof computerGuidance === "function"
         ? computerGuidance(actor.orgId)
@@ -566,7 +582,11 @@ export function mountCopilotRuntime(
    * there is no reason for a caller to have to say `undefined` here to reach `basePath`.
    */
   stallGuard: StallGuard,
-  loadToolsForActor?: (actorId: string, orgId?: string) => LoadToolsForBot,
+  loadToolsForActor?: (
+    actorId: string,
+    orgId?: string,
+    runContext?: ToolRunContext,
+  ) => LoadToolsForBot,
   signRunForActor?: (actorId: string, orgId?: string) => SignRun,
   /**
    * What built-in Bots are told about the computer, asked per request.
@@ -576,6 +596,10 @@ export function mountCopilotRuntime(
    * mention one; when a computer is configured and nothing is passed, the shipped guidance is used.
    */
   computerGuidance?: string | ((orgId?: string) => string | undefined),
+  resolveRunContext?: (
+    actor: AgentActor,
+    request: Request,
+  ) => Promise<ToolRunContext | undefined>,
   basePath = "/api/copilotkit",
 ) {
   const { intelligence } = config.runtime;
@@ -617,6 +641,7 @@ export function mountCopilotRuntime(
        * guidance: a Bot is not told about hands it has not got.
        */
       computerGuidance ?? (config.computer ? COMPUTER_GUIDANCE : undefined),
+      resolveRunContext,
     ) as never,
   });
 

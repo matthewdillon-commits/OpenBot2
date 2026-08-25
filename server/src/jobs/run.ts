@@ -25,6 +25,7 @@ import {
   identifyActorFromContext,
   identifyUserFromContext,
 } from "./actor";
+import type { ToolRunContext } from "./run-context";
 import type {
   ThreadIdleChecker,
   ThreadLookup,
@@ -68,7 +69,11 @@ export type UnattendedRunDeps = {
     activity: ChannelActivity;
   }) => Promise<void>;
   loadAgents: (actor: AgentActor) => Promise<RegisteredAgent[]>;
-  loadTools: (actorId: string, orgId?: string) => LoadToolsForBot;
+  loadTools: (
+    actorId: string,
+    orgId?: string,
+    runContext?: ToolRunContext,
+  ) => LoadToolsForBot;
   signRun?: (actorId: string, orgId?: string) => SignRun;
   resolveModelApiKey: () => Promise<string | null>;
   model: RuntimeModel;
@@ -275,7 +280,11 @@ export async function startUnattendedRun(input: {
     );
   }
 
-  const rawTools = await input.deps.loadTools(actor.id, orgId)(coworker.id);
+  const rawTools = await input.deps.loadTools(actor.id, orgId, {
+    channelId: input.channelId,
+    threadId: mapping.threadId,
+    goalId,
+  })(coworker.id);
   const gated = await gateUserOAuthTools(
     serverSideToolsOnly(rawTools),
     { id: actor.id, orgId },

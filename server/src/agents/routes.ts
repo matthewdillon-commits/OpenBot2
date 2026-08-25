@@ -463,6 +463,7 @@ function agentDto(actor: AgentActor, agent: AgentProfile) {
     // another user's coworker, so a roster that split "mine" on it would file other people's work
     // under yours, and only for administrators, who are the least likely to notice.
     mine: agent.ownerUserId === actor.id,
+    standingRole: agent.standingRole,
   };
 }
 

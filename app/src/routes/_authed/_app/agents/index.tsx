@@ -1,6 +1,6 @@
 import { IconPlus } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { z } from "zod";
 import { AgentCard } from "@/components/agents/agent-card";
 import { AgentProfile as AgentProfileDetail } from "@/components/agents/agent-profile";
@@ -9,6 +9,7 @@ import { DetailPanel } from "@/components/layout/detail-panel";
 import { StaggerItem } from "@/components/layout/stagger";
 import { Button } from "@/components/ui/button";
 import { agentListQueryOptions } from "@/lib/agents/queries";
+import { currentUserQueryOptions } from "@/lib/auth/queries";
 
 /**
  * Creating and inspecting a coworker are search-parameter states so the roster remains mounted and
@@ -21,6 +22,14 @@ const agentsSearchSchema = z.object({
 
 export const Route = createFileRoute("/_authed/_app/agents/")({
   validateSearch: agentsSearchSchema,
+  beforeLoad: async ({ context }) => {
+    const user = await context.queryClient.ensureQueryData(
+      currentUserQueryOptions(),
+    );
+    if (!user?.canSeeTheWork) {
+      throw redirect({ to: "/" });
+    }
+  },
   component: AgentsScreen,
 });
 

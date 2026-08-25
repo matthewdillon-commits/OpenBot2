@@ -50,6 +50,7 @@ import {
 } from "@/lib/channels/queries";
 import { useChannelEvents } from "@/lib/channels/use-channel-events";
 import { appConfig } from "@/lib/generated/application-config";
+import { ownerNavItems } from "@/lib/nav/owner-nav";
 import { EASE_OUT, ENTRANCE_SECONDS } from "@/lib/motion";
 import { Button } from "../ui/button";
 import { Channel } from "./channel";
@@ -105,7 +106,7 @@ function matchingChannels(
     return channels;
   }
   return channels.filter((channel) =>
-    [channel.name, channel.lastMessage].some((field) =>
+    [channel.name, channel.lastMessage, channel.lastAction].some((field) =>
       field?.toLowerCase().includes(needle),
     ),
   );
@@ -141,12 +142,15 @@ function ChannelRow({
         channelId={channel.id}
         participantIds={channel.agentIds}
         name={channel.name}
-        lastMessage={channel.lastMessage ?? undefined}
+        lastMessage={channel.lastAction ?? channel.lastMessage ?? undefined}
         lastMessageAt={
-          channel.lastMessageAt
-            ? relativeTime(channel.lastMessageAt)
-            : undefined
+          channel.lastActionAt
+            ? relativeTime(channel.lastActionAt)
+            : channel.lastMessageAt
+              ? relativeTime(channel.lastMessageAt)
+              : undefined
         }
+        goalStatus={channel.goalStatus}
       />
     </motion.div>
   );
@@ -191,13 +195,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               )}
             />
             <Button
-              aria-label="New channel"
+              aria-label="New goal"
               size="icon"
               variant="ghost"
               render={(props) => (
                 <Link
                   {...props}
-                  to="/channel/new"
+                  to="/"
                   activeProps={{
                     className: "bg-foreground/5",
                   }}
@@ -215,7 +219,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <SidebarMenuItem>
               <InputGroup className="bg-background text-sm rounded-lg h-9">
                 <InputGroupInput
-                  aria-label="Search channels"
+                  aria-label="Search goals"
                   onChange={(event) => setSearch(event.target.value)}
                   placeholder="Search..."
                   value={search}
@@ -234,14 +238,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
              */}
             {searching && visibleChannels.length === 0 ? (
               <p className="px-2 py-3 text-sm text-muted-foreground">
-                No channels match your search. Nothing here is named “
+                No goals match your search. Nothing here is named “
                 {search.trim()}”, and nobody has said it recently either.
               </p>
             ) : null}
             {!searching && channels.data?.length === 0 ? (
               <p className="px-2 py-3 text-sm text-muted-foreground">
-                You don't have channels yet. Start talking to agents and your
-                channels will appear here.
+                You don't have goals yet. Ask LimitlessAI what the business
+                should get done.
               </p>
             ) : null}
             <AnimatePresence initial={false}>
@@ -258,83 +262,39 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarContent>
       <SidebarFooter>
         <SidebarMenu className="gap-px">
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              className="hover:bg-foreground/5 h-10"
-              render={(props) => (
-                <Link
-                  {...props}
-                  to="/crm"
-                  activeProps={{
-                    className: "bg-foreground/5",
-                  }}
-                />
-              )}
-            >
-              <div className="size-[28px] flex items-center justify-center">
-                <IconAddressBook />
-              </div>
-              <span className="text-sm tracking-tight">CRM</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              className="hover:bg-foreground/5 h-10"
-              render={(props) => (
-                <Link
-                  {...props}
-                  to="/plugins"
-                  activeProps={{
-                    className: "bg-foreground/5",
-                  }}
-                />
-              )}
-            >
-              <div className="flex size-7 items-center justify-center rounded-full border border-border">
-                <IconPlug className="size-3.5" />
-              </div>
-              <span className="text-sm tracking-tight">Plugins</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            {/* Beside Agents rather than inside Admin: writing a skill is something anybody does. */}
-            <SidebarMenuButton
-              className="hover:bg-foreground/5 h-10"
-              render={(props) => (
-                <Link
-                  {...props}
-                  to="/skills"
-                  activeProps={{
-                    className: "bg-foreground/5",
-                  }}
-                />
-              )}
-            >
-              <div className="size-[28px] flex items-center justify-center">
-                <IconBox />
-              </div>
-              <span className="text-sm tracking-tight">Skills</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              className="hover:bg-foreground/5 h-10"
-              render={(props) => (
-                <Link
-                  {...props}
-                  to="/agents"
-                  activeProps={{
-                    className: "bg-foreground/5",
-                  }}
-                />
-              )}
-            >
-              <div className="size-[28px] flex items-center justify-center">
-                <IconBolt />
-              </div>
-              <span className="text-sm tracking-tight">Agents</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
+          {ownerNavItems({
+            canSeeTheWork: currentUser?.canSeeTheWork === true,
+          }).map((item) => (
+            <SidebarMenuItem key={item.to}>
+              <SidebarMenuButton
+                className="hover:bg-foreground/5 h-10"
+                render={(props) => (
+                  <Link
+                    {...props}
+                    to={item.to}
+                    activeProps={{
+                      className: "bg-foreground/5",
+                    }}
+                  />
+                )}
+              >
+                <div className="size-[28px] flex items-center justify-center">
+                  {item.to === "/crm" ? (
+                    <IconAddressBook />
+                  ) : item.to === "/plugins" ? (
+                    <span className="flex size-7 items-center justify-center rounded-full border border-border">
+                      <IconPlug className="size-3.5" />
+                    </span>
+                  ) : item.to === "/skills" ? (
+                    <IconBox />
+                  ) : (
+                    <IconBolt />
+                  )}
+                </div>
+                <span className="text-sm tracking-tight">{item.label}</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          ))}
           <SidebarMenuItem>
             <DropdownMenu>
               <DropdownMenuTrigger

@@ -48,6 +48,7 @@ import {
   createThreadPersister,
   intelligenceUserForActor,
 } from "./thread";
+import { startSpecialist } from "./specialist";
 import { createLoadToolsForActor } from "./tools";
 import {
   createJobTriggerStore,
@@ -142,6 +143,16 @@ export async function createUnattendedWorkerRuntime(
     recordActivity: async ({ actor, channelId, activity }) => {
       await channelStore.recordActivity(actor, channelId, activity);
     },
+    startSpecialist: (input) =>
+      startSpecialist(input, {
+        lookupChannel: (actor, channelId) => channelStore.get(actor, channelId),
+        addAgents: (actor, channelId, agentIds) =>
+          channelStore.addAgents(actor, channelId, agentIds),
+        getAgent: (actor, id) => agentProfileStore.get(actor, id),
+        listAgents: (actor) => agentProfileStore.list(actor),
+        skillBySlug: (slug, orgId) => pluginStore.skillBySlug(slug, orgId),
+        jobStore,
+      }),
     ...(webSearch ? { webSearch } : {}),
     ...(computerGateway ? { computerGateway } : {}),
   });

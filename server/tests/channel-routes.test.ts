@@ -57,13 +57,39 @@ function fakeStore(
 ): ChannelStore & { calls: StoreCall[] } {
   const calls: StoreCall[] = [];
   const base: ChannelStore = {
-    async create(receivedActor, agentIds) {
-      calls.push(["create", receivedActor, agentIds]);
-      return channel({ agentIds });
+    async create(receivedActor, agentIds, options) {
+      calls.push(
+        options
+          ? ["create", receivedActor, agentIds, options]
+          : ["create", receivedActor, agentIds],
+      );
+      return channel({
+        agentIds,
+        ...(options?.name ? { name: options.name } : {}),
+      });
     },
     async get(receivedActor, id) {
       calls.push(["get", receivedActor, id]);
       return channel({ id });
+    },
+    async getByThread(receivedActor, threadId) {
+      calls.push(["getByThread", receivedActor, threadId]);
+      return channel({ threadId });
+    },
+    async list(receivedActor, query) {
+      calls.push(["list", receivedActor, query]);
+      return { channels: [], nextCursor: null };
+    },
+    async recordActivity(receivedActor, channelId, activity) {
+      calls.push(["recordActivity", receivedActor, channelId, activity]);
+    },
+    async addAgents(receivedActor, channelId, agentIds) {
+      calls.push(["addAgents", receivedActor, channelId, agentIds]);
+      const existing = channel({ id: channelId });
+      return {
+        ...existing,
+        agentIds: [...new Set([...existing.agentIds, ...agentIds])],
+      };
     },
   };
 
@@ -133,11 +159,25 @@ describe("channel input parser", () => {
       parseChannelInput({
         agentIds: [" agent-2 ", "agent-1"],
         id: "forged-channel",
-        name: "forged name",
         threadId: "forged-thread",
         active: false,
       }),
     ).toEqual({ ok: true, value: { agentIds: ["agent-2", "agent-1"] } });
+  });
+
+  test("accepts an optional goal name and still ignores id, threadId, and active", () => {
+    expect(
+      parseChannelInput({
+        agentIds: ["agent-1"],
+        name: "  Research these two people.  ",
+        id: "forged-channel",
+        threadId: "forged-thread",
+        active: false,
+      }),
+    ).toEqual({
+      ok: true,
+      value: { agentIds: ["agent-1"], name: "Research these two people." },
+    });
   });
 });
 
@@ -176,6 +216,23 @@ describe("channel routes", () => {
     expect(store.calls).toEqual([
       ["create", actor, ["agent-2", "agent-1"]],
       ["get", actor, "channel-1"],
+    ]);
+  });
+
+  test("passes an optional goal name through to create", async () => {
+    const store = fakeStore();
+    const app = appFor(store);
+    const created = await app.request("http://openbot.test/", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        agentIds: ["agent-1"],
+        name: "Research these two people.",
+      }),
+    });
+    expect(created.status).toBe(201);
+    expect(store.calls).toEqual([
+      ["create", actor, ["agent-1"], { name: "Research these two people." }],
     ]);
   });
 
@@ -704,6 +761,75 @@ describe("channel store integration", () => {
         .sort((left, right) => left.position - right.position)
         .map(({ agentId }) => agentId),
     ).toEqual(agentIds);
+  });
+
+  test("uses the requested goal name instead of coworker names", async () => {
+    const actor = await createPersistentUser();
+    const agentId = await createPersistentAgent({
+      name: "General Assistant",
+      owner: actor,
+    });
+    const created = await persistentStore.create(actor, [agentId], {
+      name: "Research these two people.",
+    });
+    createdChannelIds.push(created.id);
+    expect(created.name).toBe("Research these two people.");
+    expect((await persistentStore.get(actor, created.id))?.name).toBe(
+      "Research these two people.",
+    );
+  });
+
+  test("looks a goal up by its Intelligence thread", async () => {
+    const actor = await createPersistentUser();
+    const agentId = await createPersistentAgent({
+      name: "LimitlessAI",
+      owner: actor,
+    });
+    const created = await persistentStore.create(actor, [agentId]);
+    createdChannelIds.push(created.id);
+    const found = await persistentStore.getByThread(actor, created.threadId);
+    expect(found?.id).toBe(created.id);
+    expect(found?.threadId).toBe(created.threadId);
+    expect(await persistentStore.getByThread(actor, "")).toBeNull();
+    expect(
+      await persistentStore.getByThread(actor, "missing-thread"),
+    ).toBeNull();
+  });
+
+  test("adds specialists after the lead and refuses a ninth coworker", async () => {
+    const actor = await createPersistentUser();
+    const leadId = await createPersistentAgent({
+      name: "LimitlessAI",
+      owner: actor,
+    });
+    const specialistId = await createPersistentAgent({
+      name: "Knowledge",
+      owner: actor,
+    });
+    const extras: string[] = [];
+    for (let index = 0; index < 6; index += 1) {
+      extras.push(
+        await createPersistentAgent({
+          name: `Specialist ${index}`,
+          owner: actor,
+        }),
+      );
+    }
+    const created = await persistentStore.create(actor, [leadId]);
+    createdChannelIds.push(created.id);
+    const withSpecialist = await persistentStore.addAgents(actor, created.id, [
+      specialistId,
+    ]);
+    expect(withSpecialist.agentIds[0]).toBe(leadId);
+    expect(withSpecialist.agentIds).toContain(specialistId);
+    await persistentStore.addAgents(actor, created.id, extras);
+    const ninth = await createPersistentAgent({
+      name: "Ninth",
+      owner: actor,
+    });
+    await expect(
+      persistentStore.addAgents(actor, created.id, [ninth]),
+    ).rejects.toMatchObject({ name: "RoomFullError" });
   });
 
   test("truncates derived names to 120 Unicode code points with an ellipsis", async () => {

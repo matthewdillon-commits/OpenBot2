@@ -22,6 +22,10 @@ function profile(overrides: Partial<AgentProfile> = {}): AgentProfile {
     systemOwned: false,
     hidden: false,
     deletedAt: null,
+    endpoint: null,
+    hasAuth: false,
+    hasCallbackToken: false,
+    standingRole: null,
     ...overrides,
   };
 }

@@ -97,6 +97,8 @@ export type ComposerProps = {
    * job started there would have nowhere to attach. Absent hides the control.
    */
   onSendAndGo?: (draft: ComposerDraft) => void | Promise<void>;
+  /** Composer prompt. Home uses the empty-state sentence. */
+  placeholder?: string;
 };
 
 export function Composer({
@@ -112,6 +114,7 @@ export function Composer({
   stoppable,
   onDraftChange,
   onSendAndGo,
+  placeholder = "Ask anything",
 }: ComposerProps) {
   const [value, setValue] = useState<Segment[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -326,7 +329,7 @@ export function Composer({
           minHeight={COMPACT_MIN_HEIGHT_PX}
           onChange={handleChange}
           onSubmit={submitDraft}
-          placeholder="Ask anything"
+          placeholder={placeholder}
           ref={promptAreaRef}
           triggers={triggers}
           value={value}
@@ -392,7 +395,7 @@ export function Composer({
             maxHeight={MAX_HEIGHT_PX}
             onChange={handleChange}
             onSubmit={submitDraft}
-            placeholder="Ask anything"
+            placeholder={placeholder}
             ref={promptAreaRef}
             triggers={triggers}
             value={value}

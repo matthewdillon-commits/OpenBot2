@@ -42,8 +42,10 @@ import { createCrmRoutes } from "./crm/routes";
 import type { CrmStore } from "./crm/store";
 import { createInboundRoutes } from "./jobs/inbound";
 import { createJobRoutes } from "./jobs/routes";
+import { createRoomRoutes } from "./jobs/room-routes";
 import type { JobStore } from "./jobs/store";
 import type { JobTriggerStore } from "./jobs/triggers";
+import { canSeeTheWork } from "./orchestrator";
 import { LOCAL_ORGANIZATION_ID, orgIdOf } from "./orgs/constants";
 import { createOrganizationRoutes } from "./orgs/routes";
 import type { OrganizationStore } from "./orgs/store";
@@ -349,7 +351,10 @@ export function createApp(
       ? await organizationStore.listForUser(context.var.actor.id)
       : [];
     return context.json({
-      user: context.var.actor,
+      user: {
+        ...context.var.actor,
+        canSeeTheWork: canSeeTheWork(context.var.actor),
+      },
       organizations,
     });
   });
@@ -845,6 +850,15 @@ export function createApp(
         jobStore,
         channelStore,
         auditStore,
+      }),
+    );
+    app.route(
+      "/api/rooms",
+      createRoomRoutes({
+        requireUser,
+        channelStore,
+        jobStore,
+        agentProfileStore,
       }),
     );
   }

@@ -7,12 +7,14 @@ import { z } from "zod";
 import { AgentProfile } from "@/components/agents/agent-profile";
 import { ChannelAvatar } from "@/components/channels/avatar";
 import { ChannelChat } from "@/components/channels/channel-chat";
+import { SeeTheWorkPanel } from "@/components/channels/see-the-work";
 import { ActivityLog } from "@/components/computer/activity-log";
 import { ComputerView } from "@/components/computer/computer-view";
 import { useNeedsYouAmong } from "@/components/computer/needs-you";
 import { DetailPanel } from "@/components/layout/detail-panel";
 import { Button } from "@/components/ui/button";
 import { agentQueryOptions } from "@/lib/agents/queries";
+import { currentUserQueryOptions } from "@/lib/auth/queries";
 import { type AgentChannel, channelQueryOptions } from "@/lib/channels/queries";
 import {
   activityFor,
@@ -25,6 +27,8 @@ const chatSearchSchema = z.object({
   settings: z.boolean().optional(),
   /** Opens the Bot's screen in the shared detail pane. */
   watch: z.boolean().optional(),
+  /** Operator door: A2A room for this goal. */
+  work: z.boolean().optional(),
 });
 
 const EASE_OUT = [0.23, 1, 0.32, 1] as const;
@@ -138,12 +142,15 @@ function ComputerViewPanel({
 
 function RouteComponent() {
   const { channelId } = Route.useParams();
-  const { settings, watch } = Route.useSearch();
+  const { settings, watch, work } = Route.useSearch();
   const channel = useQuery(channelQueryOptions(channelId));
+  const { data: currentUser } = useQuery(currentUserQueryOptions());
+  const canSeeTheWork = currentUser?.canSeeTheWork === true;
   const navigate = Route.useNavigate();
   const isSettingsOpen = settings === true;
   const prefersReducedMotion = useReducedMotion();
-  const isWatching = watch === true;
+  const isWatching = canSeeTheWork && watch === true;
+  const isWorking = canSeeTheWork && work === true;
   const [speakerId, setSpeakerId] = useState<string | undefined>();
   const [focusAgentId, setFocusAgentId] = useState<string | undefined>();
   const memberIds = channel.data?.agentIds ?? [];
@@ -161,20 +168,28 @@ function RouteComponent() {
     enabled: Boolean(watchAgentId),
   });
   /** Needs-you state is rendered by the screen when the screen is already open. */
-  const needing = useNeedsYouAmong(memberIds, !isWatching);
+  const needing = useNeedsYouAmong(memberIds, !isWatching && !isWorking);
   const needsYou = needing !== null;
 
-  // Needs-you prompts auto-open the screen because the actionable prompt is rendered there.
+  // Needs-you prompts auto-open the operator door because the actionable prompt is there.
   useEffect(() => {
-    if (!needing) return;
+    if (!canSeeTheWork || !needing) return;
     setFocusAgentId(needing);
-    show("watch");
-  });
+    void navigate({
+      search: (previous) => ({
+        ...previous,
+        settings: undefined,
+        watch: undefined,
+        work: true,
+      }),
+    });
+  }, [canSeeTheWork, needing, navigate]);
 
   // Browser activity may auto-open the screen once per run unless this run was dismissed.
   const dismissedEpoch = useRef<number | null>(null);
   const runEpoch = useRef<number | null>(null);
   useEffect(() => {
+    if (!canSeeTheWork) return;
     const members = memberKey.length === 0 ? [] : memberKey.split("\0");
     if (members.length === 0) return;
     return onComputerActivity((activity) => {
@@ -184,35 +199,52 @@ function RouteComponent() {
       setFocusAgentId(activity.botId);
       navigate({
         search: (previous) =>
-          previous.watch === true || previous.settings === true
+          previous.work === true ||
+          previous.watch === true ||
+          previous.settings === true
             ? previous
-            : { ...previous, settings: undefined, watch: true },
+            : {
+                ...previous,
+                settings: undefined,
+                watch: undefined,
+                work: true,
+              },
       });
     });
-  }, [memberKey, navigate]);
+  }, [canSeeTheWork, memberKey, navigate]);
 
-  // Settings and watch share one pane; opening either clears the other URL flag.
-  const show = (next: "settings" | "watch" | null) => {
-    // Dismissal applies only to the current browser-activity run.
-    if (next !== "watch" && isWatching)
+  // Settings, watch, and See the work share one pane; opening one clears the others.
+  const show = (next: "settings" | "watch" | "work" | null) => {
+    if (next !== "watch" && next !== "work" && (isWatching || isWorking)) {
       dismissedEpoch.current = runEpoch.current;
+    }
     return navigate({
       search: (previous) => ({
         ...previous,
         settings: next === "settings" ? true : undefined,
         watch: next === "watch" ? true : undefined,
+        work: next === "work" ? true : undefined,
       }),
     });
   };
 
+  const paneOpen =
+    canSeeTheWork &&
+    (isSettingsOpen || isWatching || isWorking) &&
+    watchAgentId !== undefined;
+
   return (
     <DetailPanel
       onClose={() => show(null)}
-      open={(isSettingsOpen || isWatching) && watchAgentId !== undefined}
-      detailWidth={isWatching ? SCREEN_PANEL_WIDTH : undefined}
+      open={paneOpen}
+      detailWidth={isWatching || isWorking ? SCREEN_PANEL_WIDTH : undefined}
       detail={
-        watchAgentId === undefined ? null : isWatching ? (
-          // Manual watch remains active even when there is no current browser action.
+        watchAgentId === undefined ? null : isWorking ? (
+          <SeeTheWorkPanel
+            channelId={channelId}
+            {...(focusAgentId ? { focusAgentId } : {})}
+          />
+        ) : isWatching ? (
           <ComputerViewPanel
             agentId={watchAgentId}
             name={speakerProfile?.name}
@@ -259,40 +291,61 @@ function RouteComponent() {
                 ease: EASE_OUT,
               }}
             >
-              {channel.data?.name ?? "Channel"}
+              {channel.data?.name ?? "Goal"}
             </motion.span>
           </div>
           <div className="flex flex-row gap-1.5">
-            <Button
-              aria-label={
-                needsYou
-                  ? "This Bot is waiting for you. Open its screen"
-                  : "Watch this Bot's screen"
-              }
-              aria-pressed={isWatching}
-              className={`relative ${isWatching ? "bg-foreground/5" : ""}`}
-              disabled={watchAgentId === undefined}
-              onClick={() => show(isWatching ? null : "watch")}
-              variant="ghost"
-              size="icon"
-            >
-              <IconDeviceDesktop className="size-4.5" />
-              {/* Mirrors needs-you state outside the hidden screen pane. */}
-              {needsYou ? (
-                <span className="absolute right-1 top-1 size-2 rounded-full bg-amber-500" />
-              ) : null}
-            </Button>
-            <Button
-              aria-label="Channel coworker"
-              aria-pressed={isSettingsOpen}
-              className={isSettingsOpen ? "bg-foreground/5" : undefined}
-              disabled={watchAgentId === undefined}
-              onClick={() => show(isSettingsOpen ? null : "settings")}
-              variant="ghost"
-              size="icon"
-            >
-              <IconSettings className="size-4.5" />
-            </Button>
+            {canSeeTheWork ? (
+              <>
+                <Button
+                  aria-label={
+                    needsYou
+                      ? "This Bot is waiting for you. Open See the work"
+                      : "See the work"
+                  }
+                  aria-pressed={isWorking}
+                  className={isWorking ? "bg-foreground/5" : undefined}
+                  disabled={watchAgentId === undefined}
+                  onClick={() => show(isWorking ? null : "work")}
+                  size="sm"
+                  variant="ghost"
+                >
+                  See the work
+                  {needsYou ? (
+                    <span className="ml-1.5 size-2 rounded-full bg-amber-500" />
+                  ) : null}
+                </Button>
+                <Button
+                  aria-label={
+                    needsYou
+                      ? "This Bot is waiting for you. Open its screen"
+                      : "Watch this Bot's screen"
+                  }
+                  aria-pressed={isWatching}
+                  className={`relative ${isWatching ? "bg-foreground/5" : ""}`}
+                  disabled={watchAgentId === undefined}
+                  onClick={() => show(isWatching ? null : "watch")}
+                  variant="ghost"
+                  size="icon"
+                >
+                  <IconDeviceDesktop className="size-4.5" />
+                  {needsYou ? (
+                    <span className="absolute right-1 top-1 size-2 rounded-full bg-amber-500" />
+                  ) : null}
+                </Button>
+                <Button
+                  aria-label="Channel coworker"
+                  aria-pressed={isSettingsOpen}
+                  className={isSettingsOpen ? "bg-foreground/5" : undefined}
+                  disabled={watchAgentId === undefined}
+                  onClick={() => show(isSettingsOpen ? null : "settings")}
+                  variant="ghost"
+                  size="icon"
+                >
+                  <IconSettings className="size-4.5" />
+                </Button>
+              </>
+            ) : null}
           </div>
         </div>
       </div>

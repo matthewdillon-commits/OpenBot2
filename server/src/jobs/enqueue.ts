@@ -1,10 +1,10 @@
 /**
  * The one insert path for an unattended job.
  *
- * Send-and-go, cron, webhook, and inbound email all land here. The worker still claims the
- * `jobs` row with `FOR UPDATE SKIP LOCKED` and calls `startUnattendedRun`. A missing mapping or
- * Intelligence thread is a refuse — this function does not mint a thread, and it does not run
- * the coworker itself.
+ * Send-and-go, cron, webhook, inbound email, and specialist spawn all land here.
+ * The worker still claims the `jobs` row with `FOR UPDATE SKIP LOCKED` and calls
+ * `startUnattendedRun`. A missing mapping or Intelligence thread is a refuse —
+ * this function does not mint a thread, and it does not run the coworker itself.
  */
 import type { AgentActor } from "../agents/profile-types";
 import type { OpenBotRole } from "../auth/roles";

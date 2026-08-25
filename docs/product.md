@@ -169,9 +169,10 @@ That does not live in a system prompt.
 | 3. Intelligence + action | The layer understands the book, prioritizes, and acts without waiting for a chat send. |
 | 4. Self-improving business | Measure and improve are closed. The loop compounds. |
 
-Code in this tree is **late Stage 1 / early Stage 2**: in-app, org-scoped, no
-unattended loop. How we climb the rest is [roadmap.md](roadmap.md). That work
-is other pull requests.
+Code in this tree is **late Stage 1 / early Stage 2**: in-app, org-scoped,
+connected agents, rooms behind See the work, unattended jobs. Measure and
+improve are not closed. How we climb the rest is [roadmap.md](roadmap.md).
+Later phases are other pull requests.
 
 ---
 
@@ -209,7 +210,19 @@ never succeeded. The job row is not a second transcript: prompt plus a skinny
 `resultText` / outcome only. The job row stores a skinny outcome: status
 Active | Needs you | Done, `last_action` (one
 sentence), `last_action_at`, plus who ran and any CRM record ids the write
-already returned. That is not an approval card. There is no Goals home UI.
+already returned. That is not an approval card.
+
+**Two doors.** Home is Composer to LimitlessAI plus Goals (the existing
+channel list: name, Active | Needs you | Done, last action, time). Opening a
+goal talks to the orchestrator, not a worker. The orchestrator starts a
+finite specialist with `start_specialist` (a skill/playbook or a coworker,
+including one with a computer). That call enqueues via `enqueueUnattendedJob`
+on the same runner. Specialists share the organization’s CRM. “See the work”
+(deployment admin, or org owner/admin) opens the A2A room for this goal:
+members, jobs, computers, traces. Cmd-K Rooms is the same door for power
+users. A typical owner does not see Sales / Website / Marketing / Customer /
+Ops, leftover coworker names, or Agents in the nav, and does not see rooms
+unless they opened See the work. First-run does not tour the roster.
 
 ### How a coworker actually runs
 
@@ -220,7 +233,8 @@ from the composer: an explicit “continue this channel after I leave.” **Cron
 resolves a stored actor / org / goal / thread / coworker and inserts the same
 `jobs` row (`enqueueUnattendedJob` → `jobStore.enqueue`). The worker claims
 it with `FOR UPDATE SKIP LOCKED` and calls `startUnattendedRun`. There is no
-second runner. A standing role is a system prompt on the next user turn.
+second runner. A specialist the orchestrator starts is that same insert.
+A standing role is a system prompt on the next user turn.
 
 Once a turn has started — in the tab or from a claimed job:
 
@@ -291,12 +305,11 @@ running beside it.
 **Not a self-serve multi-tenant SaaS** until RLS, billing, seats, per-org SSO,
 per-tenant computers, and a spend cap exist.
 
-**Not a durable unattended transcript, and not Goals home.** Send-and-go, cron,
-webhook, and inbound email all enqueue the same job and the worker runs it after
+**Not a durable unattended transcript.** Send-and-go, cron, webhook, inbound
+email, and specialist spawn all enqueue the same job and the worker runs it after
 the tab closes, including computer tools when the gateway is on. Persist onto
 the Intelligence thread still fails closed — close-tab / come-back on the same
-mapped thread is not true yet unless persist is later given a write. There is
-no Goals home UI.
+mapped thread is not true yet unless persist is later given a write.
 
 **Not the self-improving loop.** There are no outcome events tied to actions,
 no approval cards with expected impact, and no keep / revise / revert that
@@ -319,6 +332,13 @@ It does not measure whether the work moved the business.
 | Twenty tool steps | `server/src/copilot.ts` `TOOL_STEPS` |
 | Send-and-go / unattended jobs | `server/src/jobs/`, `worker/src/index.ts` |
 | One enqueue path for every start | `server/src/jobs/enqueue.ts` `enqueueUnattendedJob` |
+| Orchestrator standing role | `examples/fintech/agents.yaml` `standing_role: orchestrator`, `server/src/orchestrator.ts` |
+| Composer + Goals home | `app/src/routes/_authed/_app/index.tsx` |
+| Owner nav has no family names | `app/src/lib/nav/owner-nav.ts`, `app/tests/owner-nav.test.ts` |
+| See the work (role-gated room) | `server/src/jobs/room-routes.ts`, `app/src/components/channels/see-the-work.tsx` |
+| Specialist on demand | `server/src/jobs/specialist.ts` `startSpecialist`, `server/src/jobs/specialist-tool.ts` `start_specialist` |
+| Specialist shares org CRM | `server/src/jobs/specialist.ts` `specialistCrmOrgId`; tools from `loadToolsForActor` |
+| Cmd-K Rooms | `app/src/components/command-palette.tsx` |
 | Cron standing row and due claim | `server/src/jobs/triggers.ts` `CLAIM_DUE_CRON_SQL`, `tickDueCrons`; `job_triggers` |
 | Webhook and inbound email | `server/src/jobs/inbound.ts` `POST /api/inbound/webhook/:id`, `POST /api/inbound/email` |
 | Unattended persist fails closed | `server/src/jobs/thread.ts` `createThreadPersister` (`getThread` only) |
@@ -329,24 +349,23 @@ It does not measure whether the work moved the business.
 
 ## C. What it is not yet
 
-Three things people will assume from Part A. Scheduled and inbound starts
-have landed; persist and the customer home have not:
+Three things people will assume from Part A. The two doors have landed;
+persist and the loop have not:
 
-1. **A durable unattended transcript.** Send-and-go, cron, webhook, and
-   inbound email exist (Part B), including computer tools on the server and a
-   `needs_you` pause. Persist onto the Intelligence thread still fails
-   closed — close-tab / come-back on the same mapped thread is not true yet.
+1. **A durable unattended transcript.** Send-and-go, cron, webhook, inbound
+   email, and specialist spawn exist (Part B), including computer tools on the
+   server and a `needs_you` pause. Persist onto the Intelligence thread still
+   fails closed — close-tab / come-back on the same mapped thread is not true
+   yet.
 2. **Self-serve SaaS.** No RLS, no Stripe, no seat quota, no invite email, no
    per-org SSO, no spend cap, no multi-replica story beyond “Postgres is the
    shared state.” `/platform` is sales-led provisioning, not a checkout.
-3. **The UX contract and the loop.** Home is not Composer + Goals. A person
-   still picks a coworker from a roster (General Assistant, Knowledge, an
-   optional Risk Analyst). A goal in this tree is the existing channel plus
-   its thread; the job row can hold Active | Needs you | Done and last
-   action. There is no Goals home, no “See the work,” and no approval cards.
-   Observe / understand / prioritize / act can be *performed by a person
-   talking to a Bot*, or by a standing trigger that enqueues the same job.
-   Measure and improve are not product surfaces.
+3. **The self-improving loop.** Home is Composer + Goals. See the work opens
+   that goal’s room. There are still no approval cards, no expected impact, and
+   no keep / revise / revert. Observe / understand / prioritize / act can be
+   *performed by a person talking to LimitlessAI*, or by a standing trigger or
+   specialist job that enqueues the same runner. Measure and improve are not
+   product surfaces.
 
 When a pull request claims one of those, it is done only when Part B of this
 file can say so with a file citation. Until then the honest sentence is the
