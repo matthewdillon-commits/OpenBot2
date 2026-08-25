@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
+import { z } from "zod";
 import { createAgentProfileStore } from "../src/agents/profile-store";
 import type { AgentActor } from "../src/agents/profile-types";
 import { createChannelStore } from "../src/channels/routes";
@@ -165,7 +166,7 @@ describe.skipIf(!postgresReachable)(
             {
               name: "crm_search",
               description: "Search CRM",
-              parameters: { parse: () => ({}) } as never,
+              parameters: z.object({ query: z.string().optional() }),
               execute: async () => "Ada is at Acme.",
             },
           ],
