@@ -127,7 +127,7 @@ The same runner as Phase 1, with the tools Phase 2 made server-side.
 
 Order matters:
 
-1. **Cron** — a standing prompt on a schedule, into a known channel / thread.
+1. **Cron** — a standing prompt on a schedule, into a known goal / thread.
 2. **Webhook** — an external system starts the same job.
 3. **Inbound email** — a message arrives, the runner starts, the reply is
    work, not a new product.
