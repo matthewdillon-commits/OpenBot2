@@ -46,6 +46,11 @@ function channel(overrides: Partial<AgentChannel> = {}): AgentChannel {
     agentIds: ["agent-1", "agent-2"],
     threadId: "thread-1",
     active: true,
+    expectedImpact: null,
+    outcome: null,
+    loopStage: null,
+    approval: null,
+    lastDecision: null,
     ...overrides,
   };
 }
@@ -262,6 +267,11 @@ describe("channel routes", () => {
         agentIds: ["agent-1"],
         threadId: "thread-1",
         active: true,
+        expectedImpact: null,
+        outcome: null,
+        loopStage: null,
+        approval: null,
+        lastDecision: null,
       },
     });
     expect(fetched.status).toBe(200);
@@ -752,6 +762,11 @@ describe("channel store integration", () => {
       agentIds,
       threadId: created.threadId,
       active: true,
+      expectedImpact: null,
+      outcome: null,
+      loopStage: null,
+      approval: null,
+      lastDecision: null,
     });
     const persisted = await persistedChannel(created.id);
     expect(persisted.channelRow?.name).toBe("Zulu, Alpha");

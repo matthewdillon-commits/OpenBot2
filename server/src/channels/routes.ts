@@ -254,7 +254,14 @@ export function createChannelStore(
             threadId,
           });
 
-          return { id, name, agentIds, threadId, active: true };
+          return {
+            id,
+            name,
+            agentIds,
+            threadId,
+            active: true,
+            ...loopFieldsFrom(null),
+          };
         },
         { isolationLevel: "read committed" },
       );
@@ -456,6 +463,7 @@ export function createChannelStore(
             agentIds: rows.map((row) => row.agentId),
             threadId: first.threadId,
             active: rows.every((row) => row.deletedAt === null),
+            ...loopFieldsFrom(first.loop),
           };
         },
         { isolationLevel: "read committed" },
