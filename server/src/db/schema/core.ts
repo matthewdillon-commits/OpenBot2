@@ -366,6 +366,12 @@ export const channels = pgTable(
         onDelete: "set null",
       },
     ),
+    /**
+     * Phase 5 loop on this goal. In this tree a goal is the existing channel plus its
+     * Intelligence thread. expected_impact, outcome (worked / didn't / unknown), the
+     * approval card, and keep | revise | revert live here — not a second table-as-product.
+     */
+    loop: jsonb("loop"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

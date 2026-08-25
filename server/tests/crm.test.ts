@@ -24,6 +24,9 @@ import type {
 } from "../src/crm/store";
 import { deriveThreadStatus } from "../src/crm/store";
 import { crmTools } from "../src/crm/tools";
+import { createHighRiskWait, createMemoryGoalLoopStore } from "../src/loop";
+import { runInGoalActionScope } from "../src/loop/scope";
+import { APPROVAL_WAIT_MARKER } from "../src/loop/types";
 import { REFUSAL_MARKER } from "../src/plugins/tools";
 
 const ACTOR: AgentActor = { id: "user-1", role: "user", orgId: "org_local" };
@@ -676,5 +679,87 @@ describe("CRM gateway", () => {
 
     expect(answer).toContain("Casey Chen");
     expect(written[0]?.eventType).toBe("crm.record_read");
+  });
+
+  test("a high-risk CRM write on a goal waits as an approval card, not a silent act", async () => {
+    const store = fakeStore();
+    const { written, auditStore } = recorder();
+    const loopStore = createMemoryGoalLoopStore();
+    const gateway = createCrmGateway({
+      store,
+      database: databaseStub,
+      auditStore,
+      policy: () => PERMISSIVE,
+      highRiskWait: createHighRiskWait({ loopStore }),
+    });
+
+    const answer = await runInGoalActionScope(
+      {
+        orgId: "org_local",
+        channelId: "channel_1",
+        goalId: "channel_1",
+        actorId: ACTOR.id,
+        botId: "risk",
+        toolName: "crm_create",
+        args: { kind: "person", name: "Casey Chen" },
+      },
+      () =>
+        gateway.create({
+          botId: "risk",
+          actor: ACTOR,
+          kind: "person",
+          fields: { name: "Casey Chen", emails: ["casey@acme.test"] },
+        }),
+    );
+
+    expect(answer.startsWith(APPROVAL_WAIT_MARKER)).toBe(true);
+    expect(answer.startsWith(REFUSAL_MARKER)).toBe(false);
+    expect(store.created).toEqual([]);
+    expect(written.some((row) => row.eventType === "crm.record_written")).toBe(
+      false,
+    );
+    const loop = await loopStore.get("org_local", "channel_1");
+    expect(loop.approval?.status).toBe("waiting");
+    expect(loop.expectedImpact).toBeTruthy();
+    expect(loop.approval?.before).toBeTruthy();
+    expect(loop.approval?.after).toBeTruthy();
+    expect(loop.approval?.rollback).toBeTruthy();
+  });
+
+  test("a CRM read on a goal still runs after the gateway permits it", async () => {
+    const store = fakeStore({
+      listPeople: async () => page([person()]),
+    });
+    const loopStore = createMemoryGoalLoopStore();
+    const { auditStore } = recorder();
+    const gateway = createCrmGateway({
+      store,
+      database: databaseStub,
+      auditStore,
+      policy: () => PERMISSIVE,
+      highRiskWait: createHighRiskWait({ loopStore }),
+    });
+
+    const answer = await runInGoalActionScope(
+      {
+        orgId: "org_local",
+        channelId: "channel_1",
+        goalId: "channel_1",
+        actorId: ACTOR.id,
+        botId: "risk",
+        toolName: "crm_search",
+        args: { kind: "person" },
+      },
+      () =>
+        gateway.search({
+          botId: "risk",
+          actor: ACTOR,
+          kind: "person",
+        }),
+    );
+
+    expect(answer).toContain("Casey Chen");
+    const loop = await loopStore.get("org_local", "channel_1");
+    expect(loop.approval).toBeNull();
   });
 });

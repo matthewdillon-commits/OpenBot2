@@ -14,6 +14,7 @@ import type { GrantedTool } from "../plugins/tools";
 import {
   type ActionActor,
   ActionRefusedError,
+  ActionWaitingError,
   type ComputerGateway,
   ComputerUnavailableError,
   ElementNotFoundError,
@@ -143,6 +144,9 @@ function actionActorFrom(actor: AgentActor): ActionActor {
 }
 
 function recover(error: unknown): string {
+  if (error instanceof ActionWaitingError) {
+    return error.message;
+  }
   if (error instanceof ActionRefusedError) {
     return `${REFUSAL_MARKER} ${error.message}`;
   }

@@ -1,12 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import type { AuditEventInput, AuditStore } from "../src/audit";
+import type { HighRiskWait } from "../src/loop";
 import {
   ActionRefusedError,
+  ActionWaitingError,
   createComputerGateway,
   SharedComputerIsolationError,
   WorkspaceRefusedError,
 } from "../src/computer/gateway";
 import type { ActionPolicy } from "../src/computer/policy";
+import { createHighRiskWait, createMemoryGoalLoopStore } from "../src/loop";
+import { runInGoalActionScope } from "../src/loop/scope";
+import { APPROVAL_WAIT_MARKER } from "../src/loop/types";
 import type {
   ComputerLocation,
   ComputerProvider,
@@ -199,6 +204,7 @@ async function gatewayWith(
     resetResult?: { cleared: boolean };
     locations?: ComputerLocation[];
     token?: string;
+    highRiskWait?: HighRiskWait;
   },
 ) {
   const { provider, fetchImpl, calls, addressedAs, requests } =
@@ -210,6 +216,7 @@ async function gatewayWith(
     auditStore: store,
     policy: () => policy,
     token: options?.token,
+    ...(options?.highRiskWait ? { highRiskWait: options.highRiskWait } : {}),
   });
   // Every test acts on refs, so the server must hold a snapshot first, exactly as the real flow does.
   await gateway.snapshot("bot-1");
@@ -414,6 +421,40 @@ describe("the computer gateway", () => {
     // The same guarantee as typed text: a Bot writes down what it was told, so a file body is exactly
     // as sensitive and is never put in the row.
     expect(JSON.stringify(rows[0]?.payload)).not.toContain("4111");
+  });
+
+  test("a high-risk write on a goal waits as an approval card, not a silent act", async () => {
+    const loopStore = createMemoryGoalLoopStore();
+    const { gateway, calls } = await gatewayWith(PERMISSIVE, {
+      highRiskWait: createHighRiskWait({ loopStore }),
+    });
+
+    const error = await runInGoalActionScope(
+      {
+        orgId: "org_local",
+        channelId: "channel_1",
+        goalId: "channel_1",
+        actorId: ACTOR.id,
+        botId: "bot-1",
+        toolName: "computer_write_file",
+        args: { path: "notes.md", contents: "hello" },
+      },
+      () =>
+        gateway.writeFile("bot-1", ACTOR, {
+          path: "notes.md",
+          contents: "hello",
+        }),
+    ).catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(ActionWaitingError);
+    expect((error as Error).message.startsWith(APPROVAL_WAIT_MARKER)).toBe(
+      true,
+    );
+    expect(calls).toEqual([]);
+    const loop = await loopStore.get("org_local", "channel_1");
+    expect(loop.approval?.status).toBe("waiting");
+    expect(loop.approval?.rationale).toContain("notes.md");
+    expect(loop.approval?.rollback.length).toBeGreaterThan(0);
   });
 
   test("a permitted command runs and is recorded by command, never by output", async () => {

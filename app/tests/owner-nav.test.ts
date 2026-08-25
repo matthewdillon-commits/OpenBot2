@@ -16,6 +16,8 @@ describe("owner nav", () => {
       expect(labels).not.toContain(name);
     }
     expect(labels).not.toContain("Agents");
+    expect(labels).not.toContain("Measure");
+    expect(labels).not.toContain("Approvals");
     expect(labels).toEqual(["CRM", "Plugins", "Skills"]);
   });
 
@@ -29,6 +31,8 @@ describe("owner nav", () => {
       expect(labels).not.toContain(name);
     }
     expect(labels).toContain("Agents");
+    expect(labels).not.toContain("Measure");
+    expect(labels).not.toContain("Approvals");
     expect(items.some((item) => item.to === "/agents")).toBe(true);
   });
 });

@@ -13,6 +13,7 @@ export const Channel = memo(function Channel({
   lastMessage,
   lastMessageAt,
   goalStatus,
+  loopStage,
 }: {
   channelId: string;
   participantIds: string[];
@@ -20,6 +21,7 @@ export const Channel = memo(function Channel({
   lastMessage?: string;
   lastMessageAt?: string;
   goalStatus?: "Active" | "Needs you" | "Done";
+  loopStage?: string | null;
 }) {
   return (
     <Link
@@ -45,6 +47,11 @@ export const Channel = memo(function Channel({
           {goalStatus ? (
             <span className="shrink-0 text-[12px] leading-4 text-muted-foreground">
               {goalStatus}
+            </span>
+          ) : null}
+          {loopStage ? (
+            <span className="shrink-0 text-[12px] leading-4 text-muted-foreground/70">
+              {loopStage}
             </span>
           ) : null}
           <span className="min-w-0 flex-1 truncate text-[12px] leading-4 text-muted-foreground">

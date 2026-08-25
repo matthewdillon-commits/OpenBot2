@@ -59,3 +59,61 @@ export function recordChannelActivityMutationOptions() {
     },
   });
 }
+
+export type GoalDecisionInput = {
+  channelId: string;
+  decision: "keep" | "revise" | "revert";
+  note?: string;
+};
+
+export type GoalOutcomeInput = {
+  channelId: string;
+  outcome: "worked" | "didn't" | "unknown";
+};
+
+/**
+ * Keep / revise / revert on this goal's approval card. Invalidates the goal
+ * list so home and the thread both see the decision.
+ */
+export function recordGoalDecisionMutationOptions(queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: async (input: GoalDecisionInput) => {
+      const response = await client(
+        `/api/channels/${input.channelId}/loop/decision`,
+        {
+          method: "POST",
+          body: {
+            decision: input.decision,
+            ...(input.note ? { note: input.note } : {}),
+          },
+          fallback: "Could not record that decision",
+        },
+      );
+      return (await response.json()) as {
+        loop: unknown;
+        carriedOut: string | null;
+      };
+    },
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: channelKeys.all }),
+  });
+}
+
+/** Record whether the work on this goal moved the business. */
+export function recordGoalOutcomeMutationOptions(queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: async (input: GoalOutcomeInput) => {
+      const response = await client(
+        `/api/channels/${input.channelId}/loop/outcome`,
+        {
+          method: "POST",
+          body: { outcome: input.outcome },
+          fallback: "Could not record that outcome",
+        },
+      );
+      return (await response.json()) as { loop: unknown };
+    },
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: channelKeys.all }),
+  });
+}

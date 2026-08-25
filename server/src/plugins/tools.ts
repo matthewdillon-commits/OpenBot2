@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { PluginRefusedError } from "./errors";
+import { PluginRefusedError, PluginWaitingError } from "./errors";
 import { REFUSAL_MARKER } from "./refusal";
 import type { PluginStore } from "./store";
 
@@ -96,6 +96,9 @@ export async function grantedTools(options: {
         });
         return result.text;
       } catch (error) {
+        if (error instanceof PluginWaitingError) {
+          return error.message;
+        }
         if (error instanceof PluginRefusedError) {
           return `${REFUSAL_MARKER} ${error.message}`;
         }

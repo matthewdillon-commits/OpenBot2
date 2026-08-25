@@ -169,10 +169,12 @@ That does not live in a system prompt.
 | 3. Intelligence + action | The layer understands the book, prioritizes, and acts without waiting for a chat send. |
 | 4. Self-improving business | Measure and improve are closed. The loop compounds. |
 
-Code in this tree is **late Stage 1 / early Stage 2**: in-app, org-scoped,
-connected agents, rooms behind See the work, unattended jobs. Measure and
-improve are not closed. How we climb the rest is [roadmap.md](roadmap.md).
-Later phases are other pull requests.
+Code in this tree is **late Stage 1 / early Stage 2**, with measure and
+improve closed on the **same goal object**: a high-risk permit waits as an
+approval card; the owner keep / revise / revert; the goal stores
+expected_impact and outcome; the next orchestrator turn sees that decision.
+Persist onto the Intelligence thread still fails closed. Self-serve SaaS is
+not this tree. How we climb the rest is [roadmap.md](roadmap.md).
 
 ---
 
@@ -210,7 +212,14 @@ never succeeded. The job row is not a second transcript: prompt plus a skinny
 `resultText` / outcome only. The job row stores a skinny outcome: status
 Active | Needs you | Done, `last_action` (one
 sentence), `last_action_at`, plus who ran and any CRM record ids the write
-already returned. That is not an approval card.
+already returned. That is not an approval card. **Phase 5** stores whether
+the work moved the business on that same goal: `channels.loop` holds
+expected_impact, outcome (worked / didn't / unknown), the approval card
+(rationale, before/after, rollback), and keep | revise | revert. High-risk
+writes (CRM create/update/send, computer write/run, MCP writes) wait after
+the gateway permits them, instead of silently acting. Low-risk reads still
+auto-run. The owner answers the card on that goal. The next orchestrator
+turn is told the last decision and outcome.
 
 **Two doors.** Home is Composer to LimitlessAI plus Goals (the existing
 channel list: name, Active | Needs you | Done, last action, time). Opening a
@@ -311,10 +320,11 @@ the tab closes, including computer tools when the gateway is on. Persist onto
 the Intelligence thread still fails closed — close-tab / come-back on the same
 mapped thread is not true yet unless persist is later given a write.
 
-**Not the self-improving loop.** There are no outcome events tied to actions,
-no approval cards with expected impact, and no keep / revise / revert that
-feeds the next choice. The audit trail records what was permitted or refused.
-It does not measure whether the work moved the business.
+**The self-improving loop is closed on the goal.** High-risk actions wait as
+an approval card on that goal. The owner keep / revise / revert. Outcome
+(worked / didn't / unknown) is stored on the same object. The next
+orchestrator turn sees that decision. Persist still fails closed. There is
+no Measure or Approvals nav, and no second runner.
 
 ### Code that says this
 
@@ -344,13 +354,19 @@ It does not measure whether the work moved the business.
 | Unattended persist fails closed | `server/src/jobs/thread.ts` `createThreadPersister` (`getThread` only) |
 | Shared computer without supervisor | `docs/deployment.md`, `COMPUTER_SUPERVISOR_URL` |
 | Composio keyed by org | `server/src/composio/client.ts` |
+| High-risk wait as an approval card | `server/src/loop/wait.ts` `createHighRiskWait`; `server/src/crm/gateway.ts`; `server/src/computer/gateway.ts`; `server/src/plugins/store.ts` |
+| Loop fields on the existing goal | `server/src/db/schema/core.ts` `channels.loop`; `server/src/loop/store.ts` |
+| Keep / revise / revert | `server/src/loop/routes.ts` `POST /:channelId/loop/decision`; `app/src/components/channels/goal-loop-card.tsx` |
+| Outcome on the same goal | `server/src/loop/routes.ts` `POST /:channelId/loop/outcome`; `recordUnknownOutcomeIfAbsent` |
+| Next orchestrator turn sees the decision | `server/src/loop/guidance.ts` `orchestratorContextFromLoop`; `server/src/copilot.ts` `goalLoopGuidance`; `server/src/jobs/run.ts` |
+| Owner nav has no Measure / Approvals item | `app/src/lib/nav/owner-nav.ts`, `app/tests/owner-nav.test.ts` |
 
 ---
 
 ## C. What it is not yet
 
 Three things people will assume from Part A. The two doors have landed;
-persist and the loop have not:
+the loop is closed on the goal; persist and SaaS have not:
 
 1. **A durable unattended transcript.** Send-and-go, cron, webhook, inbound
    email, and specialist spawn exist (Part B), including computer tools on the
@@ -360,12 +376,11 @@ persist and the loop have not:
 2. **Self-serve SaaS.** No RLS, no Stripe, no seat quota, no invite email, no
    per-org SSO, no spend cap, no multi-replica story beyond “Postgres is the
    shared state.” `/platform` is sales-led provisioning, not a checkout.
-3. **The self-improving loop.** Home is Composer + Goals. See the work opens
-   that goal’s room. There are still no approval cards, no expected impact, and
-   no keep / revise / revert. Observe / understand / prioritize / act can be
-   *performed by a person talking to LimitlessAI*, or by a standing trigger or
-   specialist job that enqueues the same runner. Measure and improve are not
-   product surfaces.
+3. **The rest of Stage 4 compounding.** Approval cards, expected impact,
+   outcome, and keep / revise / revert live on the same goal (Part B). Home is
+   still Composer + Goals. See the work still opens that goal’s room. There is
+   no experimentation platform, no Measure / Approvals nav, and persist onto
+   the Intelligence thread still fails closed.
 
 When a pull request claims one of those, it is done only when Part B of this
 file can say so with a file citation. Until then the honest sentence is the

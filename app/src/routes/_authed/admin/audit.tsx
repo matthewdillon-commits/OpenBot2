@@ -336,6 +336,10 @@ const DECISIONS: Record<string, string> = {
   "job.succeeded": "Unattended job finished",
   "job.failed": "Unattended job failed",
   "job.refused": "Unattended job refused",
+
+  "goal.approval_opened": "Approval card opened",
+  "goal.decision_recorded": "Keep / revise / revert recorded",
+  "goal.outcome_recorded": "Goal outcome recorded",
 };
 
 function hostOf(url: string): string {

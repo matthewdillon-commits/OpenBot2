@@ -569,4 +569,18 @@ describe("OpenBot database schema", () => {
       `CREATE INDEX "agent_profiles_visibility_deleted_idx" ON "agent_profiles" USING btree ("visibility","deleted_at")`,
     );
   });
+
+  test("persists the Phase 5 loop on the existing channel", () => {
+    expect(Object.keys(channels)).toEqual(expect.arrayContaining(["loop"]));
+  });
+
+  test("adds the goal loop column in its own migration", async () => {
+    const migration = await readFile(
+      new URL("../drizzle/0017_channel_loop.sql", import.meta.url),
+      "utf8",
+    );
+    expect(migration).toContain(
+      `ALTER TABLE "channels" ADD COLUMN "loop" jsonb`,
+    );
+  });
 });

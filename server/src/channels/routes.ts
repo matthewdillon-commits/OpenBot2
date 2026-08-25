@@ -17,6 +17,15 @@ import {
 } from "../db/schema";
 import { jobs } from "../db/schema/jobs";
 import { asJobOutcome, type GoalStatus } from "../jobs/outcome";
+import { asGoalLoop } from "../loop/parse";
+import {
+  loopStageOf,
+  publicGoalLoop,
+  type LoopOutcome,
+  type LoopStage,
+  type PublicApprovalCard,
+  type PublicLoopDecision,
+} from "../loop/types";
 import { orgIdOf } from "../orgs/constants";
 import {
   CHANNEL_ACTIVITY_TOPIC,
@@ -32,6 +41,11 @@ export type AgentChannel = {
   agentIds: string[];
   threadId: string;
   active: boolean;
+  expectedImpact?: string | null;
+  outcome?: LoopOutcome | null;
+  loopStage?: LoopStage | null;
+  approval?: PublicApprovalCard | null;
+  lastDecision?: PublicLoopDecision | null;
 };
 
 /** A channel plus the last thing said in it, which is what a roster renders. */
@@ -157,6 +171,22 @@ function channelName(names: string[]) {
   return `${codePoints.slice(0, MAX_CHANNEL_NAME_CODE_POINTS - 1).join("")}…`;
 }
 
+function loopFieldsFrom(
+  value: unknown,
+): Pick<
+  AgentChannel,
+  "expectedImpact" | "outcome" | "loopStage" | "approval" | "lastDecision"
+> {
+  const publicLoop = publicGoalLoop(asGoalLoop(value));
+  return {
+    expectedImpact: publicLoop.expectedImpact,
+    outcome: publicLoop.outcome,
+    loopStage: publicLoop.stage,
+    approval: publicLoop.approval,
+    lastDecision: publicLoop.lastDecision,
+  };
+}
+
 export function createChannelStore(
   database: Database,
   profileStore: AgentProfileStore,
@@ -238,6 +268,7 @@ export function createChannelStore(
           agentId: channelAgents.agentId,
           threadId: intelligenceChannelMappings.threadId,
           deletedAt: agentProfiles.deletedAt,
+          loop: channels.loop,
         })
         .from(channels)
         .innerJoin(
@@ -273,6 +304,7 @@ export function createChannelStore(
         agentIds: rows.map((row) => row.agentId),
         threadId: first.threadId,
         active: rows.every((row) => row.deletedAt === null),
+        ...loopFieldsFrom(first.loop),
       };
     },
 
@@ -286,6 +318,7 @@ export function createChannelStore(
           agentId: channelAgents.agentId,
           threadId: intelligenceChannelMappings.threadId,
           deletedAt: agentProfiles.deletedAt,
+          loop: channels.loop,
         })
         .from(channels)
         .innerJoin(
@@ -320,6 +353,7 @@ export function createChannelStore(
         agentIds: rows.map((row) => row.agentId),
         threadId: first.threadId,
         active: rows.every((row) => row.deletedAt === null),
+        ...loopFieldsFrom(first.loop),
       };
     },
 
@@ -493,6 +527,7 @@ export function createChannelStore(
           lastMessageAt: channels.lastMessageAt,
           lastMessageAgentId: channels.lastMessageAgentId,
           createdAt: channels.createdAt,
+          loop: channels.loop,
         })
         .from(channels)
         .innerJoin(
@@ -555,6 +590,7 @@ export function createChannelStore(
           goalStatus: "Active",
           lastAction: row.lastMessage,
           lastActionAt: row.lastMessageAt,
+          ...loopFieldsFrom(row.loop),
         });
       }
 
@@ -587,23 +623,31 @@ export function createChannelStore(
         }
         for (const summary of listed) {
           const job = byChannel.get(summary.id);
-          if (!job) continue;
-          const outcome = asJobOutcome(job.outcome);
-          if (job.needsYou) {
-            summary.goalStatus = "Needs you";
-          } else if (outcome) {
-            summary.goalStatus = outcome.status;
-          } else if (job.status === "queued" || job.status === "running") {
-            summary.goalStatus = "Active";
-          } else if (job.status === "succeeded") {
-            summary.goalStatus = "Done";
-          } else {
-            summary.goalStatus = "Needs you";
+          if (job) {
+            const outcome = asJobOutcome(job.outcome);
+            if (job.needsYou) {
+              summary.goalStatus = "Needs you";
+            } else if (outcome) {
+              summary.goalStatus = outcome.status;
+            } else if (job.status === "queued" || job.status === "running") {
+              summary.goalStatus = "Active";
+            } else if (job.status === "succeeded") {
+              summary.goalStatus = "Done";
+            } else {
+              summary.goalStatus = "Needs you";
+            }
+            summary.lastAction = outcome?.last_action ?? summary.lastMessage;
+            summary.lastActionAt = outcome?.last_action_at
+              ? new Date(outcome.last_action_at)
+              : (summary.lastMessageAt ?? job.updatedAt);
           }
-          summary.lastAction = outcome?.last_action ?? summary.lastMessage;
-          summary.lastActionAt = outcome?.last_action_at
-            ? new Date(outcome.last_action_at)
-            : (summary.lastMessageAt ?? job.updatedAt);
+          if (summary.approval?.status === "waiting") {
+            summary.goalStatus = "Needs you";
+            summary.lastAction =
+              summary.approval.rationale ||
+              summary.lastAction ||
+              "Needs you: keep, revise, or revert.";
+          }
         }
       }
 
@@ -903,13 +947,18 @@ export function createChannelRoutes(
   return routes;
 }
 
-function channelDto(channel: AgentChannel): AgentChannel {
+function channelDto(channel: AgentChannel) {
   return {
     id: channel.id,
     name: channel.name,
     agentIds: channel.agentIds,
     threadId: channel.threadId,
     active: channel.active,
+    expectedImpact: channel.expectedImpact ?? null,
+    outcome: channel.outcome ?? null,
+    loopStage: channel.loopStage ?? null,
+    approval: channel.approval ?? null,
+    lastDecision: channel.lastDecision ?? null,
   };
 }
 
