@@ -37,4 +37,8 @@ if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='openbo
 fi
 sudo -u postgres psql -d openbot -v ON_ERROR_STOP=1 -c 'CREATE EXTENSION IF NOT EXISTS vector;' >/dev/null
 
+# Rewrite bun's hardlink store before migrate. Terminals wait for public.users
+# so they do not start until this and migrate have both finished.
+bash scripts/ensure-js-deps.sh
+
 (cd server && bun --env-file=../.env drizzle-kit migrate --config=drizzle.config.ts)
