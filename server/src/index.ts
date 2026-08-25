@@ -54,6 +54,7 @@ import {
   identifyUserFromContext,
 } from "./jobs/actor";
 import { createJobStore } from "./jobs/store";
+import { createJobTriggerStore } from "./jobs/triggers";
 import { createLoadToolsForActor } from "./jobs/tools";
 import { createKnowledgeSearch } from "./knowledge/search";
 import { bootstrapOrganizations } from "./orgs/bootstrap";
@@ -421,6 +422,7 @@ const webSearch = config.tavilyApiKey
  * same list back through `/api/agent-tools/call`.
  */
 const jobStore = createJobStore(database);
+const jobTriggerStore = createJobTriggerStore(database);
 const loadToolsForActor = createLoadToolsForActor({
   pluginStore,
   knowledgeSearch,
@@ -554,6 +556,7 @@ const app = createApp(
   },
   crmStore,
   jobStore,
+  jobTriggerStore,
 );
 
 /**

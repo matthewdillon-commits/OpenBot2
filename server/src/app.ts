@@ -40,8 +40,10 @@ import type { ConnectorAdminService } from "./connectors";
 import type { CredentialAdminService, CredentialInput } from "./credentials";
 import { createCrmRoutes } from "./crm/routes";
 import type { CrmStore } from "./crm/store";
+import { createInboundRoutes } from "./jobs/inbound";
 import { createJobRoutes } from "./jobs/routes";
 import type { JobStore } from "./jobs/store";
+import type { JobTriggerStore } from "./jobs/triggers";
 import { LOCAL_ORGANIZATION_ID, orgIdOf } from "./orgs/constants";
 import { createOrganizationRoutes } from "./orgs/routes";
 import type { OrganizationStore } from "./orgs/store";
@@ -188,6 +190,12 @@ export function createApp(
    * worker claims, and a deployment that has not wired the table should not pretend it can.
    */
   jobStore?: JobStore,
+  /**
+   * Standing cron / webhook / email config. Absent leaves inbound and schedule routes
+   * unmounted: those starts insert the same jobs row, and a deployment that has not
+   * wired the table should not pretend it can.
+   */
+  jobTriggerStore?: JobTriggerStore,
 ) {
   const app = new Hono<{ Variables: AppVariables }>();
 
@@ -836,6 +844,19 @@ export function createApp(
         requireUser,
         jobStore,
         channelStore,
+        auditStore,
+      }),
+    );
+  }
+
+  if (jobStore && channelStore && jobTriggerStore) {
+    app.route(
+      "/api",
+      createInboundRoutes({
+        requireUser,
+        jobStore,
+        channelStore,
+        triggerStore: jobTriggerStore,
         auditStore,
       }),
     );

@@ -10,6 +10,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   index,
+  integer,
   pgEnum,
   pgTable,
   text,
@@ -56,7 +57,7 @@ export const jobs = pgTable(
     actingUserId: text("acting_user_id")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
-    /** Phase 1 is explicit Send-and-go. Cron / webhook / email arrive later. */
+    /** How the job was asked for: `manual` (Send-and-go), `cron`, `webhook`, or `email`. */
     trigger: text("trigger").notNull().default("manual"),
     payload: jsonb("payload").notNull(),
     status: jobStatus("status").notNull().default("queued"),
@@ -96,5 +97,83 @@ export const jobs = pgTable(
     uniqueIndex("jobs_one_running_per_thread")
       .on(table.threadId)
       .where(sql`${table.status} = 'running'`),
+  ],
+);
+
+export const jobTriggerKind = pgEnum("job_trigger_kind", [
+  "cron",
+  "webhook",
+  "email",
+]);
+
+/**
+ * Standing config that enqueues the same `jobs` row Phase 1 already runs.
+ *
+ * Cron, webhook, and inbound email are not a second runner. Each row names the
+ * actor, org, goal/channel, thread, coworker, and prompt. When the trigger
+ * fires it inserts through `jobStore.enqueue`; the worker still claims with
+ * `FOR UPDATE SKIP LOCKED`. A missing mapping or thread is a refuse — this
+ * table does not mint an Intelligence thread.
+ */
+export const jobTriggers = pgTable(
+  "job_triggers",
+  {
+    id: text("id").primaryKey(),
+    orgId: organizationIdColumn(),
+    kind: jobTriggerKind("kind").notNull(),
+    channelId: text("channel_id")
+      .notNull()
+      .references(() => channels.id, { onDelete: "cascade" }),
+    /**
+     * In this tree a goal is the existing channel. Stored so a fire can pass
+     * `goalId` into `startUnattendedRun` without a Goals table.
+     */
+    goalId: text("goal_id").notNull(),
+    /**
+     * The Intelligence thread already mapped for (acting user, channel).
+     * Rechecked at fire; a mismatch or a missing live mapping is a refuse.
+     */
+    threadId: text("thread_id").notNull(),
+    coworkerId: text("coworker_id")
+      .notNull()
+      .references(() => agents.id, { onDelete: "restrict" }),
+    /**
+     * Who the job runs as. Cron / webhook / email have no cookie Request;
+     * this is the actor, resolved the same way the worker reloads a job row.
+     */
+    actingUserId: text("acting_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    prompt: text("prompt").notNull(),
+    enabled: boolean("enabled").notNull().default(true),
+    /** Cron only: seconds between fires. Null on webhook and email rows. */
+    everySeconds: integer("every_seconds"),
+    /** Cron only: when this row is next due. Advanced under SKIP LOCKED. */
+    nextRunAt: timestamp("next_run_at", { withTimezone: true }),
+    /**
+     * Webhook and email: SHA-256 of the org-scoped secret. The plaintext is
+     * returned once at create and never stored.
+     */
+    secretHash: text("secret_hash"),
+    /**
+     * Email only: the mailbox address this maps to. Looked up when a message
+     * arrives; unknown addresses are a refuse.
+     */
+    mailbox: text("mailbox"),
+    lastEnqueuedAt: timestamp("last_enqueued_at", { withTimezone: true }),
+    lastError: text("last_error"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    index("job_triggers_org_kind_idx").on(table.orgId, table.kind),
+    index("job_triggers_cron_due_idx").on(
+      table.kind,
+      table.enabled,
+      table.nextRunAt,
+    ),
+    uniqueIndex("job_triggers_mailbox_unique")
+      .on(table.mailbox)
+      .where(sql`${table.mailbox} is not null`),
   ],
 );

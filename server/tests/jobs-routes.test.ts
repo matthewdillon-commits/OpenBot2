@@ -60,8 +60,10 @@ const recordingStore = () => {
     enqueue: async (input) => {
       const row = job({
         channelId: input.channelId,
+        goalId: input.goalId ?? input.channelId,
         coworkerId: input.coworkerId,
         threadId: input.threadId,
+        trigger: input.trigger ?? "manual",
         payload: { prompt: input.prompt },
       });
       enqueued.push(row);
@@ -75,6 +77,7 @@ const recordingStore = () => {
         : null,
     listForChannel: async () => [],
     markNeedsYou: async () => [],
+    hasUnfinishedOnThread: async () => false,
   };
   return { jobStore, enqueued };
 };

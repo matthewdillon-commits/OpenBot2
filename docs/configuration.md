@@ -353,6 +353,40 @@ sources:
 
 Supported source types are `google-drive` and `microsoft-onedrive`.
 
+## Standing unattended starts
+
+Cron, webhook, and inbound email insert the same `jobs` row Send-and-go uses. The worker process
+must be running; the API only writes the row.
+
+Create a standing config while signed in:
+
+```http
+POST /api/job-triggers
+{
+  "kind": "cron" | "webhook" | "email",
+  "channelId": "<existing channel / goal id>",
+  "prompt": "Standing prompt.",
+  "everySeconds": 3600,
+  "mailbox": "work@example.test"
+}
+```
+
+`everySeconds` is required for `cron`. `mailbox` is required for `email`. Webhook and email return
+`secret` once; it is stored as a hash. Fire them with that secret, not a session cookie:
+
+```http
+POST /api/inbound/webhook/<id>
+Authorization: Bearer <secret>
+X-OpenBot-Signature: sha256=<hmac-sha256 of the raw body>  # optional
+
+POST /api/inbound/email
+X-OpenBot-Trigger-Secret: <secret>
+{ "to": "work@example.test", "from": "ada@acme.test", "subject": "…", "text": "…" }
+```
+
+A missing Intelligence thread is a refuse. The trigger does not mint one. Persist onto that thread
+still fails closed on this tree.
+
 ## Change workflow
 
 1. Edit the relevant `.env` value or tenant YAML file.

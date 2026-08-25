@@ -36,18 +36,21 @@ computer, a file, CRM, MCP, or the public web.
 
 ## What a coworker does today
 
-A turn starts when someone sends a message in the open app. Closing the app does
-not start work, and nothing in this tree is a scheduler.
+A turn starts when someone sends a message in the open app, from Send-and-go,
+or from a standing cron / webhook / inbound email (the same `jobs` row; the
+worker claims it with `FOR UPDATE SKIP LOCKED`). Closing the tab does not stop
+a claimed job. A missing Intelligence thread is a refuse — nothing mints one.
 
-During that turn, CRM, web search, company knowledge, and granted MCP tools run
-on the API (up to twenty steps). Clicking, typing, and files run in the tab:
-those are frontend tools, and they stop if the tab is gone. The transcript lives
-in CopilotKit Intelligence, so reopening the channel shows what was said.
+During that turn, CRM, web search, company knowledge, granted MCP, and computer
+tools run on the server when the gateway is on (up to twenty steps). The watch
+tab only renders the computer. Persist onto the Intelligence thread still fails
+closed on this tree. Reopening the channel does not yet show the unattended
+result.
 
 [docs/product.md](docs/product.md) Part B is the source of truth for what is in
 this code and what is not: org-scoped data without Postgres RLS, no Stripe or
 seat quotas, no per-org SSO, a shared browser unless the supervisor is actually
-running, no outcome-tied learning loop.
+running, no Goals home, no outcome-tied learning loop.
 
 ## Quick start
 

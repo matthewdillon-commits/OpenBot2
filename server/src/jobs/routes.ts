@@ -12,6 +12,7 @@ import { recordAuditEvent } from "../audit";
 import type { AppVariables } from "../auth/guards";
 import type { ChannelStore } from "../channels/routes";
 import { orgIdOf } from "../orgs/constants";
+import { enqueueUnattendedJob } from "./enqueue";
 import type { JobOutcome, JobStore, UnattendedJob } from "./store";
 
 export type JobRoutesOptions = {
@@ -94,52 +95,8 @@ export function createJobRoutes(options: JobRoutesOptions) {
         : typeof body.text === "string"
           ? body.text.trim()
           : "";
-    if (!channelId) {
-      return context.json({ error: "A channel is required." }, 400);
-    }
-    if (!prompt) {
-      return context.json({ error: "A message is required." }, 400);
-    }
-    const channel = await channelStore.get(
-      { id: actor.id, role: actor.role, orgId },
-      channelId,
-    );
-    if (!channel) {
-      return context.json({ error: "There is no such channel." }, 404);
-    }
-    if (!channel.threadId) {
-      return context.json(
-        {
-          error:
-            "This channel has no Intelligence thread. Unattended runs attach to the existing mapping and do not mint one.",
-        },
-        409,
-      );
-    }
-    if (!channel.active) {
-      return context.json(
-        { error: "This channel can no longer start a run." },
-        409,
-      );
-    }
-    if (goalId !== channel.id) {
-      return context.json(
-        {
-          error:
-            "A goal maps to the existing channel and its Intelligence thread. This goal is not that channel.",
-        },
-        409,
-      );
-    }
     const requested =
       typeof body.agentId === "string" ? body.agentId.trim() : "";
-    const coworkerId = requested || channel.agentIds[0] || "";
-    if (!coworkerId || !channel.agentIds.includes(coworkerId)) {
-      return context.json(
-        { error: "That coworker is not in this channel." },
-        400,
-      );
-    }
     const skillInstructions = Array.isArray(body.skillInstructions)
       ? body.skillInstructions.filter(
           (item): item is string =>
@@ -147,17 +104,23 @@ export function createJobRoutes(options: JobRoutesOptions) {
         )
       : [];
 
-    const job = await jobStore.enqueue({
+    const result = await enqueueUnattendedJob({
+      trigger: "manual",
       orgId,
-      channelId: channel.id,
-      goalId: channel.id,
-      coworkerId,
+      channelId,
+      goalId,
+      coworkerId: requested,
       actingUserId: actor.id,
-      threadId: channel.threadId,
+      actorRole: actor.role,
       prompt,
       ...(skillInstructions.length > 0 ? { skillInstructions } : {}),
-      trigger: "manual",
+      lookupChannel: (acting, id) => channelStore.get(acting, id),
+      jobStore,
     });
+    if (!result.ok) {
+      return context.json({ error: result.error }, result.status);
+    }
+    const { job, channel } = result;
 
     await channelStore
       .recordActivity({ id: actor.id, role: actor.role, orgId }, channel.id, {
@@ -176,7 +139,7 @@ export function createJobRoutes(options: JobRoutesOptions) {
         orgId,
         payload: {
           channelId: channel.id,
-          coworkerId,
+          coworkerId: job.coworkerId,
           threadId: channel.threadId,
           trigger: "manual",
         },
