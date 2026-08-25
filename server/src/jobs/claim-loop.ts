@@ -49,6 +49,8 @@ export async function runUnattendedClaimLoop(
   // connection is how drizzle `transaction()` plus a follow-up select deadlocks
   // (the UPDATE holds FOR UPDATE; the select waits for it). The coworker graph
   // opens its own pool later; it must not exist yet on the first claim.
+  // Claim visibility is every org: `createJobStore.claim` bypasses RLS so a
+  // leftover `processJob` bind cannot hide a later queued row.
   const jobStore =
     options.jobStore ??
     createJobStore(createDatabase(config.databaseUrl, { max: 1 }));

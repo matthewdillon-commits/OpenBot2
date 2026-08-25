@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { SQL } from "bun";
-import { bindRequestRls, wrapClientWithRls } from "../src/db/rls";
+import {
+  bindRequestRls,
+  currentRlsBinding,
+  runWithRequestRls,
+  wrapClientWithRls,
+} from "../src/db/rls";
 
 /**
  * The request RLS wrapper used to run a bound query when `unsafe` was called
@@ -68,5 +73,39 @@ describe("request RLS bun-sql wrapper", () => {
     expect(inserts).toEqual([
       'insert into "users" ("id") values ($1) returning "id"',
     ]);
+  });
+
+  test("runWithRequestRls restores the caller so the next query is not the job org", async () => {
+    expect(currentRlsBinding()).toBeUndefined();
+    await runWithRequestRls(
+      undefined,
+      { orgId: "org_first", bypass: false },
+      async () => {
+        expect(currentRlsBinding()).toEqual({
+          orgId: "org_first",
+          bypass: false,
+        });
+      },
+    );
+    expect(currentRlsBinding()).toBeUndefined();
+  });
+
+  test("enterWith processJob finally still leaves a store the claim loop would see", async () => {
+    async function processJob() {
+      await bindRequestRls(undefined, { orgId: "org_first", bypass: false });
+      try {
+        await Promise.resolve();
+      } finally {
+        await bindRequestRls(undefined, { orgId: null, bypass: false });
+      }
+    }
+
+    await processJob();
+    // The finally enterWith("") does not restore the caller. The claim loop
+    // would still see the first job's org.
+    expect(currentRlsBinding()).toEqual({
+      orgId: "org_first",
+      bypass: false,
+    });
   });
 });

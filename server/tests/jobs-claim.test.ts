@@ -7,11 +7,19 @@ import { createChannelStore } from "../src/channels/routes";
 import { createThreadIdentity } from "../src/channels/thread-identity";
 import { createDatabase } from "../src/db/client";
 import {
+  bindRequestRls,
+  currentRlsBinding,
+  runWithRequestRls,
+} from "../src/db/rls";
+import {
   agentProfiles,
   agents,
   channels,
   intelligenceChannelMappings,
   jobs,
+  organizationMemberships,
+  organizationSso,
+  organizations,
   users,
 } from "../src/db/schema";
 import {
@@ -21,6 +29,7 @@ import {
 } from "../src/jobs/store";
 import { TEST_POOL } from "./support/database";
 import {
+  createTestOrganization,
   ensureLocalOrganization,
   seedMembership,
 } from "./support/organization";
@@ -44,6 +53,32 @@ describe("unattended job claim", () => {
     expect(claim).not.toContain("database.transaction(");
     expect(claim).not.toContain("tx.execute");
     expect(claim).not.toContain("tx.select");
+  });
+
+  test("claim() bypasses a leftover processJob org bind so every org is visible", async () => {
+    const source = await Bun.file(
+      new URL("../src/jobs/store.ts", import.meta.url),
+    ).text();
+    const start = source.indexOf("async claim()");
+    const end = source.indexOf("async finish", start);
+    const claim = source.slice(start, end);
+    expect(claim).toContain("runWithRequestRls");
+    expect(claim).toContain("bypass: true");
+    expect(claim).toContain("database.execute");
+    expect(claim).not.toContain("database.transaction(");
+  });
+
+  test("processJob binds the job org with ALS.run, not enterWith", async () => {
+    const source = await Bun.file(
+      new URL("../src/jobs/bootstrap.ts", import.meta.url),
+    ).text();
+    const start = source.indexOf("async function processJob");
+    const end = source.indexOf("async function executeJob", start);
+    const processJob = source.slice(start, end);
+    expect(processJob).toContain("runWithRequestRls");
+    expect(processJob).toContain("orgId: job.orgId");
+    expect(processJob).not.toContain("bindRequestRls");
+    expect(processJob).not.toContain("enterWith");
   });
 
   test("parseClaimedIds reads bun-sql execute shapes that used to look empty", () => {
@@ -88,6 +123,7 @@ describe.skipIf(!postgresReachable)(
     const createdAgentIds: string[] = [];
     const createdChannelIds: string[] = [];
     const createdJobIds: string[] = [];
+    const createdOrgIds: string[] = [];
 
     afterAll(async () => {
       for (const jobId of createdJobIds) {
@@ -118,8 +154,22 @@ describe.skipIf(!postgresReachable)(
       }
       for (const userId of createdUserIds) {
         await database
+          .delete(organizationMemberships)
+          .where(eq(organizationMemberships.userId, userId))
+          .catch(() => undefined);
+        await database
           .delete(users)
           .where(eq(users.id, userId))
+          .catch(() => undefined);
+      }
+      for (const orgId of createdOrgIds) {
+        await database
+          .delete(organizationSso)
+          .where(eq(organizationSso.orgId, orgId))
+          .catch(() => undefined);
+        await database
+          .delete(organizations)
+          .where(eq(organizations.id, orgId))
           .catch(() => undefined);
       }
       await database.$client.close();
@@ -150,6 +200,53 @@ describe.skipIf(!postgresReachable)(
       const channel = await channelStore.create(actor, [agent.id]);
       createdChannelIds.push(channel.id);
       return { actor, agent, channel };
+    }
+
+    async function seedOrgJob(
+      org: { id: string; slug: string; name: string },
+      prompt: string,
+    ) {
+      await createTestOrganization(database, org);
+      createdOrgIds.push(org.id);
+      const actor: AgentActor = {
+        id: `${prefix}-user-${org.id}`,
+        role: "user",
+        orgId: org.id,
+      };
+      await database.insert(users).values({
+        id: actor.id,
+        email: `${actor.id}@example.test`,
+        name: "Two-org claim",
+      });
+      createdUserIds.push(actor.id);
+      await seedMembership(database, actor.id, "member", org.id);
+      const agentId = `${prefix}-agent-${org.id}`;
+      await database.insert(agents).values({
+        id: agentId,
+        orgId: org.id,
+        name: "Researcher",
+        type: "built_in",
+        configuration: {},
+      });
+      createdAgentIds.push(agentId);
+      const channelId = `${prefix}-channel-${org.id}`;
+      await database.insert(channels).values({
+        id: channelId,
+        orgId: org.id,
+        name: "Goal",
+        description: "two-org claim",
+      });
+      createdChannelIds.push(channelId);
+      const job = await createJobStore(database).enqueue({
+        orgId: org.id,
+        channelId,
+        coworkerId: agentId,
+        actingUserId: actor.id,
+        threadId: `thread-${channelId}`,
+        prompt,
+      });
+      createdJobIds.push(job.id);
+      return job;
     }
 
     test("two workers racing one queued job: one wins", async () => {
@@ -209,6 +306,59 @@ describe.skipIf(!postgresReachable)(
         expect(claimed?.startedAt).toBeInstanceOf(Date);
       } finally {
         await single.$client.close();
+      }
+    });
+
+    test("claim() still starts a second org's job after processJob bound the first", async () => {
+      const orgA = {
+        id: `org_claim_a_${prefix}`,
+        slug: `claim-a-${prefix}`.slice(0, 40),
+        name: "Claim Org A",
+      };
+      const orgB = {
+        id: `org_claim_b_${prefix}`,
+        slug: `claim-b-${prefix}`.slice(0, 40),
+        name: "Claim Org B",
+      };
+      const jobA = await seedOrgJob(orgA, "First org leftover.");
+      const jobB = await seedOrgJob(orgB, "Second org after the leftover.");
+      const claimDb = createDatabase(databaseUrl, { max: 1 });
+      const runtimeDb = createDatabase(databaseUrl, { max: 1 });
+      try {
+        await claimDb.execute(sql`grant openbot_rls to current_user`);
+        await runtimeDb.execute(sql`grant openbot_rls to current_user`);
+        const store = createJobStore(claimDb);
+
+        const first = await store.claim();
+        expect(first?.id).toBe(jobA.id);
+        expect(first?.orgId).toBe(orgA.id);
+        expect(first?.startedAt).toBeInstanceOf(Date);
+
+        // The live worker: processJob enterWith(org A). ALS is process-wide, so
+        // the claim pool's next UPDATE ran as openbot_rls for org A and missed
+        // org B. A scoped UPDATE here must not match job B.
+        await bindRequestRls(claimDb, { orgId: orgA.id, bypass: false });
+        const scoped = await claimDb.execute(sql.raw(CLAIM_QUEUED_JOB_SQL));
+        expect(parseClaimedIds(scoped)).toEqual([]);
+
+        // processJob now uses ALS.run for the job only; that must not leak.
+        await runWithRequestRls(
+          runtimeDb,
+          { orgId: orgA.id, bypass: false },
+          () => runtimeDb.execute(sql`select 1`),
+        );
+        // enterWith sticks; ALS.run does not add a second leak. Claim must
+        // still see org B while this leftover org A store is in place.
+        expect(currentRlsBinding()?.orgId).toBe(orgA.id);
+
+        const second = await store.claim();
+        expect(second?.id).toBe(jobB.id);
+        expect(second?.orgId).toBe(orgB.id);
+        expect(second?.status).toBe("running");
+        expect(second?.startedAt).toBeInstanceOf(Date);
+      } finally {
+        await claimDb.$client.close();
+        await runtimeDb.$client.close();
       }
     });
   },

@@ -8,6 +8,7 @@
  */
 import { and, desc, eq, sql } from "drizzle-orm";
 import type { Database } from "../db/client";
+import { runWithRequestRls } from "../db/rls";
 import { jobs } from "../db/schema/jobs";
 import { orgIdOf } from "../orgs/constants";
 import { asJobOutcome, buildJobOutcome, type JobOutcome } from "./outcome";
@@ -280,12 +281,19 @@ export function createJobStore(database: Database): JobStore {
     },
 
     async claim() {
+      // Bypass, not the current ALS org. `wrapClientWithRls` reads a
+      // process-wide store; a previous `processJob` enterWith(orgA) would
+      // otherwise make this UPDATE run as `openbot_rls` for org A only.
       // One statement, then a read of the committed row. A drizzle
       // transaction plus a second select on the same client is the bun-sql
       // pool deadlock: BEGIN on connection 1, UPDATE holds FOR UPDATE, SELECT
       // borrows connection 2 and waits for the lock that connection 1 will
       // not release until the select returns. `started_at` stays invisible.
-      const result = await database.execute(sql`
+      return runWithRequestRls(
+        database,
+        { orgId: null, bypass: true },
+        async () => {
+          const result = await database.execute(sql`
           UPDATE jobs
           SET status = 'running',
               started_at = COALESCE(started_at, now()),
@@ -304,10 +312,15 @@ export function createJobStore(database: Database): JobStore {
           )
           RETURNING id
         `);
-      const id = parseClaimedIds(result)[0];
-      if (!id) return null;
-      const [row] = await database.select().from(jobs).where(eq(jobs.id, id));
-      return row ? toJob(row) : null;
+          const id = parseClaimedIds(result)[0];
+          if (!id) return null;
+          const [row] = await database
+            .select()
+            .from(jobs)
+            .where(eq(jobs.id, id));
+          return row ? toJob(row) : null;
+        },
+      );
     },
 
     async finish(id, status, update = {}) {
