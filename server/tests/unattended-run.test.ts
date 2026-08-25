@@ -444,7 +444,7 @@ describe("unattended tools", () => {
     });
   });
 
-  test("drops computer tools and fails closed on user-oauth without a connection", async () => {
+  test("keeps computer tools, drops gallery tools, and fails closed on user-oauth without a connection", async () => {
     const tools = serverSideToolsOnly([
       {
         name: "computer_click",
@@ -453,13 +453,22 @@ describe("unattended tools", () => {
         execute: async () => "clicked",
       },
       {
+        name: "gallery_chart",
+        description: "Chart",
+        parameters: z.object({}),
+        execute: async () => "drawn",
+      },
+      {
         name: "crm_search",
         description: "Search",
         parameters: z.object({}),
         execute: async () => "ok",
       },
     ]);
-    expect(tools.map((tool) => tool.name)).toEqual(["crm_search"]);
+    expect(tools.map((tool) => tool.name)).toEqual([
+      "computer_click",
+      "crm_search",
+    ]);
 
     const gated = await gateUserOAuthTools(
       [

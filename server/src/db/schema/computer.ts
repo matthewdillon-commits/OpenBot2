@@ -48,6 +48,23 @@ export const actionPolicy = pgTable("action_policy", {
 });
 
 /**
+ * Which organization first used the one shared Chromium.
+ *
+ * One row (`id = shared`). Insert-on-conflict so two replicas cannot both
+ * believe they are first. A second org is refused until COMPUTER_SUPERVISOR_URL
+ * selects the docker provider (one computer per org×bot).
+ */
+export const SHARED_COMPUTER_CLAIM_ID = "shared";
+
+export const sharedComputerClaim = pgTable("shared_computer_claim", {
+  id: text("id").primaryKey(),
+  orgId: organizationIdColumn(),
+  claimedAt: timestamp("claimed_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
  * The last snapshot a computer produced, kept where every replica can read it.
  *
  * The gateway resolves the opaque ref in an acting call into the element it points at, and it must

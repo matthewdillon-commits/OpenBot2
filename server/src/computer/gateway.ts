@@ -20,6 +20,11 @@
 import { type AuditStore, recordAuditEvent } from "../audit";
 import { computerIdFor, LOCAL_ORGANIZATION_ID } from "../orgs/constants";
 import { ComputerUnavailableError, createComputerTransport } from "./client";
+import {
+  createInMemorySharedComputerClaim,
+  type SharedComputerClaim,
+  SharedComputerIsolationError,
+} from "./shared-claim";
 import { checkComputerAddress } from "./target";
 
 export {
@@ -30,6 +35,10 @@ export {
   WorkspaceRefusedError,
   WorkspaceRequestError,
 } from "./client";
+export {
+  SHARED_COMPUTER_SECOND_ORG,
+  SharedComputerIsolationError,
+} from "./shared-claim";
 
 import {
   type ActionPolicy,
@@ -111,6 +120,14 @@ export type ComputerGatewayOptions = {
    * is correct in one process and is what a unit test wants. See snapshot-store.ts.
    */
   snapshots?: SnapshotStore;
+  /**
+   * Which organization first used a shared Chromium.
+   *
+   * Required in production when isolation is shared — the row lives in Postgres so two
+   * replicas cannot each let a different org through. Absent, the gateway keeps the
+   * claim in this process, which is what a unit test wants.
+   */
+  sharedClaim?: SharedComputerClaim;
 };
 
 export interface ComputerGateway {
@@ -234,6 +251,8 @@ export function createComputerGateway(
    * ref from a superseded page from resolving to whatever now holds it. See snapshot-store.ts.
    */
   const snapshots = options.snapshots ?? createInMemorySnapshotStore();
+  const sharedClaim =
+    options.sharedClaim ?? createInMemorySharedComputerClaim();
 
   function isolation(botId: string, orgId?: string) {
     const org = orgId?.trim() || LOCAL_ORGANIZATION_ID;
@@ -252,7 +271,19 @@ export function createComputerGateway(
    * Bot may browse and the wrong one here, where loopback is the normal case.
    */
   async function locate(botId: string, orgId?: string): Promise<string> {
-    const { computerId } = isolation(botId, orgId);
+    const { orgId: org, computerId } = isolation(botId, orgId);
+    /*
+     * One shared Chromium is allowed for a single trusted org. A second organization
+     * must not get that browser: COMPUTER_SUPERVISOR_URL is how computers are made
+     * (one computer per org×bot). Asked here, before the provider is contacted, so
+     * the second org never starts a session on the first org's machine.
+     */
+    if (provider.isolation === "shared") {
+      const verdict = await sharedClaim.ensure(org);
+      if (!verdict.allowed) {
+        throw new SharedComputerIsolationError();
+      }
+    }
     const address = await provider.locate(computerId);
     const verdict = checkComputerAddress(address);
     if (!verdict.allowed) {

@@ -2,8 +2,9 @@
  * Start an unattended coworker run on the existing mapped Intelligence thread.
  *
  * Same `buildAgents` / `loadToolsForActor` / standing role / `signRun` path as an open-tab
- * turn in copilot.ts. Computer guidance is never attached: those tools live in the tab.
- * No cookie Request — the actor is explicit.
+ * turn in copilot.ts. Computer tools execute on the server when the gateway is configured;
+ * pass `computerGuidance` so the coworker is told about those hands. No cookie Request —
+ * the actor is explicit.
  */
 import type { AbstractAgent } from "@ag-ui/client";
 import type { AgentActor } from "../agents/profile-types";
@@ -74,6 +75,8 @@ export type UnattendedRunDeps = {
   timeoutMs: number;
   threadWaitMs?: number;
   userOAuth?: UserOAuthLookup;
+  /** What built-in Bots are told about the computer. Absent means this run has none. */
+  computerGuidance?: string;
   /**
    * Test seam. Production builds the coworker through `buildAgents` and calls `runAgent`.
    */
@@ -293,8 +296,7 @@ export async function startUnattendedRun(input: {
       undefined,
       loadTools,
       input.deps.signRun?.(actor.id, orgId),
-      // Unattended runs do not mention the computer. Those tools stay in the tab.
-      undefined,
+      input.deps.computerGuidance,
     ));
   const agent = agents[coworker.id];
   if (!agent) {

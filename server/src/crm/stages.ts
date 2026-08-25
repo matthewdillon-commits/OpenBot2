@@ -158,5 +158,7 @@ export function contactStageLabel(key: string): string {
 
 export function dealStageLabel(key: string): string {
   const normalized = normalizeDealStage(key);
-  return DEAL_STAGE_DEFS.find((stage) => stage.key === normalized)?.label ?? key;
+  return (
+    DEAL_STAGE_DEFS.find((stage) => stage.key === normalized)?.label ?? key
+  );
 }

@@ -31,6 +31,7 @@ import {
   jobStatus,
   jobs,
   sessions,
+  sharedComputerClaim,
   syncRuns,
   userRoles,
   users,
@@ -455,6 +456,23 @@ describe("OpenBot database schema", () => {
     expect(migration).toContain(`"needs_you"`);
     expect(migration).toContain(`"goal_id"`);
     expect(migration).toContain(`"outcome" jsonb`);
+  });
+
+  test("defines the shared Chromium claim isolated by org_id", () => {
+    expect(getTableName(sharedComputerClaim)).toBe("shared_computer_claim");
+    expect(Object.keys(sharedComputerClaim)).toEqual(
+      expect.arrayContaining(["id", "orgId", "claimedAt"]),
+    );
+  });
+
+  test("adds the shared computer claim in its own migration", async () => {
+    const migration = await readFile(
+      new URL("../drizzle/0015_shared_computer_claim.sql", import.meta.url),
+      "utf8",
+    );
+    expect(migration).toContain(`CREATE TABLE "shared_computer_claim"`);
+    expect(migration).toContain(`"org_id" text DEFAULT 'org_local' NOT NULL`);
+    expect(migration).toContain(`PRIMARY KEY`);
   });
 
   test("adds LimitlessAI-2 stages in their own migration", async () => {

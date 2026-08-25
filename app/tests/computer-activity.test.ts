@@ -1,10 +1,16 @@
 import { beforeEach, describe, expect, test } from "bun:test";
+import { readFile } from "node:fs/promises";
 import {
   activityFor,
   clearActivity,
+  hasBrowsed,
   recordActivity,
 } from "../src/lib/computers/activity";
-import { outputOf } from "../src/lib/copilot/computer-tools";
+import { onComputerActivity } from "../src/lib/copilot/computer-activity";
+import {
+  outputOf,
+  rememberComputerToolRender,
+} from "../src/lib/copilot/computer-tools";
 
 /**
  * What a Bot did on its computer, other than browse.
@@ -136,5 +142,150 @@ describe("the activity a pane shows", () => {
 
     const [first, second] = activityFor("bot-1");
     expect(first?.id).not.toBe(second?.id);
+  });
+});
+
+describe("rememberComputerToolRender", () => {
+  beforeEach(() => {
+    clearActivity("bot-1");
+  });
+
+  test("reports activity once per tool-call id and records file and shell lines on complete", () => {
+    const seen = new Set<string>();
+    const epochs: number[] = [];
+    const stop = onComputerActivity((activity) => {
+      if (activity.botId === "bot-1") epochs.push(activity.epoch);
+    });
+
+    rememberComputerToolRender({
+      name: "computer_list_files",
+      botId: "bot-1",
+      status: "inProgress",
+      args: { path: "notes" },
+      toolCallId: "call-list",
+      seen,
+    });
+    rememberComputerToolRender({
+      name: "computer_list_files",
+      botId: "bot-1",
+      status: "inProgress",
+      args: { path: "notes" },
+      toolCallId: "call-list",
+      seen,
+    });
+    expect(epochs).toHaveLength(1);
+
+    rememberComputerToolRender({
+      name: "computer_list_files",
+      botId: "bot-1",
+      status: "complete",
+      result: JSON.stringify({
+        ok: true,
+        entries: [{ path: "notes.md", kind: "file", bytes: 5 }],
+      }),
+      args: { path: "notes" },
+      toolCallId: "call-list",
+      seen,
+    });
+    rememberComputerToolRender({
+      name: "computer_list_files",
+      botId: "bot-1",
+      status: "complete",
+      result: JSON.stringify({
+        ok: true,
+        entries: [{ path: "notes.md", kind: "file", bytes: 5 }],
+      }),
+      args: { path: "notes" },
+      toolCallId: "call-list",
+      seen,
+    });
+    expect(activityFor("bot-1")).toHaveLength(1);
+    expect(activityFor("bot-1")[0]?.kind).toBe("list_files");
+    stop();
+  });
+
+  test("records read, write, and run_command the way the handlers used to", () => {
+    const seen = new Set<string>();
+    rememberComputerToolRender({
+      name: "computer_read_file",
+      botId: "bot-1",
+      status: "complete",
+      result: JSON.stringify({ ok: true, text: "hello", path: "notes.md" }),
+      args: { path: "notes.md" },
+      toolCallId: "call-read",
+      seen,
+    });
+    rememberComputerToolRender({
+      name: "computer_write_file",
+      botId: "bot-1",
+      status: "complete",
+      result: JSON.stringify({ ok: true, bytes: 12 }),
+      args: { path: "notes.md", append: true },
+      toolCallId: "call-write",
+      seen,
+    });
+    rememberComputerToolRender({
+      name: "computer_run_command",
+      botId: "bot-1",
+      status: "complete",
+      result: JSON.stringify({
+        ok: true,
+        exitCode: 0,
+        stdout: "ok",
+        stderr: "",
+      }),
+      args: { command: "ls" },
+      toolCallId: "call-run",
+      seen,
+    });
+
+    const kinds = activityFor("bot-1").map((entry) => entry.kind);
+    expect(kinds).toEqual(["read_file", "write_file", "command"]);
+    expect(activityFor("bot-1")[1]?.output).toBe("12 bytes, appended");
+    expect(activityFor("bot-1")[2]?.subject).toBe("ls");
+  });
+
+  test("marks browsed on a successful navigate and not on a refusal", () => {
+    const seen = new Set<string>();
+    rememberComputerToolRender({
+      name: "computer_navigate",
+      botId: "bot-1",
+      status: "complete",
+      result: "Refused. Browser use is switched off.",
+      args: { url: "https://example.com/" },
+      toolCallId: "call-nav-refused",
+      seen,
+    });
+    expect(hasBrowsed("bot-1")).toBe(false);
+
+    rememberComputerToolRender({
+      name: "computer_navigate",
+      botId: "bot-1",
+      status: "complete",
+      result: JSON.stringify({
+        ok: true,
+        title: "Example",
+        url: "https://example.com/",
+      }),
+      args: { url: "https://example.com/" },
+      toolCallId: "call-nav",
+      seen,
+    });
+    expect(hasBrowsed("bot-1")).toBe(true);
+  });
+});
+
+describe("computer-tools.tsx is render-only", () => {
+  test("does not execute computer_* or wait for a person in the tab", async () => {
+    const source = await readFile(
+      new URL("../src/lib/copilot/computer-tools.tsx", import.meta.url),
+      "utf8",
+    );
+    expect(source).not.toContain("waitForPerson");
+    expect(source).not.toContain("callComputer");
+    expect(source).not.toContain("/api/computers/");
+    expect(source).not.toContain("readControl");
+    expect(source).toContain("useRenderTool");
+    expect(source).not.toMatch(/useFrontendTool\(\s*\{\s*name:\s*"computer_/);
   });
 });

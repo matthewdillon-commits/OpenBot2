@@ -2,16 +2,21 @@
  * Server tools for a coworker run, built the same way an open-tab turn builds them.
  *
  * `loadToolsForActor` used to live only in the API process. An unattended run has to offer the
- * same CRM, search, knowledge, and granted MCP tools — and must not register computer_* or
- * gallery components, which still execute in the tab. Extracting the factory means the worker
- * cannot drift from the API list.
+ * same CRM, search, knowledge, granted MCP, and — when the gateway is configured and the
+ * browser is on — computer_* tools. Gallery components still execute in the tab.
  *
  * User-oauth tools fail closed: if a tool is marked as needing a per-user connection and the
  * acting user has none, the execute path refuses rather than calling out as the org.
  */
 import type { AgentActor } from "../agents/profile-types";
 import type { AuditStore } from "../audit";
-import type { ActionPolicy } from "../computer/policy";
+import type { ChannelActivity } from "../channels/routes";
+import {
+  computerTools,
+  lastActionForNeedsYou,
+} from "../computer/computer-tools";
+import type { ComputerGateway } from "../computer/gateway";
+import { type ActionPolicy, isBrowserEnabled } from "../computer/policy";
 import type { CrmGateway } from "../crm/gateway";
 import { crmTools } from "../crm/tools";
 import type { Database } from "../db/client";
@@ -23,6 +28,7 @@ import type { PluginStore } from "../plugins/store";
 import { type GrantedTool, grantedTools } from "../plugins/tools";
 import type { WebSearch } from "../web-search/tavily";
 import { webSearchTool } from "../web-search/tool";
+import type { JobStore } from "./store";
 
 export type UserOAuthLookup = {
   hasConnection: (input: {
@@ -46,9 +52,16 @@ export type LoadToolsForActorDeps = {
    * `requiresUserOAuth` refuses. Org-scoped Composio / MCP grants are not user-oauth.
    */
   userOAuth?: UserOAuthLookup;
+  computerGateway?: ComputerGateway;
+  jobStore?: JobStore;
+  recordActivity?: (input: {
+    actor: AgentActor;
+    channelId: string;
+    activity: ChannelActivity;
+  }) => Promise<void>;
 };
 
-const FRONTEND_ONLY_TOOL = /^(computer_|gallery)/;
+const FRONTEND_ONLY_TOOL = /^gallery/;
 
 export function isFrontendOnlyTool(name: string): boolean {
   return FRONTEND_ONLY_TOOL.test(name);
@@ -88,7 +101,8 @@ export async function gateUserOAuthTools(
  * What one Bot may call, for an explicit actor, with no Request.
  *
  * Same list as an open-tab turn: granted MCP, knowledge when there are documents, `search_web`
- * when a Tavily key exists, and CRM. The gateway still decides every acting call.
+ * when a Tavily key exists, CRM, and computer tools when the gateway is configured and the
+ * browser is on. The gateway still decides every acting call.
  */
 export function createLoadToolsForActor(deps: LoadToolsForActorDeps) {
   return (actorId: string, orgId?: string) => async (botId: string) => {
@@ -136,6 +150,49 @@ export function createLoadToolsForActor(deps: LoadToolsForActorDeps) {
         publicOrigin: deps.publicOrigin,
       }),
     );
+    if (deps.computerGateway && isBrowserEnabled(deps.policyFor(scoped))) {
+      extra.push(
+        ...computerTools({
+          computer: deps.computerGateway,
+          botId,
+          actor: {
+            id: actorId,
+            role: "user",
+            orgId: scoped,
+          },
+          onNeedsYou: async (event) => {
+            if (!deps.jobStore) return;
+            const lastAction = lastActionForNeedsYou(event);
+            const paused = await deps.jobStore.markNeedsYou({
+              orgId: scoped,
+              coworkerId: botId,
+              actingUserId: actorId,
+              lastAction,
+            });
+            if (!deps.recordActivity) return;
+            for (const job of paused) {
+              try {
+                await deps.recordActivity({
+                  actor: {
+                    id: actorId,
+                    role: "user",
+                    orgId: scoped,
+                  },
+                  channelId: job.channelId,
+                  activity: {
+                    text: lastAction,
+                    agentId: botId,
+                    at: new Date(),
+                  },
+                });
+              } catch {
+                // Roster notify is best-effort; the computer still holds the ask.
+              }
+            }
+          },
+        }),
+      );
+    }
     const combined = extra.length === 0 ? granted : [...granted, ...extra];
     return gateUserOAuthTools(
       combined,

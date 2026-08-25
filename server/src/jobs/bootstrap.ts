@@ -7,16 +7,22 @@
  */
 
 import { eq } from "drizzle-orm";
+import { COMPUTER_GUIDANCE } from "../../../shared/bot-prompt";
 import { mintRunAssertion } from "../agents/callback-token";
 import { createAgentProfileStore } from "../agents/profile-store";
 import { createRuntimeAgentLoader } from "../agents/runtime-agents";
 import { createAuditStore, recordAuditEvent } from "../audit";
 import { createChannelStore } from "../channels/routes";
 import { createThreadIdentity } from "../channels/thread-identity";
+import { createComputerGateway } from "../computer/gateway";
+import { isBrowserEnabled } from "../computer/policy";
 import {
   createPolicyStore,
   DEFAULT_ACTION_POLICY,
 } from "../computer/policy-store";
+import { createComputerProvider } from "../computer/provider";
+import { createSharedComputerClaimStore } from "../computer/shared-claim";
+import { createSnapshotStore } from "../computer/snapshot-store";
 import type { DeploymentConfig } from "../config";
 import { createCredentialStore, resolveModelApiKey } from "../credentials";
 import { createCrmGateway } from "../crm/gateway";
@@ -100,6 +106,22 @@ export async function createUnattendedWorkerRuntime(
   const webSearch = config.tavilyApiKey
     ? tavilySearch(config.tavilyApiKey)
     : undefined;
+  const computerProvider = config.computer
+    ? createComputerProvider(config.computer)
+    : undefined;
+  const computerGateway = computerProvider
+    ? createComputerGateway({
+        provider: computerProvider,
+        auditStore,
+        policy: (orgId) => policyStore.get(orgId),
+        snapshots: createSnapshotStore(database),
+        allowPrivateHosts: config.computer?.allowPrivateHosts,
+        token: config.computer?.token,
+        ...(computerProvider.isolation === "shared"
+          ? { sharedClaim: createSharedComputerClaimStore(database) }
+          : {}),
+      })
+    : undefined;
   const loadToolsForActor = createLoadToolsForActor({
     pluginStore,
     knowledgeSearch,
@@ -108,7 +130,12 @@ export async function createUnattendedWorkerRuntime(
     policyFor: (orgId) => policyStore.get(orgId),
     crmGateway,
     publicOrigin: config.auth?.baseUrl,
+    jobStore,
+    recordActivity: async ({ actor, channelId, activity }) => {
+      await channelStore.recordActivity(actor, channelId, activity);
+    },
     ...(webSearch ? { webSearch } : {}),
+    ...(computerGateway ? { computerGateway } : {}),
   });
   const loadAgents = createRuntimeAgentLoader(
     database,
@@ -230,6 +257,10 @@ export async function createUnattendedWorkerRuntime(
         model: tenantPackage.model,
         timeoutMs: config.unattendedJobTimeoutMs,
         threadWaitMs: 15_000,
+        computerGuidance:
+          config.computer && isBrowserEnabled(policyStore.get(job.orgId))
+            ? COMPUTER_GUIDANCE
+            : undefined,
       },
     });
 

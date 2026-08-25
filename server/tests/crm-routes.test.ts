@@ -90,8 +90,11 @@ function appWith(options?: {
 } {
   const people = options?.people ?? [];
   const createdBy: CrmCreatedBy[] = [];
-  const events: { sendId: string; eventType: string; linkUrl?: string | null }[] =
-    [];
+  const events: {
+    sendId: string;
+    eventType: string;
+    linkUrl?: string | null;
+  }[] = [];
   const sendRow = options?.sendRow;
   const token = options?.token ?? "track-token";
 
@@ -139,9 +142,7 @@ function appWith(options?: {
     createConversation: unused,
     updateConversation: unused,
     listSends: async () =>
-      sendRow
-        ? { items: [sendRow], nextCursor: null, total: 1 }
-        : emptyPage(),
+      sendRow ? { items: [sendRow], nextCursor: null, total: 1 } : emptyPage(),
     getSend: async (_orgId, id) =>
       sendRow && sendRow.id === id ? sendRow : undefined,
     createSend: async (_orgId, input, actor) => {
@@ -241,7 +242,10 @@ describe("CRM HTTP routes", () => {
     const { request } = appWith({ people: [person()] });
     const response = await request("/api/crm/threads");
     expect(response.status).toBe(200);
-    const body = (await response.json()) as { threads: unknown[]; total: number };
+    const body = (await response.json()) as {
+      threads: unknown[];
+      total: number;
+    };
     expect(body.threads).toEqual([]);
     expect(JSON.stringify(body)).not.toContain("trackingToken");
   });

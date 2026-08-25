@@ -74,6 +74,7 @@ const recordingStore = () => {
         ? job({ status: "succeeded" })
         : null,
     listForChannel: async () => [],
+    markNeedsYou: async () => [],
   };
   return { jobStore, enqueued };
 };

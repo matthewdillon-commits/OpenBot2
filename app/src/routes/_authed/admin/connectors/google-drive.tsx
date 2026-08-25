@@ -88,10 +88,7 @@ function GoogleDriveConnectorPage() {
                     value={field.state.value}
                   />
                   {isInvalid ? (
-                    <FieldError
-                      errors={field.state.meta.errors}
-                      id={errorId}
-                    />
+                    <FieldError errors={field.state.meta.errors} id={errorId} />
                   ) : null}
                 </Field>
               );
@@ -117,10 +114,7 @@ function GoogleDriveConnectorPage() {
                     value={field.state.value}
                   />
                   {isInvalid ? (
-                    <FieldError
-                      errors={field.state.meta.errors}
-                      id={errorId}
-                    />
+                    <FieldError errors={field.state.meta.errors} id={errorId} />
                   ) : null}
                 </Field>
               );

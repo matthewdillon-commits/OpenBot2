@@ -65,8 +65,9 @@ export const jobs = pgTable(
      */
     threadId: text("thread_id").notNull(),
     /**
-     * Phase 2: the coworker is waiting on a person. Unused in Phase 1; the column exists so a
-     * later migration does not have to add it under a running worker.
+     * The coworker is waiting on a person (login, 2FA, a secret). Set by server
+     * computer_request_help / computer_request_secret. The job stays running; the
+     * skinny outcome is Needs you.
      */
     needsYou: boolean("needs_you").notNull().default(false),
     error: text("error"),

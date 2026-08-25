@@ -105,7 +105,9 @@ if (databaseUrl) {
 afterEach(async () => {
   if (!databaseUrl) return;
   for (const sendId of createdSendIds.splice(0)) {
-    await database.delete(crmSendEvents).where(eq(crmSendEvents.sendId, sendId));
+    await database
+      .delete(crmSendEvents)
+      .where(eq(crmSendEvents.sendId, sendId));
     await database.delete(crmSends).where(eq(crmSends.id, sendId));
   }
   for (const conversationId of createdConversationIds.splice(0)) {
@@ -486,7 +488,9 @@ describe("CRM against a real store", () => {
     expect(contacted.stageKey).toBe("contacted");
 
     const listed = await store.listPeople({ orgId, stage: "contacted" });
-    expect(listed.items.every((row) => row.stageKey === "contacted")).toBe(true);
+    expect(listed.items.every((row) => row.stageKey === "contacted")).toBe(
+      true,
+    );
     expect(listed.items.some((row) => row.id === contacted.id)).toBe(true);
     expect(listed.items.some((row) => row.id === fresh.id)).toBe(false);
     expect(listed.stageCounts?.contacted).toBeGreaterThanOrEqual(1);

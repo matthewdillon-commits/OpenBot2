@@ -287,9 +287,7 @@ describe("CRM input parsers", () => {
       ok: true,
       value: { name: "Casey", emails: ["a@b.test"] },
     });
-    expect(
-      parsePersonInput({ name: "Casey", stageKey: "contacted" }),
-    ).toEqual({
+    expect(parsePersonInput({ name: "Casey", stageKey: "contacted" })).toEqual({
       ok: true,
       value: { name: "Casey", stageKey: "contacted" },
     });

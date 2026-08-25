@@ -22,10 +22,7 @@ function RouteComponent() {
       }
     >
       <AppSidebar />
-      <main
-        className="flex-1 flex flex-col min-h-0 overflow-hidden"
-        id="main"
-      >
+      <main className="flex-1 flex flex-col min-h-0 overflow-hidden" id="main">
         <MobileChrome title={appConfig.brand.productName} />
         <div className="relative flex h-full min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden">
           <Outlet />

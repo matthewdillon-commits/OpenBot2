@@ -194,16 +194,18 @@ unit is a goal: in this tree a goal is the existing channel plus its
 Intelligence thread. `startUnattendedRun` may take `goalId`; it must be that
 channel. A second transcript is not minted. The API inserts a `jobs` row; the
 `worker` claims it with `FOR UPDATE SKIP LOCKED` and runs the coworker with
-server tools only (CRM, `search_web`, knowledge, granted MCP). A missing
-mapping or missing thread is a refuse. Persist must write that same mapped
-thread. The client this tree already uses for thread reads is
-`CopilotKitIntelligence.getThread` (`server/src/intelligence-client.ts`,
+the same server tools an open-tab turn uses: CRM, `search_web`, knowledge,
+granted MCP, and computer tools when the gateway is configured and the
+browser is on. A missing mapping or missing thread is a refuse. Persist must
+write that same mapped thread. The client this tree already uses for thread
+reads is `CopilotKitIntelligence.getThread`
+(`server/src/intelligence-client.ts`,
 `server/src/channels/thread-status.ts`). That class has no method that appends
 chat messages — tab turns persist through the CopilotRuntime runner, which
 this path does not use. Persist therefore fails closed and the job is failed,
 never succeeded. The job row is not a second transcript: prompt plus a skinny
-`resultText` / outcome only. Computer tools still need the tab. The job row
-stores a skinny outcome: status Active | Needs you | Done, `last_action` (one
+`resultText` / outcome only. The job row stores a skinny outcome: status
+Active | Needs you | Done, `last_action` (one
 sentence), `last_action_at`, plus who ran and any CRM record ids the write
 already returned. That is not an approval card. There is no Goals home UI.
 
@@ -219,24 +221,30 @@ Once a turn has started — in the tab or from a claimed job:
 
 - **Server tools run on the API.** CRM (`crm_search`, `crm_get`, `crm_create`,
   `crm_update`, `crm_send`), `search_web` when `TAVILY_API_KEY` is set, company
-  knowledge when there are documents, and granted MCP tools. Built-in Bots may
-  take twenty of those steps in one run. A remote AG-UI Bot calls the same list
-  back through `/api/agent-tools/call`. An unattended job uses this list only.
-- **Computer tools run in the tab.** Click, type, snapshot, files, and the
-  shell are frontend tools. The run ends, the open browser executes them, then
-  the client starts another run with the result. Gallery and sandboxed
-  components are the same shape. Close the tab and that loop stops.
-  Human-in-the-loop waits (login, 2FA, a secret) also live in the tab.
-  Send-and-go does not register these tools.
+  knowledge when there are documents, granted MCP tools, and computer tools
+  (`computer_navigate`, snapshot, click, type, files, shell, help, secret)
+  when the computer gateway is configured and the browser is on. Built-in
+  Bots may take twenty of those steps in one run. A remote AG-UI Bot calls
+  the same list back through `/api/agent-tools/call`. An unattended job uses
+  this same list.
+- **The watch tab renders computer tools; it does not execute them.** Click,
+  type, snapshot, files, and the shell go through `ComputerGateway` on the
+  server. The open tab paints the watch pane and Activity lines. Close it and
+  the coworker still acts. Human-in-the-loop (login, 2FA, a secret) asks on
+  the computer, persists `jobs.needs_you`, notifies the channel, and returns
+  immediately — it does not wait in the tab. Gallery and sandboxed components
+  still execute in the browser.
 - **The transcript is not the Activity tab.** Activity is held in the browser
   for the open conversation and is gone on reload. The audit trail is the
   record that survives. The roster preview is `channels.lastMessage`, updated
   when a job finishes.
 
-So: a person can send “research these two people and write the CRM” with
-Send-and-go, close the tab, and the worker still runs those server tools. The
-turn is not written onto the Intelligence thread, so coming back does not yet
-show that result on the same mapped thread. Computer still needs the tab.
+So: a person can send “research these two people, open their sites, and write
+the CRM” with Send-and-go, close the tab, and the worker still runs those
+server tools — including the computer. A login or secret pauses as Needs you;
+the ask stays on the computer if the tab is closed. The turn is not written
+onto the Intelligence thread, so coming back does not yet show that result on
+the same mapped thread.
 
 ### Organizations
 
@@ -262,8 +270,9 @@ What that is not:
   model, and knowledge YAML stay shared.
 - **Not a computer per tenant in the one-container image.** Without the
   supervisor, every Bot shares one Chromium. That is fine for one trusted team.
-  It is not a boundary between customers. The supervisor needs a Docker socket,
-  which the shippable image does not include.
+  A second organization is refused until `COMPUTER_SUPERVISOR_URL` is how
+  computers are made — one computer per org×bot. The supervisor needs a Docker
+  socket, which the shippable image does not include.
 
 ### What to run it as
 
@@ -275,9 +284,9 @@ running beside it.
 **Not a self-serve multi-tenant SaaS** until RLS, billing, seats, per-org SSO,
 per-tenant computers, and a spend cap exist.
 
-**Not unattended computer, cron, webhook, or inbound email.** Send-and-go runs
-CRM / research / MCP after the tab closes. Computer tools still execute in the
-person’s browser. Scheduled and inbound starts are later phases.
+**Not cron, webhook, or inbound email.** Send-and-go runs CRM / research /
+MCP / computer after the tab closes. Scheduled and inbound starts are later
+phases.
 
 **Not the self-improving loop.** There are no outcome events tied to actions,
 no approval cards with expected impact, and no keep / revise / revert that
@@ -292,7 +301,10 @@ It does not measure whether the work moved the business.
 | Org tables and plan-until-billing | `server/src/db/schema/core.ts` |
 | Isolation is query-scoped | `server/tests/organization-isolation.integration.test.ts` |
 | Turns start in the app | `app/src/components/channels/channel-chat.tsx` (`useAgent`) |
-| Computer tools are frontend | `app/src/lib/copilot/computer-tools.tsx`, `server/src/channels/turn-watchdog.ts` |
+| Computer tools execute on the server | `server/src/computer/computer-tools.ts`, `server/src/jobs/tools.ts` `loadToolsForActor` |
+| Watch pane is render-only | `app/src/lib/copilot/computer-tools.tsx` (`useRenderTool`) |
+| HITL is `needs_you`, not a tab wait | `server/src/jobs/store.ts` `markNeedsYou`, `jobs.needs_you` |
+| Shared Chromium refuses a second org | `server/src/computer/shared-claim.ts`, `server/src/computer/gateway.ts` `locate` |
 | Server CRM / search tools | `server/src/index.ts` `loadToolsForActor` |
 | Twenty tool steps | `server/src/copilot.ts` `TOOL_STEPS` |
 | Send-and-go / unattended jobs | `server/src/jobs/`, `worker/src/index.ts` |
@@ -307,12 +319,11 @@ It does not measure whether the work moved the business.
 Three things people will assume from Part A. The first has started; the
 other two have not:
 
-1. **Unattended computer and scheduled starts.** Send-and-go exists (Part B):
-   the worker claims a job and continues CRM / research / MCP after the tab
-   closes. Persist onto the Intelligence thread fails closed — close-tab /
-   come-back on the same mapped thread is not true yet. There is still no
-   cron, no webhook, and no inbound email that opens a run. Computer tools
-   still need the tab.
+1. **Scheduled and inbound starts, and a durable unattended transcript.**
+   Send-and-go exists (Part B), including computer tools on the server and a
+   `needs_you` pause. Persist onto the Intelligence thread still fails
+   closed — close-tab / come-back on the same mapped thread is not true yet.
+   There is still no cron, no webhook, and no inbound email that opens a run.
 2. **Self-serve SaaS.** No RLS, no Stripe, no seat quota, no invite email, no
    per-org SSO, no spend cap, no multi-replica story beyond “Postgres is the
    shared state.” `/platform` is sales-led provisioning, not a checkout.

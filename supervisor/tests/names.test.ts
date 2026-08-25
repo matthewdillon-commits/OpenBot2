@@ -84,8 +84,7 @@ describe("the ids a supervisor will accept", () => {
   });
 
   test("an org-scoped agent id is accepted", () => {
-    const id =
-      "org_aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee__general-assistant";
+    const id = "org_aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee__general-assistant";
     const result = namesFor(id);
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.names.botId).toBe(id);

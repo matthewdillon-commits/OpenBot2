@@ -89,10 +89,7 @@ export function SkillFields({
                   value={field.state.value}
                 />
                 {isInvalid ? (
-                  <FieldError
-                    errors={field.state.meta.errors}
-                    id={errorId}
-                  />
+                  <FieldError errors={field.state.meta.errors} id={errorId} />
                 ) : (
                   <p className="text-muted-foreground text-xs">
                     {slugLocked ? (
@@ -131,10 +128,7 @@ export function SkillFields({
                   value={field.state.value}
                 />
                 {isInvalid ? (
-                  <FieldError
-                    errors={field.state.meta.errors}
-                    id={errorId}
-                  />
+                  <FieldError errors={field.state.meta.errors} id={errorId} />
                 ) : null}
               </Field>
             );
@@ -160,10 +154,7 @@ export function SkillFields({
                   value={field.state.value}
                 />
                 {isInvalid ? (
-                  <FieldError
-                    errors={field.state.meta.errors}
-                    id={errorId}
-                  />
+                  <FieldError errors={field.state.meta.errors} id={errorId} />
                 ) : (
                   <p className="text-muted-foreground text-xs">
                     Shown beside the command in this list and in the{" "}
@@ -195,10 +186,7 @@ export function SkillFields({
                   value={field.state.value}
                 />
                 {isInvalid ? (
-                  <FieldError
-                    errors={field.state.meta.errors}
-                    id={errorId}
-                  />
+                  <FieldError errors={field.state.meta.errors} id={errorId} />
                 ) : (
                   <p className="text-muted-foreground text-xs">
                     Added to the run when the command is used. Write it as
