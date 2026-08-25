@@ -24,6 +24,7 @@ import { createComputerProvider } from "../computer/provider";
 import { createSharedComputerClaimStore } from "../computer/shared-claim";
 import { createSnapshotStore } from "../computer/snapshot-store";
 import type { DeploymentConfig } from "../config";
+import { createUnattendedCopilotRuntime } from "../copilot";
 import { createCredentialStore, resolveModelApiKey } from "../credentials";
 import { createCrmGateway } from "../crm/gateway";
 import { createCrmStore } from "../crm/store";
@@ -283,6 +284,14 @@ export async function createUnattendedWorkerRuntime(
             : null;
         },
         threadIdle,
+        runtime: createUnattendedCopilotRuntime(
+          intelligence,
+          config.runtime.intelligence.licenseToken,
+          async () => ({
+            id: intelligenceUserForActor(actor),
+            name: actor.name,
+          }),
+        ),
         persistThread: persistThread.append,
         recordActivity: async ({
           actor: activityActor,
