@@ -10,6 +10,7 @@ import { recordAuditEvent } from "../audit";
 import type { AppVariables } from "../auth/guards";
 import type { ChannelStore } from "../channels/routes";
 import { orgIdOf } from "../orgs/constants";
+import type { SpendStore } from "../orgs/spend";
 import { enqueueUnattendedJob } from "./enqueue";
 import { publicJob } from "./routes";
 import type { JobStore } from "./store";
@@ -30,6 +31,7 @@ export type InboundRoutesOptions = {
   channelStore: ChannelStore;
   triggerStore: JobTriggerStore;
   auditStore?: AuditStore;
+  spend?: SpendStore;
 };
 
 function presentedSecret(headers: Headers): string {
@@ -116,6 +118,7 @@ async function fireStanding(
     lookupChannel: (actor, channelId) =>
       options.channelStore.get(actor, channelId),
     jobStore: options.jobStore,
+    ...(options.spend ? { spend: options.spend } : {}),
   });
   if (!result.ok) {
     await options.triggerStore.recordFire(trigger.id, { error: result.error });

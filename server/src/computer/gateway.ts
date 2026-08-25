@@ -146,6 +146,11 @@ export type ComputerGatewayOptions = {
    * (tests that are not about Phase 5).
    */
   highRiskWait?: HighRiskWait;
+  /**
+   * Spend cap. Crossing it refuses computer work. Production passes the
+   * Postgres ledger; tests that are not about billing omit it.
+   */
+  assertSpend?: (orgId: string) => Promise<void>;
 };
 
 export interface ComputerGateway {
@@ -301,6 +306,9 @@ export function createComputerGateway(
       if (!verdict.allowed) {
         throw new SharedComputerIsolationError();
       }
+    }
+    if (options.assertSpend) {
+      await options.assertSpend(org);
     }
     const address = await provider.locate(computerId);
     const verdict = checkComputerAddress(address);

@@ -18,6 +18,7 @@ import {
   TOOL_STEPS,
 } from "../copilot";
 import { orgIdOf } from "../orgs/constants";
+import { SpendCapError } from "../orgs/spend";
 import { REFUSAL_MARKER } from "../plugins/refusal";
 import type { GrantedTool } from "../plugins/tools";
 import {
@@ -88,6 +89,8 @@ export type UnattendedRunDeps = {
    * outcome are visible on the next unattended turn.
    */
   goalLoopGuidance?: string;
+  /** Model spend for this org. Crossing the cap refuses the run. */
+  assertSpend?: (orgId: string) => Promise<void>;
   /**
    * Test seam. Production builds the coworker through `buildAgents` and calls `runAgent`.
    */
@@ -303,6 +306,17 @@ export async function startUnattendedRun(input: {
   const observed = observeServerTools(gated);
   const loadTools: LoadToolsForBot = async (botId) =>
     botId === coworker.id ? observed.tools : [];
+
+  if (coworker.type === "built_in" && input.deps.assertSpend) {
+    try {
+      await input.deps.assertSpend(orgId);
+    } catch (error) {
+      if (error instanceof SpendCapError) {
+        return emptyResult("refused", error.message);
+      }
+      throw error;
+    }
+  }
 
   const agents =
     input.deps.prebuiltAgents ??

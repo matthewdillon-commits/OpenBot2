@@ -106,7 +106,14 @@ Two things are worth knowing before pointing a deployment at any gateway. Not ev
 | ---------------------------- | -------------------------------------------------------------------------------------- |
 | `OPENBOT_SINGLE_USER`        | One fixed administrator and no sign-in. **Required** when no identity provider and no email auth are configured, or the deployment refuses to start. Ignored when one is. |
 | `OPENBOT_EMAIL_AUTH`         | Email and password. Create-account asks for an organization name. Can run alone or next to OAuth. |
-| `PLATFORM_SUPERADMINS`       | Comma-separated addresses that may provision and suspend organizations on `/platform`. Not an organization's own administrator. |
+| `PLATFORM_SUPERADMINS`       | Comma-separated addresses that may provision and suspend organizations on `/platform`. Not an organization's own administrator. Checkout is the owner path. |
+| `STRIPE_SECRET_KEY`          | Stripe secret key. Must be set together with `STRIPE_WEBHOOK_SECRET` and `STRIPE_PRICE_ID`, or all three left unset. |
+| `STRIPE_WEBHOOK_SECRET`      | Stripe webhook signing secret for `POST /api/billing/webhook`. |
+| `STRIPE_PRICE_ID`            | Price used by Checkout (`mode=subscription`). Quantity is the seat limit. |
+| `STRIPE_SUCCESS_URL`         | Optional. Defaults to `{TRUSTED_ORIGINS first origin, else BETTER_AUTH_URL}/o?checkout=success`. |
+| `STRIPE_CANCEL_URL`          | Optional. Defaults to `{TRUSTED_ORIGINS first origin, else BETTER_AUTH_URL}/o?checkout=cancel`. |
+| `SMTP_URL` or `SMTP_HOST` + `SMTP_FROM` | Owner invites email the link. Missing config fails closed. Same variables CRM send uses. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | When set, API and worker export traces over OTLP HTTP. Unset still records spans on a discard exporter. |
 | `GOOGLE_OAUTH_CLIENT_ID`     | Google OAuth client id. `GOOGLE_CLIENT_ID` is accepted as the same value.               |
 | `GOOGLE_OAUTH_CLIENT_SECRET` | Google OAuth client secret. `GOOGLE_CLIENT_SECRET` is accepted as the same value.       |
 | `MICROSOFT_OAUTH_CLIENT_ID`  | Microsoft Entra ID application id.                                                     |

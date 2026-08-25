@@ -12,6 +12,7 @@ import { recordAuditEvent } from "../audit";
 import type { AppVariables } from "../auth/guards";
 import type { ChannelStore } from "../channels/routes";
 import { orgIdOf } from "../orgs/constants";
+import type { SpendStore } from "../orgs/spend";
 import { enqueueUnattendedJob } from "./enqueue";
 import type { JobOutcome, JobStore, UnattendedJob } from "./store";
 
@@ -20,6 +21,7 @@ export type JobRoutesOptions = {
   jobStore: JobStore;
   channelStore: ChannelStore;
   auditStore?: AuditStore;
+  spend?: SpendStore;
 };
 
 export type PublicJob = {
@@ -64,7 +66,7 @@ export function publicJob(job: UnattendedJob): PublicJob {
 }
 
 export function createJobRoutes(options: JobRoutesOptions) {
-  const { requireUser, jobStore, channelStore, auditStore } = options;
+  const { requireUser, jobStore, channelStore, auditStore, spend } = options;
   const routes = new Hono<{ Variables: AppVariables }>();
 
   routes.post("/", requireUser, async (context) => {
@@ -116,6 +118,7 @@ export function createJobRoutes(options: JobRoutesOptions) {
       ...(skillInstructions.length > 0 ? { skillInstructions } : {}),
       lookupChannel: (acting, id) => channelStore.get(acting, id),
       jobStore,
+      ...(spend ? { spend } : {}),
     });
     if (!result.ok) {
       return context.json({ error: result.error }, result.status);

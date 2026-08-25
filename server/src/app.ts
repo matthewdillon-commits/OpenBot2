@@ -1,6 +1,7 @@
 import type { Context, Hono as HonoApp, MiddlewareHandler } from "hono";
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
+import { SpanStatusCode } from "@opentelemetry/api";
 import { authoriseAgentCall } from "./agents/callback-token";
 import type { BotAccessCheck } from "./agents/profile-policy";
 import type { AgentProfileStore } from "./agents/profile-store";
@@ -34,8 +35,10 @@ import { createComposioRoutes } from "./composio/routes";
 import type { ComputerGateway } from "./computer/gateway";
 import { isBrowserEnabled } from "./computer/policy";
 import type { PolicyStore } from "./computer/policy-store";
-import { createComputerRoutes } from "./computer/routes";
 import { configuredAuthProviders, type DeploymentConfig } from "./config";
+import { createComputerRoutes } from "./computer/routes";
+import { createBillingRoutes } from "./billing/routes";
+import type { BillingService, StripeConfig } from "./billing/stripe";
 import type { ConnectorAdminService } from "./connectors";
 import type { CredentialAdminService, CredentialInput } from "./credentials";
 import { createCrmRoutes } from "./crm/routes";
@@ -53,7 +56,11 @@ import {
 import { canSeeTheWork } from "./orchestrator";
 import { LOCAL_ORGANIZATION_ID, orgIdOf } from "./orgs/constants";
 import { createOrganizationRoutes } from "./orgs/routes";
+import { providerAllowed, type OrganizationSsoStore } from "./orgs/sso";
+import type { SpendStore } from "./orgs/spend";
 import type { OrganizationStore } from "./orgs/store";
+import type { InviteMailer } from "./orgs/invite-mail";
+import { tracer } from "./telemetry";
 import type { PeopleStore } from "./people/store";
 import { REFUSAL_MARKER } from "./plugins/refusal";
 import type { PackageStatusReader } from "./tenant-package";
@@ -212,8 +219,44 @@ export function createApp(
     store: GoalLoopStore;
     executePending?: ExecutePendingAction;
   },
+  /**
+   * Phase 6 self-serve SaaS. Absent leaves first-org create working and a
+   * second workspace refused without checkout, which is the honest laptop path.
+   */
+  saas?: {
+    bindRls?: (input: {
+      orgId?: string | null;
+      bypass?: boolean;
+    }) => Promise<void>;
+    billing?: BillingService;
+    stripe?: StripeConfig;
+    mail?: InviteMailer;
+    sso?: OrganizationSsoStore;
+    spend?: SpendStore;
+  },
 ) {
   const app = new Hono<{ Variables: AppVariables }>();
+
+  app.use(async (context, next) => {
+    if (saas?.bindRls) {
+      await saas.bindRls({ orgId: null, bypass: false });
+    }
+    const span = tracer().startSpan(
+      `${context.req.method} ${context.req.path}`,
+    );
+    try {
+      await next();
+      span.setStatus({ code: SpanStatusCode.OK });
+    } catch (error) {
+      span.setStatus({
+        code: SpanStatusCode.ERROR,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    } finally {
+      span.end();
+    }
+  });
 
   async function capabilitiesOrgId(context: {
     req: { raw: Request };
@@ -287,6 +330,24 @@ export function createApp(
       ),
     }),
   );
+
+  app.get("/api/auth/sso-for-email", async (context) => {
+    const email = context.req.query("email")?.trim() ?? "";
+    if (!email || !email.includes("@")) {
+      return context.json({ error: "An email address is required." }, 400);
+    }
+    if (!saas?.sso) {
+      return context.json({
+        orgId: null,
+        google: configuredAuthProviders(config.auth).includes("google"),
+        microsoft: configuredAuthProviders(config.auth).includes("microsoft"),
+        okta: configuredAuthProviders(config.auth).includes("okta"),
+        email: config.auth?.emailPassword === true,
+      });
+    }
+    const resolved = await saas.sso.resolveForEmail(email, config.auth);
+    return context.json(resolved);
+  });
   /*
    * Registering an identity provider is an administrator's decision, not a signed-in one.
    *
@@ -309,7 +370,34 @@ export function createApp(
       );
     }
 
-    if (ADMIN_ONLY_AUTH_ROUTES.has(new URL(context.req.url).pathname)) {
+    const pathname = new URL(context.req.url).pathname;
+    if (
+      saas?.sso &&
+      context.req.method === "POST" &&
+      (pathname === "/api/auth/sign-in/email" ||
+        pathname === "/api/auth/sign-up/email")
+    ) {
+      let email = "";
+      try {
+        const body = (await context.req.raw.clone().json()) as {
+          email?: unknown;
+        };
+        email = typeof body.email === "string" ? body.email.trim() : "";
+      } catch {
+        email = "";
+      }
+      if (email) {
+        const resolved = await saas.sso.resolveForEmail(email, config.auth);
+        if (resolved.orgId && !providerAllowed(resolved, "email")) {
+          return context.json(
+            { error: "This organization does not allow email sign-in." },
+            403,
+          );
+        }
+      }
+    }
+
+    if (ADMIN_ONLY_AUTH_ROUTES.has(pathname)) {
       const session = await auth.api.getSession({
         headers: context.req.raw.headers,
         // Fresh, not the cookie cache: a role changed a moment ago has to apply to this request.
@@ -335,7 +423,7 @@ export function createApp(
     context.json({ error: "No identity provider is configured." }, 503);
   // One administrator, when nothing is configured to sign anybody in. Checked first, and only ever
   // true when there is no provider, so a configured deployment cannot fall back to it.
-  const requireUser = config.singleUser
+  const innerRequireUser = config.singleUser
     ? createDevRequireUser()
     : auth && roleRepository
       ? createRequireUser(
@@ -349,6 +437,27 @@ export function createApp(
         )
       : authenticationUnavailable;
 
+  const requireUser: MiddlewareHandler<{ Variables: AppVariables }> = async (
+    context,
+    next,
+  ) => {
+    return innerRequireUser(context, async () => {
+      if (saas?.bindRls && context.var.actor) {
+        const path = context.req.path;
+        const directory =
+          path === "/api/me" ||
+          path.startsWith("/api/orgs") ||
+          path.startsWith("/api/platform") ||
+          path.startsWith("/api/billing");
+        await saas.bindRls({
+          orgId: directory ? null : (context.var.actor.orgId ?? null),
+          bypass: false,
+        });
+      }
+      await next();
+    });
+  };
+
   if (organizationStore) {
     app.route(
       "/",
@@ -356,7 +465,26 @@ export function createApp(
         organizationStore,
         config.platformSuperadmins,
         requireUser,
+        {
+          ...(saas?.billing ? { billing: saas.billing } : {}),
+          ...(saas?.mail ? { mail: saas.mail } : {}),
+          ...(saas?.sso ? { sso: saas.sso } : {}),
+          ...(saas?.spend ? { spend: saas.spend } : {}),
+          ...(config.auth ? { auth: config.auth } : {}),
+        },
       ),
+    );
+  }
+
+  if (organizationStore && saas?.billing && saas.stripe) {
+    app.route(
+      "/",
+      createBillingRoutes({
+        billing: saas.billing,
+        stripe: saas.stripe,
+        organizations: organizationStore,
+        requireUser,
+      }),
     );
   }
 
@@ -876,6 +1004,7 @@ export function createApp(
         jobStore,
         channelStore,
         auditStore,
+        ...(saas?.spend ? { spend: saas.spend } : {}),
       }),
     );
     app.route(
@@ -898,6 +1027,7 @@ export function createApp(
         channelStore,
         triggerStore: jobTriggerStore,
         auditStore,
+        ...(saas?.spend ? { spend: saas.spend } : {}),
       }),
     );
   }

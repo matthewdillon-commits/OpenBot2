@@ -1,5 +1,6 @@
 import { SQL } from "bun";
 import { drizzle } from "drizzle-orm/bun-sql";
+import { wrapClientWithRls } from "./rls";
 import * as schema from "./schema";
 
 /**
@@ -17,7 +18,7 @@ export function createDatabase(
       ? new SQL(databaseUrl)
       : new SQL(databaseUrl, { max: options.max });
 
-  return drizzle({ client, schema });
+  return drizzle({ client: wrapClientWithRls(client), schema });
 }
 
 export type Database = ReturnType<typeof createDatabase>;

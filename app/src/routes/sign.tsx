@@ -15,6 +15,7 @@ import {
   authKeys,
   authProvidersQueryOptions,
   currentUserQueryOptions,
+  ssoForEmailQueryOptions,
 } from "@/lib/auth/queries";
 import { SPRING_NO_BOUNCE } from "@/lib/motion";
 import { useMeasure } from "@/lib/use-measure";
@@ -71,14 +72,19 @@ function SignScreen() {
     oauthErrorMessage(oauthError),
   );
   const [showPassword, setShowPassword] = useState(false);
-  const { data: options } = useQuery(authProvidersQueryOptions());
-  const providers = options?.providers ?? [];
-  const emailPassword = options?.emailPassword === true;
-  const googleConfigured = providers.includes("google");
-  const otherProviders = providers.filter((provider) => provider !== "google");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const { data: options } = useQuery(authProvidersQueryOptions());
+  const providers = options?.providers ?? [];
+  const emailPassword = options?.emailPassword === true;
+  const ssoForEmail = useQuery(ssoForEmailQueryOptions(email));
+  const googleConfigured = ssoForEmail.data?.google !== false;
+  const otherProviders = providers.filter((provider) => {
+    if (provider === "google") return false;
+    if (!ssoForEmail.data) return true;
+    return ssoForEmail.data[provider] === true;
+  });
   const navigate = useNavigate();
   const busy = opening !== null;
   const year = new Date().getFullYear();
@@ -351,22 +357,24 @@ function SignScreen() {
                 </div>
 
                 <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                  <button
-                    className={socialButton}
-                    data-testid="button-login-google"
-                    disabled={busy}
-                    onClick={handleGoogle}
-                    type="button"
-                  >
-                    <span className="inline-flex h-[18px] w-[18px] items-center justify-center">
-                      <GoogleMark />
-                    </span>
-                    {opening === "google"
-                      ? "Opening Google…"
-                      : mode === "up"
-                        ? "Sign up with Google"
-                        : "Continue with Google"}
-                  </button>
+                  {googleConfigured ? (
+                    <button
+                      className={socialButton}
+                      data-testid="button-login-google"
+                      disabled={busy}
+                      onClick={handleGoogle}
+                      type="button"
+                    >
+                      <span className="inline-flex h-[18px] w-[18px] items-center justify-center">
+                        <GoogleMark />
+                      </span>
+                      {opening === "google"
+                        ? "Opening Google…"
+                        : mode === "up"
+                          ? "Sign up with Google"
+                          : "Continue with Google"}
+                    </button>
+                  ) : null}
                   <button className={socialButton} disabled type="button">
                     <span className="inline-flex h-[18px] w-[18px] items-center justify-center text-[#111]">
                       <AppleMark />

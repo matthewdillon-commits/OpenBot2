@@ -28,6 +28,7 @@ import { createCredentialStore, resolveModelApiKey } from "../credentials";
 import { createCrmGateway } from "../crm/gateway";
 import { createCrmStore } from "../crm/store";
 import { createDatabase, type Database } from "../db/client";
+import { bindRequestRls } from "../db/rls";
 import { users } from "../db/schema";
 import { createIntelligenceClient } from "../intelligence-client";
 import { createKnowledgeSearch } from "../knowledge/search";
@@ -38,8 +39,10 @@ import {
   recordUnknownOutcomeIfAbsent,
 } from "../loop";
 import { orgIdOf } from "../orgs/constants";
+import { createSpendStore } from "../orgs/spend";
 import { createOrganizationStore } from "../orgs/store";
 import { createPluginStore } from "../plugins/store";
+import { withSpan } from "../telemetry";
 import { loadTenantPackage } from "../tenant-package";
 import { tavilySearch } from "../web-search/tavily";
 import {
@@ -75,6 +78,7 @@ export async function createUnattendedWorkerRuntime(
 ): Promise<UnattendedWorkerRuntime> {
   const database = createDatabase(config.databaseUrl);
   const organizationStore = createOrganizationStore(database);
+  const spendStore = createSpendStore(database);
   const credentialStore = createCredentialStore(database);
   const agentVault = {
     store: credentialStore,
@@ -144,6 +148,9 @@ export async function createUnattendedWorkerRuntime(
           ? { sharedClaim: createSharedComputerClaimStore(database) }
           : {}),
         highRiskWait,
+        assertSpend: async (orgId) => {
+          await spendStore.consume({ orgId, kind: "computer" });
+        },
       })
     : undefined;
   const loadToolsForActor = createLoadToolsForActor({
@@ -167,6 +174,7 @@ export async function createUnattendedWorkerRuntime(
         listAgents: (actor) => agentProfileStore.list(actor),
         skillBySlug: (slug, orgId) => pluginStore.skillBySlug(slug, orgId),
         jobStore,
+        spend: spendStore,
       }),
     ...(webSearch ? { webSearch } : {}),
     ...(computerGateway ? { computerGateway } : {}),
@@ -207,6 +215,15 @@ export async function createUnattendedWorkerRuntime(
   }
 
   async function processJob(job: UnattendedJob): Promise<void> {
+    await bindRequestRls(database, { orgId: job.orgId, bypass: false });
+    try {
+      await withSpan("unattended.job", () => executeJob(job));
+    } finally {
+      await bindRequestRls(database, { orgId: null, bypass: false });
+    }
+  }
+
+  async function executeJob(job: UnattendedJob): Promise<void> {
     await recordAuditEvent(auditStore, {
       eventType: "job.claimed",
       targetType: "job",
@@ -297,6 +314,9 @@ export async function createUnattendedWorkerRuntime(
             ? COMPUTER_GUIDANCE
             : undefined,
         goalLoopGuidance: orchestratorContextFromLoop(loop) || undefined,
+        assertSpend: async (orgId) => {
+          await spendStore.consume({ orgId, kind: "model" });
+        },
       },
     });
 
@@ -355,6 +375,7 @@ export async function createUnattendedWorkerRuntime(
         jobStore,
         lookupChannel: (actor, channelId) => channelStore.get(actor, channelId),
         auditStore,
+        spend: spendStore,
       }),
   };
 }

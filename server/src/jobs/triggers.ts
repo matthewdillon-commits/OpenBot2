@@ -18,6 +18,7 @@ import type { ChannelStore } from "../channels/routes";
 import type { Database } from "../db/client";
 import { jobTriggers } from "../db/schema/jobs";
 import { orgIdOf } from "../orgs/constants";
+import type { SpendStore } from "../orgs/spend";
 import { enqueueUnattendedJob } from "./enqueue";
 import type { JobStore } from "./store";
 
@@ -381,6 +382,7 @@ export async function tickDueCrons(input: {
   jobStore: JobStore;
   lookupChannel: ChannelStore["get"];
   auditStore?: AuditStore;
+  spend?: SpendStore;
 }): Promise<number> {
   let enqueued = 0;
   for (;;) {
@@ -401,6 +403,7 @@ export async function tickDueCrons(input: {
       expectedThreadId: due.threadId,
       lookupChannel: input.lookupChannel,
       jobStore: input.jobStore,
+      ...(input.spend ? { spend: input.spend } : {}),
     });
     if (!result.ok) {
       await input.triggerStore.recordFire(due.id, { error: result.error });

@@ -9,6 +9,7 @@
 import { z } from "zod";
 import type { AgentActor } from "../agents/profile-types";
 import { orgIdOf } from "../orgs/constants";
+import { SpendCapError } from "../orgs/spend";
 import { REFUSAL_MARKER } from "../plugins/refusal";
 import type { GrantedTool } from "../plugins/tools";
 import {
@@ -158,6 +159,9 @@ function recover(error: unknown): string {
   }
   if (error instanceof SharedComputerIsolationError) {
     return JSON.stringify({ ok: false, reason: error.message });
+  }
+  if (error instanceof SpendCapError) {
+    return `${REFUSAL_MARKER} ${error.message}`;
   }
   if (
     error instanceof StaleSnapshotError ||

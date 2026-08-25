@@ -15,6 +15,28 @@ export type OrganizationRole = (typeof ORGANIZATION_ROLES)[number];
 export const ORGANIZATION_STATUSES = ["active", "suspended"] as const;
 export type OrganizationStatus = (typeof ORGANIZATION_STATUSES)[number];
 
+export const BILLING_PLANS = [
+  "free",
+  "starter",
+  "growth",
+  "enterprise",
+] as const;
+export type BillingPlan = (typeof BILLING_PLANS)[number];
+
+/** Seat quota for each plan. Stripe webhooks write this onto `organizations.seat_limit`. */
+export const PLAN_SEATS: Record<BillingPlan, number> = {
+  free: 1,
+  starter: 5,
+  growth: 20,
+  enterprise: 100,
+};
+
+export function asBillingPlan(value: string | undefined): BillingPlan {
+  return value && (BILLING_PLANS as readonly string[]).includes(value)
+    ? (value as BillingPlan)
+    : "free";
+}
+
 /** Owner and admin are the people who may change this org. Mapped to the existing `admin` role. */
 export function openBotRoleFor(orgRole: OrganizationRole): "admin" | "user" {
   return orgRole === "member" ? "user" : "admin";

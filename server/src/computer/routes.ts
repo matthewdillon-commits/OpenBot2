@@ -4,6 +4,7 @@ import type { BotAccessCheck } from "../agents/profile-policy";
 import type { AppVariables } from "../auth/guards";
 import { requireAdmin } from "../auth/guards";
 import { orgIdOf } from "../orgs/constants";
+import { SpendCapError } from "../orgs/spend";
 import {
   type ActionActor,
   ActionRefusedError,
@@ -143,6 +144,9 @@ export function createComputerRoutes(
       }
       if (error instanceof SharedComputerIsolationError) {
         return context.json({ error: error.message }, 403);
+      }
+      if (error instanceof SpendCapError) {
+        return context.json({ error: error.message }, 402);
       }
       return context.json({ error: describe(error) }, statusFor(error));
     }
@@ -564,6 +568,9 @@ async function act(
     if (error instanceof SharedComputerIsolationError) {
       return context.json({ error: error.message }, 403);
     }
+    if (error instanceof SpendCapError) {
+      return context.json({ error: error.message }, 402);
+    }
     // A 400, deliberately, NOT a 403. The surface treats 403 as "a boundary refused you" and renders
     // it as Blocked, so returning it for "there is no file at notes.md" told both the person and the
     // model that a policy had intervened when none had.
@@ -610,7 +617,8 @@ function describe(error: unknown): string {
  * not running (an operator fixes it), the refs are stale (the model fixes it by snapshotting again),
  * and everything else. Navigation established this; the acting routes follow it.
  */
-function statusFor(error: unknown): 403 | 409 | 500 | 503 {
+function statusFor(error: unknown): 402 | 403 | 409 | 500 | 503 {
+  if (error instanceof SpendCapError) return 402;
   if (error instanceof SharedComputerIsolationError) return 403;
   if (error instanceof StaleSnapshotError) return 409;
   // The same answer as a stale snapshot, because it is the same instruction: the refs are wrong, take

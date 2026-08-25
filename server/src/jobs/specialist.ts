@@ -10,6 +10,7 @@ import type { OpenBotRole } from "../auth/roles";
 import type { ChannelStore } from "../channels/routes";
 import { agentIsOrchestrator } from "../orchestrator";
 import { orgIdOf } from "../orgs/constants";
+import type { SpendStore } from "../orgs/spend";
 import { enqueueUnattendedJob, type EnqueueUnattendedResult } from "./enqueue";
 import type { JobStore } from "./store";
 
@@ -54,6 +55,7 @@ export type StartSpecialistDeps = {
   enqueue?: (
     input: Parameters<typeof enqueueUnattendedJob>[0],
   ) => Promise<EnqueueUnattendedResult>;
+  spend?: SpendStore;
 };
 
 export type StartSpecialistOk = {
@@ -68,7 +70,7 @@ export type StartSpecialistOk = {
 
 export type StartSpecialistResult =
   | StartSpecialistOk
-  | { ok: false; error: string; status: 400 | 404 | 409 };
+  | { ok: false; error: string; status: 400 | 404 | 409 | 402 };
 
 /**
  * The CRM book a specialist reads is the organization’s, never a private copy.
@@ -220,6 +222,7 @@ export async function startSpecialist(
     lookupChannel: async (actor, channelId) =>
       channelId === room.id ? room : deps.lookupChannel(actor, channelId),
     jobStore: deps.jobStore,
+    ...(deps.spend ? { spend: deps.spend } : {}),
   });
   if (!enqueued.ok) {
     return { ok: false, error: enqueued.error, status: enqueued.status };

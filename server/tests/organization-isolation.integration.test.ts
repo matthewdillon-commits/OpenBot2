@@ -1,10 +1,12 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import type { MiddlewareHandler } from "hono";
 import { Hono } from "hono";
+import { sql } from "drizzle-orm";
 import { createAgentProfileStore } from "../src/agents/profile-store";
 import { createAgentRoutes } from "../src/agents/routes";
 import { createAuditStore } from "../src/audit";
 import type { AppVariables } from "../src/auth/guards";
+import type { AuthConfig } from "../src/config";
 import {
   createChannelRoutes,
   createChannelStore,
@@ -15,7 +17,8 @@ import {
   createCredentialStore,
 } from "../src/credentials";
 import { createDatabase } from "../src/db/client";
-import { users } from "../src/db/schema";
+import { bindRequestRls } from "../src/db/rls";
+import { agents, users } from "../src/db/schema";
 import { bootstrapOrganizations } from "../src/orgs/bootstrap";
 import {
   computerIdFor,
@@ -24,6 +27,7 @@ import {
   scopedResourceId,
 } from "../src/orgs/constants";
 import { createOrganizationStore } from "../src/orgs/store";
+import { createOrganizationSsoStore } from "../src/orgs/sso";
 import { createPluginStore } from "../src/plugins/store";
 import { TEST_POOL } from "./support/database";
 import {
@@ -308,4 +312,78 @@ test("thread fingerprints differ across organizations", () => {
   expect(identity.owns(other, otherOrg.id)).toBe(true);
   expect(identity.owns(other, LOCAL_ORGANIZATION_ID)).toBe(false);
   expect(identity.owns(local, otherOrg.id)).toBe(false);
+});
+
+const TEST_AUTH: AuthConfig = {
+  baseUrl: "http://localhost:3001",
+  secret: "x".repeat(32),
+  trustedOrigins: [],
+  initialAdminEmails: [],
+  emailPassword: true,
+  google: { clientId: "id", clientSecret: "secret" },
+};
+
+test("Postgres RLS hides another org's rows from a sloppy query", async () => {
+  if (!databaseUrl) return;
+  const rlsDb = createDatabase(databaseUrl, { max: 2 });
+  await rlsDb.insert(agents).values([
+    {
+      id: `rls_a_${suffix}`,
+      orgId: LOCAL_ORGANIZATION_ID,
+      name: "RLS A",
+      type: "built_in",
+      configuration: {},
+    },
+    {
+      id: `rls_b_${suffix}`,
+      orgId: otherOrg.id,
+      name: "RLS B",
+      type: "built_in",
+      configuration: {},
+    },
+  ]);
+  await rlsDb.execute(sql`grant openbot_rls to current_user`);
+  try {
+    await bindRequestRls(rlsDb, {
+      orgId: LOCAL_ORGANIZATION_ID,
+      bypass: false,
+    });
+    const rows = await rlsDb
+      .select({ id: agents.id, orgId: agents.orgId })
+      .from(agents);
+    expect(rows.some((row) => row.id === `rls_a_${suffix}`)).toBe(true);
+    expect(rows.some((row) => row.id === `rls_b_${suffix}`)).toBe(false);
+    expect(rows.every((row) => row.orgId === LOCAL_ORGANIZATION_ID)).toBe(true);
+
+    await bindRequestRls(rlsDb, { orgId: otherOrg.id, bypass: false });
+    const otherRows = await rlsDb
+      .select({ id: agents.id, orgId: agents.orgId })
+      .from(agents);
+    expect(otherRows.some((row) => row.id === `rls_b_${suffix}`)).toBe(true);
+    expect(otherRows.some((row) => row.id === `rls_a_${suffix}`)).toBe(false);
+    expect(otherRows.every((row) => row.orgId === otherOrg.id)).toBe(true);
+  } finally {
+    await bindRequestRls(rlsDb, { orgId: null, bypass: false });
+  }
+});
+
+test("org A's SSO does not apply to org B", async () => {
+  if (!databaseUrl) return;
+  const sso = createOrganizationSsoStore(database);
+  const domainA = `alice-${suffix}.example`;
+  const domainB = `bob-${suffix}.example`;
+  await sso.set(LOCAL_ORGANIZATION_ID, {
+    googleEnabled: false,
+    domains: [domainA],
+  });
+  await sso.set(otherOrg.id, {
+    googleEnabled: true,
+    domains: [domainB],
+  });
+  const forA = await sso.resolveForEmail(`owner@${domainA}`, TEST_AUTH);
+  const forB = await sso.resolveForEmail(`owner@${domainB}`, TEST_AUTH);
+  expect(forA.orgId).toBe(LOCAL_ORGANIZATION_ID);
+  expect(forA.google).toBe(false);
+  expect(forB.orgId).toBe(otherOrg.id);
+  expect(forB.google).toBe(true);
 });

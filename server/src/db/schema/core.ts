@@ -84,11 +84,60 @@ export const organizations = pgTable("organizations", {
   slug: text("slug").notNull().unique(),
   name: text("name").notNull(),
   status: organizationStatus("status").notNull().default("active"),
-  /** String until billing exists. Sales-led pilots start as `enterprise`. */
-  plan: text("plan").notNull().default("enterprise"),
+  /**
+   * Billing plan written by Stripe webhooks (or `/platform`). Not a free-form
+   * default-enterprise string: self-serve starts as `free` with a seat quota.
+   */
+  plan: text("plan").notNull().default("free"),
+  /** Max memberships plus pending invites. Enforced on invite and accept. */
+  seatLimit: integer("seat_limit").notNull().default(1),
+  /**
+   * When set, new unattended / model / computer spend that would cross it is
+   * refused. Null means no cap. Summed from `organization_spend_events` in
+   * Postgres, not an in-process counter.
+   */
+  spendCapCents: integer("spend_cap_cents"),
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });
+
+/**
+ * Which sign-in methods this organization admits, and which email domains route
+ * here. Deployment-wide Google / Microsoft / Okta still exist; this is the
+ * per-org overlay so org A's SSO does not apply to org B.
+ */
+export const organizationSso = pgTable("organization_sso", {
+  orgId: text("org_id")
+    .primaryKey()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  googleEnabled: boolean("google_enabled").notNull().default(true),
+  microsoftEnabled: boolean("microsoft_enabled").notNull().default(true),
+  oktaEnabled: boolean("okta_enabled").notNull().default(true),
+  emailEnabled: boolean("email_enabled").notNull().default(true),
+  /** Lower-cased domains. A domain belongs to at most one org (enforced in code). */
+  domains: text("domains").array().notNull().default([]),
+  updatedAt: updatedAt(),
+});
+
+/**
+ * Ledger of billable work. Replica B sums the same rows; nothing is held in a Map.
+ */
+export const organizationSpendEvents = pgTable(
+  "organization_spend_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: organizationIdColumn(),
+    kind: text("kind").notNull(),
+    cents: integer("cents").notNull(),
+    jobId: text("job_id"),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index("organization_spend_events_org_idx").on(table.orgId, table.createdAt),
+  ],
+);
 
 export const organizationMemberships = pgTable(
   "organization_memberships",

@@ -111,6 +111,20 @@ describe("server authorization", () => {
         throw new Error("unused");
       },
       listAll: async () => [],
+      countOwnedBy: async () => 0,
+      seatUsage: async () => ({
+        members: 0,
+        pendingInvites: 0,
+        used: 0,
+        limit: 1,
+      }),
+      applyBilling: async () => {
+        throw new Error("unused");
+      },
+      getByStripeSubscription: async () => null,
+      setSpendCap: async () => {
+        throw new Error("unused");
+      },
       invite: async () => {
         throw new Error("unused");
       },

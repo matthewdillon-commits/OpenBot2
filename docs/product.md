@@ -173,8 +173,9 @@ Code in this tree is **late Stage 1 / early Stage 2**, with measure and
 improve closed on the **same goal object**: a high-risk permit waits as an
 approval card; the owner keep / revise / revert; the goal stores
 expected_impact and outcome; the next orchestrator turn sees that decision.
-Persist onto the Intelligence thread still fails closed. Self-serve SaaS is
-not this tree. How we climb the rest is [roadmap.md](roadmap.md).
+Self-serve SaaS exists (RLS, Stripe seats, invite email, per-org SSO, spend
+caps, traces). Persist onto the Intelligence thread still fails closed. How
+we climb the rest is [roadmap.md](roadmap.md).
 
 ---
 
@@ -284,17 +285,44 @@ connections are queried with `org_id`. Intelligence user ids are `org:user`.
 Computer ids for a non-local org are namespaced. Tests refuse one org reading
 another’s coworker, channel, skill, or credential.
 
+Postgres RLS is the second fence on every org-owned table (not
+`shared_computer_claim`). When `app.current_org_id` is set, a sloppy `SELECT`
+cannot read another org’s rows, even as the table owner (`FORCE ROW LEVEL
+SECURITY`). Bindings are `SET LOCAL` on the connection that runs the query
+(`server/src/db/rls.ts`), so a pool hop cannot skip the fence. Empty GUC is
+the boot / test / worker-claim path. Authenticated requests bind the actor’s
+org. Replica B uses the same Postgres; nothing is held in a Map.
+
+Self-serve billing is Stripe Checkout. `organizations.plan` is `free` /
+`starter` / `growth` / `enterprise` with a `seat_limit`. The first owned
+workspace is free (1 seat). A second `POST /api/orgs` returns 402 and a
+Checkout URL when `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and
+`STRIPE_PRICE_ID` are set, and refuses if they are not. Webhooks write plan
+and seats onto the org row. `/platform` remains for superadmins (enterprise,
+100 seats). Seats are counted as memberships plus unexpired pending invites
+and refused on invite and accept.
+
+Owner invites email the existing token. Missing `SMTP_URL` or `SMTP_HOST` +
+`SMTP_FROM` fails closed — the invite is not treated as sent. Platform
+invites may still return the token (sales-led).
+
+Google / Microsoft / Okta / email are still configured deployment-wide.
+`organization_sso` is which of those an organization admits and which email
+domains route here. Org A’s flags do not apply to org B.
+`GET /api/auth/sso-for-email` is the sign-in overlay.
+
+An org may set `spend_cap_cents`. Crossing it refuses new unattended, model,
+or computer work out loud (402 / SpendCapError). The ledger is
+`organization_spend_events` in Postgres, serialised with `FOR UPDATE` on the
+org row.
+
+API and worker processes call `startTracing`. Spans leave over OTLP HTTP when
+`OTEL_EXPORTER_OTLP_ENDPOINT` is set; without it the SDK still records spans
+on a discard exporter. Replica B emits its own traces. Nothing is fanned to a
+browser.
+
 What that is not:
 
-- **Not Postgres RLS.** Isolation is the `WHERE org_id = …` on each query. A
-  missed filter leaks.
-- **Not billing.** `organizations.plan` is a string, default `enterprise`.
-  There is no Stripe integration and no seat quota. A signed-in person may
-  `POST /api/orgs` and own another workspace.
-- **Not per-org SSO.** Google / Microsoft / Okta / email are deployment-wide.
-  `PLATFORM_SUPERADMINS` provisions and suspends organizations; `/platform` is
-  that screen. Invites return a token in the JSON; nothing in this server emails
-  the link.
 - **Not a tenant package per customer.** `TENANT_PACKAGE_DIR` is one package
   for the process. A new org gets copies of the packaged coworkers. Brand,
   model, and knowledge YAML stay shared.
@@ -303,16 +331,18 @@ What that is not:
   A second organization is refused until `COMPUTER_SUPERVISOR_URL` is how
   computers are made — one computer per org×bot. The supervisor needs a Docker
   socket, which the shippable image does not include.
+- **Not a durable unattended transcript.** Persist onto the Intelligence
+  thread still fails closed (`getThread` only).
 
 ### What to run it as
 
-**Fit for a sales-led or single-company deployment** where people are in the
-app: sign-in (or `OPENBOT_EMAIL_AUTH`), encrypted credentials, gateway and
-audit, org-scoped CRM and plugins, a computer when the supervisor is actually
-running beside it.
-
-**Not a self-serve multi-tenant SaaS** until RLS, billing, seats, per-org SSO,
-per-tenant computers, and a spend cap exist.
+**Fit for self-serve SaaS or a sales-led / single-company deployment** where
+people are in the app: sign-in (or `OPENBOT_EMAIL_AUTH`), encrypted
+credentials, gateway and audit, org-scoped CRM and plugins, RLS, Stripe
+checkout and seats, invite email, per-org SSO, a spend cap, traces, and a
+computer when the supervisor is actually running beside it. Home is still
+Composer + Goals. Rooms stay behind See the work. Approval cards stay on the
+goal.
 
 **Not a durable unattended transcript.** Send-and-go, cron, webhook, inbound
 email, and specialist spawn all enqueue the same job and the worker runs it after
@@ -331,8 +361,16 @@ no Measure or Approvals nav, and no second runner.
 | Claim | Where |
 | --- | --- |
 | Product name | `examples/fintech/brand.yaml`, `server/src/index.ts` listen line, sign-in copy |
-| Org tables and plan-until-billing | `server/src/db/schema/core.ts` |
-| Isolation is query-scoped | `server/tests/organization-isolation.integration.test.ts` |
+| Org tables, plan, seats, spend cap | `server/src/db/schema/core.ts` |
+| Isolation is query-scoped and RLS | `server/tests/organization-isolation.integration.test.ts`; `server/src/db/rls.ts`; `server/drizzle/0018_saas_billing_rls.sql` |
+| Stripe Checkout and webhooks | `server/src/billing/stripe.ts`, `server/src/billing/routes.ts` |
+| Seats on invite and accept | `server/src/orgs/store.ts` `SeatLimitError`; `server/src/orgs/constants.ts` `PLAN_SEATS` |
+| Invite email fails closed | `server/src/orgs/invite-mail.ts`; `server/src/orgs/routes.ts` `sendInvite` |
+| Per-org SSO | `server/src/orgs/sso.ts`; `GET /api/auth/sso-for-email` in `server/src/app.ts` |
+| Spend cap refuses new work | `server/src/orgs/spend.ts`; `server/src/jobs/enqueue.ts`; `server/src/copilot.ts`; `server/src/computer/gateway.ts` |
+| OpenTelemetry on API and worker | `server/src/telemetry.ts`; `server/src/index.ts`; `worker/src/index.ts` |
+| Multi-replica: Postgres / Stripe / OTel, no Map | `docs/deployment.md`; comments on each store above |
+| Owner workspace seats / SSO / spend | `app/src/routes/_authed/_app/o.tsx` |
 | Turns start in the app or from a standing trigger | `app/src/components/channels/channel-chat.tsx` (`useAgent`); `server/src/jobs/enqueue.ts` |
 | Computer tools execute on the server | `server/src/computer/computer-tools.ts`, `server/src/jobs/tools.ts` `loadToolsForActor` |
 | Watch pane is render-only | `app/src/lib/copilot/computer-tools.tsx` (`useRenderTool`) |
@@ -366,16 +404,20 @@ no Measure or Approvals nav, and no second runner.
 ## C. What it is not yet
 
 Three things people will assume from Part A. The two doors have landed;
-the loop is closed on the goal; persist and SaaS have not:
+the loop is closed on the goal; self-serve SaaS has landed; persist has not:
 
 1. **A durable unattended transcript.** Send-and-go, cron, webhook, inbound
    email, and specialist spawn exist (Part B), including computer tools on the
    server and a `needs_you` pause. Persist onto the Intelligence thread still
    fails closed — close-tab / come-back on the same mapped thread is not true
    yet.
-2. **Self-serve SaaS.** No RLS, no Stripe, no seat quota, no invite email, no
-   per-org SSO, no spend cap, no multi-replica story beyond “Postgres is the
-   shared state.” `/platform` is sales-led provisioning, not a checkout.
+2. **Self-serve SaaS leftovers.** RLS, Stripe checkout and seats, invite
+   email, per-org SSO, spend caps, OpenTelemetry, and a stated multi-replica
+   story (Postgres / Stripe / OTel, no in-process Map) exist (Part B). Still
+   true: persist fails closed; `TENANT_PACKAGE_DIR` is one package for the
+   process; a shared Chromium refuses a second org until
+   `COMPUTER_SUPERVISOR_URL`. `/platform` remains for superadmins; checkout is
+   the owner path.
 3. **The rest of Stage 4 compounding.** Approval cards, expected impact,
    outcome, and keep / revise / revert live on the same goal (Part B). Home is
    still Composer + Goals. See the work still opens that goal’s room. There is

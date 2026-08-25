@@ -1,10 +1,11 @@
 import { createHash, randomBytes } from "node:crypto";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, count, eq, gt, isNull } from "drizzle-orm";
 import type { Database } from "../db/client";
 import {
   organizationInvites,
   organizationMemberships,
   organizationSettings,
+  organizationSso,
   organizations,
   userPreferences,
   users,
@@ -13,6 +14,7 @@ import {
   LOCAL_ORGANIZATION_ID,
   LOCAL_ORGANIZATION_NAME,
   LOCAL_ORGANIZATION_SLUG,
+  PLAN_SEATS,
   type OrganizationRole,
   type OrganizationStatus,
   openBotRoleFor,
@@ -25,6 +27,10 @@ export type OrganizationRecord = {
   name: string;
   status: OrganizationStatus;
   plan: string;
+  seatLimit: number;
+  spendCapCents: number | null;
+  stripeCustomerId: string | null;
+  stripeSubscriptionId: string | null;
 };
 
 export type MembershipRecord = OrganizationRecord & {
@@ -82,12 +88,37 @@ export type OrganizationStore = {
     name: string;
     slug?: string;
     plan?: string;
+    seatLimit?: number;
+    stripeCustomerId?: string;
+    stripeSubscriptionId?: string;
   }) => Promise<OrganizationRecord>;
   setStatus: (
     orgId: string,
     status: OrganizationStatus,
   ) => Promise<OrganizationRecord>;
   listAll: () => Promise<OrganizationRecord[]>;
+  /** How many organizations this person owns. Caps unbounded POST /api/orgs. */
+  countOwnedBy: (userId: string) => Promise<number>;
+  seatUsage: (orgId: string) => Promise<{
+    members: number;
+    pendingInvites: number;
+    used: number;
+    limit: number;
+  }>;
+  applyBilling: (input: {
+    orgId: string;
+    plan: string;
+    seatLimit: number;
+    stripeCustomerId?: string | null;
+    stripeSubscriptionId?: string | null;
+  }) => Promise<OrganizationRecord>;
+  getByStripeSubscription: (
+    subscriptionId: string,
+  ) => Promise<OrganizationRecord | null>;
+  setSpendCap: (
+    orgId: string,
+    spendCapCents: number | null,
+  ) => Promise<OrganizationRecord>;
   invite: (input: {
     orgId: string;
     email: string;
@@ -112,6 +143,10 @@ function mapOrg(row: {
   name: string;
   status: OrganizationStatus;
   plan: string;
+  seatLimit: number;
+  spendCapCents: number | null;
+  stripeCustomerId: string | null;
+  stripeSubscriptionId: string | null;
 }): OrganizationRecord {
   return {
     id: row.id,
@@ -119,8 +154,24 @@ function mapOrg(row: {
     name: row.name,
     status: row.status,
     plan: row.plan,
+    seatLimit: row.seatLimit,
+    spendCapCents: row.spendCapCents,
+    stripeCustomerId: row.stripeCustomerId,
+    stripeSubscriptionId: row.stripeSubscriptionId,
   };
 }
+
+const orgColumns = {
+  id: organizations.id,
+  slug: organizations.slug,
+  name: organizations.name,
+  status: organizations.status,
+  plan: organizations.plan,
+  seatLimit: organizations.seatLimit,
+  spendCapCents: organizations.spendCapCents,
+  stripeCustomerId: organizations.stripeCustomerId,
+  stripeSubscriptionId: organizations.stripeSubscriptionId,
+};
 
 export function createOrganizationStore(database: Database): OrganizationStore {
   async function get(orgId: string) {
@@ -138,11 +189,7 @@ export function createOrganizationStore(database: Database): OrganizationStore {
   ): Promise<MembershipRecord | null> {
     const [row] = await database
       .select({
-        id: organizations.id,
-        slug: organizations.slug,
-        name: organizations.name,
-        status: organizations.status,
-        plan: organizations.plan,
+        ...orgColumns,
         role: organizationMemberships.role,
       })
       .from(organizationMemberships)
@@ -160,6 +207,33 @@ export function createOrganizationStore(database: Database): OrganizationStore {
     return row ?? null;
   }
 
+  async function seatUsage(orgId: string) {
+    const org = await get(orgId);
+    const limit = org?.seatLimit ?? 1;
+    const [members] = await database
+      .select({ value: count() })
+      .from(organizationMemberships)
+      .where(eq(organizationMemberships.orgId, orgId));
+    const [pending] = await database
+      .select({ value: count() })
+      .from(organizationInvites)
+      .where(
+        and(
+          eq(organizationInvites.orgId, orgId),
+          isNull(organizationInvites.acceptedAt),
+          gt(organizationInvites.expiresAt, new Date()),
+        ),
+      );
+    const memberCount = Number(members?.value ?? 0);
+    const pendingCount = Number(pending?.value ?? 0);
+    return {
+      members: memberCount,
+      pendingInvites: pendingCount,
+      used: memberCount + pendingCount,
+      limit,
+    };
+  }
+
   return {
     get,
 
@@ -175,11 +249,7 @@ export function createOrganizationStore(database: Database): OrganizationStore {
     async listForUser(userId) {
       return database
         .select({
-          id: organizations.id,
-          slug: organizations.slug,
-          name: organizations.name,
-          status: organizations.status,
-          plan: organizations.plan,
+          ...orgColumns,
           role: organizationMemberships.role,
         })
         .from(organizationMemberships)
@@ -204,11 +274,7 @@ export function createOrganizationStore(database: Database): OrganizationStore {
       }
       const memberships = await database
         .select({
-          id: organizations.id,
-          slug: organizations.slug,
-          name: organizations.name,
-          status: organizations.status,
-          plan: organizations.plan,
+          ...orgColumns,
           role: organizationMemberships.role,
         })
         .from(organizationMemberships)
@@ -252,6 +318,7 @@ export function createOrganizationStore(database: Database): OrganizationStore {
           name: input.name ?? LOCAL_ORGANIZATION_NAME,
           status: "active",
           plan: "enterprise",
+          seatLimit: PLAN_SEATS.enterprise,
         })
         .onConflictDoUpdate({
           target: organizations.id,
@@ -265,6 +332,10 @@ export function createOrganizationStore(database: Database): OrganizationStore {
       await database
         .insert(organizationSettings)
         .values({ orgId: row.id, featureFlags: {} })
+        .onConflictDoNothing();
+      await database
+        .insert(organizationSso)
+        .values({ orgId: row.id, domains: [] })
         .onConflictDoNothing();
       return mapOrg(row);
     },
@@ -299,6 +370,8 @@ export function createOrganizationStore(database: Database): OrganizationStore {
       const id = newOrganizationId();
       const base = slugifyOrganizationName(input.slug ?? input.name);
       let slug = base;
+      const plan = input.plan ?? "free";
+      const seatLimit = input.seatLimit ?? PLAN_SEATS.free;
       for (let attempt = 0; attempt < 8; attempt += 1) {
         try {
           const [row] = await database
@@ -308,13 +381,24 @@ export function createOrganizationStore(database: Database): OrganizationStore {
               slug,
               name: input.name.trim(),
               status: "active",
-              plan: input.plan ?? "enterprise",
+              plan,
+              seatLimit,
+              ...(input.stripeCustomerId
+                ? { stripeCustomerId: input.stripeCustomerId }
+                : {}),
+              ...(input.stripeSubscriptionId
+                ? { stripeSubscriptionId: input.stripeSubscriptionId }
+                : {}),
             })
             .returning();
           if (!row) throw new Error("The organization could not be created.");
           await database
             .insert(organizationSettings)
             .values({ orgId: row.id, displayName: row.name, featureFlags: {} });
+          await database
+            .insert(organizationSso)
+            .values({ orgId: row.id, domains: [] })
+            .onConflictDoNothing();
           return mapOrg(row);
         } catch (error) {
           if (
@@ -345,9 +429,67 @@ export function createOrganizationStore(database: Database): OrganizationStore {
       return rows.map(mapOrg);
     },
 
+    async countOwnedBy(userId) {
+      const [row] = await database
+        .select({ value: count() })
+        .from(organizationMemberships)
+        .where(
+          and(
+            eq(organizationMemberships.userId, userId),
+            eq(organizationMemberships.role, "owner"),
+          ),
+        );
+      return Number(row?.value ?? 0);
+    },
+
+    seatUsage,
+
+    async applyBilling(input) {
+      const [row] = await database
+        .update(organizations)
+        .set({
+          plan: input.plan,
+          seatLimit: input.seatLimit,
+          ...(input.stripeCustomerId !== undefined
+            ? { stripeCustomerId: input.stripeCustomerId }
+            : {}),
+          ...(input.stripeSubscriptionId !== undefined
+            ? { stripeSubscriptionId: input.stripeSubscriptionId }
+            : {}),
+          updatedAt: new Date(),
+        })
+        .where(eq(organizations.id, input.orgId))
+        .returning();
+      if (!row) throw new OrganizationNotFoundError(input.orgId);
+      return mapOrg(row);
+    },
+
+    async getByStripeSubscription(subscriptionId) {
+      const [row] = await database
+        .select()
+        .from(organizations)
+        .where(eq(organizations.stripeSubscriptionId, subscriptionId))
+        .limit(1);
+      return row ? mapOrg(row) : null;
+    },
+
+    async setSpendCap(orgId, spendCapCents) {
+      const [row] = await database
+        .update(organizations)
+        .set({ spendCapCents, updatedAt: new Date() })
+        .where(eq(organizations.id, orgId))
+        .returning();
+      if (!row) throw new OrganizationNotFoundError(orgId);
+      return mapOrg(row);
+    },
+
     async invite(input) {
       const org = await get(input.orgId);
       if (!org) throw new OrganizationNotFoundError(input.orgId);
+      const usage = await seatUsage(input.orgId);
+      if (usage.used >= usage.limit) {
+        throw new SeatLimitError(usage.limit);
+      }
       const email = input.email.trim().toLowerCase();
       const token = mintInviteToken();
       const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
@@ -396,6 +538,13 @@ export function createOrganizationStore(database: Database): OrganizationStore {
       }
       if (row.email !== user.email.trim().toLowerCase()) {
         throw new InviteInvalidError();
+      }
+      const already = await membership(user.id, row.orgId);
+      if (!already) {
+        const usage = await seatUsage(row.orgId);
+        if (usage.members >= usage.limit) {
+          throw new SeatLimitError(usage.limit);
+        }
       }
       await database.transaction(async (transaction) => {
         await transaction
@@ -469,6 +618,17 @@ export class InviteInvalidError extends Error {
   constructor() {
     super("That invite is not valid.");
     this.name = "InviteInvalidError";
+  }
+}
+
+export class SeatLimitError extends Error {
+  readonly limit: number;
+  constructor(limit: number) {
+    super(
+      `This organization has no seats left (${limit} seat${limit === 1 ? "" : "s"}). Raise the seat limit or remove a member before inviting.`,
+    );
+    this.name = "SeatLimitError";
+    this.limit = limit;
   }
 }
 
