@@ -144,6 +144,13 @@ jobs:
           tags: openbot:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Production image contains drizzle-kit
+        run: |
+          set -euo pipefail
+          # migrate.sh runs `bun x drizzle-kit` in this image. A production install that stripped
+          # it would leave that command fetching from the network, or failing offline.
+          docker run --rm --entrypoint /bin/sh openbot:ci -c \
+            'test -e /app/server/node_modules/drizzle-kit/package.json && cd /app/server && bun x drizzle-kit --version'
       # Building it says the layers resolve. Running it says the supervision tree comes up and stays
       # up, which is a different claim and the one that has broken before.
       - name: The image boots and serves
