@@ -1,0 +1,19 @@
+{
+  "name": "LimitlessAI",
+  "install": "bash scripts/cloud-install.sh",
+  "start": "bash scripts/cloud-start.sh",
+  "terminals": [
+    {
+      "name": "API",
+      "command": "export PATH=\"$HOME/.bun/bin:$PATH\" && bun run --filter server dev"
+    },
+    {
+      "name": "App",
+      "command": "export PATH=\"$HOME/.bun/bin:$PATH\" && bun --cwd app run dev --host 0.0.0.0 --port 3010 --strictPort"
+    }
+  ],
+  "ports": [
+    { "name": "app", "port": 3010 },
+    { "name": "api", "port": 3001 }
+  ]
+}
