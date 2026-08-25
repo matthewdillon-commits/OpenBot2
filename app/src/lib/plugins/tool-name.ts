@@ -6,9 +6,9 @@
  * the reader's problem, and putting it on screen tells them how the thing is built rather than what
  * their Bot just did.
  *
- * A built-in snake_case name (`search_web`) is humanised the same way: the person is watching an
- * action, not an identifier. camelCase gallery names are left alone — those were chosen for the
- * screen already.
+ * Built-in names that humanise poorly (`crm_create` → "Crm create") get a phrase. Remaining
+ * snake_case (`search_web`) is still split and sentence-cased. camelCase gallery names are left
+ * alone — those were chosen for the screen already.
  */
 export type ToolName = {
   /** What was done, for the line itself. */
@@ -17,7 +17,18 @@ export type ToolName = {
   detail?: string;
 };
 
+const ACTION_LABELS: Record<string, string> = {
+  crm_search: "Search CRM",
+  crm_get: "Read CRM",
+  crm_create: "Add to CRM",
+  crm_update: "Update CRM",
+  crm_send: "Send from CRM",
+};
+
 export function readToolName(name: string): ToolName {
+  const mapped = ACTION_LABELS[name];
+  if (mapped) return { label: mapped };
+
   const parts = name.split("__");
   if (parts.length < 3 || parts[0] !== "mcp") {
     return { label: name.includes("_") ? humanise(name) : name };
@@ -54,16 +65,20 @@ function humanise(tool: string): string {
 }
 
 /**
- * The search query (or the same-shaped field on another tool), when the arguments carry one.
+ * A short hint from the call itself, when the arguments carry one.
  *
- * Shown beside the action so "Search web" is not an empty claim: the person can see what is being
- * looked up. Other argument shapes are ignored rather than dumped; a JSON blob next to the line
- * is the identifier problem again.
+ * Search uses `query`; CRM create uses `name`. Shown beside the action so "Search web" or
+ * "Add to CRM" is not an empty claim. Other argument shapes are ignored rather than dumped; a
+ * JSON blob next to the line is the identifier problem again.
  */
 export function toolHintFrom(value: unknown): string | undefined {
   if (!value || typeof value !== "object") return undefined;
-  const query = (value as { query?: unknown }).query;
-  return typeof query === "string" && query.trim() ? query.trim() : undefined;
+  const record = value as Record<string, unknown>;
+  for (const key of ["query", "name", "subject", "to_address"] as const) {
+    const field = record[key];
+    if (typeof field === "string" && field.trim()) return field.trim();
+  }
+  return undefined;
 }
 
 export function toolHintFromArgs(args: string): string | undefined {

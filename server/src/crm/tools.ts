@@ -46,6 +46,12 @@ const createParameters = z.object({
   timezone: z.string().optional(),
   source: z.string().optional(),
   company_id: z.string().optional(),
+  company_name: z
+    .string()
+    .optional()
+    .describe(
+      "Employer name when kind=person. Finds or creates that company and links it. Prefer this over putting the employer only in notes.",
+    ),
   person_id: z.string().optional(),
   campaign_id: z.string().optional(),
   domain: z.string().optional(),
@@ -104,6 +110,7 @@ export function crmTools(options: {
       description:
         "Search this organization's CRM. Use kind=person, company, opportunity, campaign, conversation, or send. " +
         "Returns matching records with ids you can pass to crm_get or crm_update. " +
+        "Search before creating a person so you update an existing row instead of duplicating it. " +
         "This is the customer record, not the signed-in directory.",
       parameters: searchParameters,
       execute: async (args: unknown) => {
@@ -140,12 +147,15 @@ export function crmTools(options: {
     {
       name: CRM_CREATE_TOOL,
       description:
-        "Create a CRM record. kind=person needs name (emails, phones, job_title, company_id, stage_key optional). " +
+        "Create a CRM record. Search first (crm_search) so you do not duplicate a person or company that is already there. " +
+        "kind=person needs name (emails, phones, job_title, location, notes, stage_key optional). " +
+        "If they have an employer, pass company_name (and website or domain if you have them) — the company is found or created and linked in this same call; do not only put the employer in notes. " +
+        "source=web when this came from research. " +
         "kind=company needs name (domain, website, industry, phone optional). " +
         "kind=opportunity needs name (stage qualify|proposal|negotiation|won|lost, amount_cents, company_id, person_id optional). " +
         "kind=campaign needs name. kind=conversation needs subject. " +
         "kind=send needs to_address and send_kind=email|sms|call. " +
-        "The row is recorded as created by this Bot.",
+        "The row is recorded as created by this Bot. After a person is saved, tell the person watching what was saved: name, company, title, location — not only the name.",
       parameters: createParameters,
       execute: async (args: unknown) => {
         const parsed = createParameters.safeParse(args);
@@ -164,7 +174,7 @@ export function crmTools(options: {
       name: CRM_UPDATE_TOOL,
       description:
         "Update a CRM record by kind and id. Pass only the fields that should change. " +
-        "Use company_id on a person to link them to a company. " +
+        "On a person, company_name finds or creates the employer and links it; company_id links an existing company. " +
         "Use stage_key to move a person, or stage to move an opportunity on the deal board.",
       parameters: updateParameters,
       execute: async (args: unknown) => {
@@ -233,6 +243,7 @@ function fieldsFrom(
   if (data.timezone !== undefined) fields.timezone = data.timezone;
   if (data.source !== undefined) fields.source = data.source;
   if (data.company_id !== undefined) fields.companyId = data.company_id;
+  if (data.company_name !== undefined) fields.companyName = data.company_name;
   if (data.person_id !== undefined) fields.personId = data.person_id;
   if (data.campaign_id !== undefined) fields.campaignId = data.campaign_id;
   if (data.domain !== undefined) fields.domain = data.domain;

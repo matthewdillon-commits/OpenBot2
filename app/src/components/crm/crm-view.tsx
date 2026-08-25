@@ -294,47 +294,83 @@ function PeopleIndex({
       </thead>
       <tbody>
         {rows.map((person) => (
-          <tr
+          <PersonRow
             key={person.id}
-            tabIndex={0}
-            aria-selected={selectedId === person.id}
-            aria-label={person.name}
-            onClick={() => onSelect(person.id)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                onSelect(person.id);
-              }
-            }}
-          >
-            <td>
-              <span className="truncate font-medium" title={person.name}>
-                {person.name}
-              </span>
-            </td>
-            <td className="hidden sm:table-cell">
-              <span
-                className="truncate text-muted-foreground"
-                title={person.emails[0]}
-              >
-                {person.emails[0] || "—"}
-              </span>
-            </td>
-            <td className="hidden sm:table-cell">
-              <span className="truncate">
-                {person.company?.name || (
-                  <span className="text-muted-foreground">—</span>
-                )}
-              </span>
-            </td>
-            <td>
-              <CrmStage stageKey={person.stageKey} />
-            </td>
-          </tr>
+            person={person}
+            selected={selectedId === person.id}
+            onSelect={onSelect}
+          />
         ))}
       </tbody>
     </table>
   );
+}
+
+function PersonRow({
+  person,
+  selected,
+  onSelect,
+}: {
+  person: CrmPerson;
+  selected: boolean;
+  onSelect: (id: string) => void;
+}) {
+  const detail = personRowDetail(person);
+  return (
+    <tr
+      tabIndex={0}
+      aria-selected={selected}
+      aria-label={detail ? `${person.name}, ${detail}` : person.name}
+      onClick={() => onSelect(person.id)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelect(person.id);
+        }
+      }}
+    >
+      <td>
+        <span className="flex min-w-0 flex-col gap-0.5">
+          <span className="truncate font-medium" title={person.name}>
+            {person.name}
+          </span>
+          {detail ? (
+            <span
+              className="truncate text-xs text-muted-foreground"
+              title={detail}
+            >
+              {detail}
+            </span>
+          ) : null}
+        </span>
+      </td>
+      <td className="hidden sm:table-cell">
+        <span
+          className="truncate text-muted-foreground"
+          title={person.emails[0]}
+        >
+          {person.emails[0] || "—"}
+        </span>
+      </td>
+      <td className="hidden sm:table-cell">
+        <span className="truncate">
+          {person.company?.name || (
+            <span className="text-muted-foreground">—</span>
+          )}
+        </span>
+      </td>
+      <td>
+        <CrmStage stageKey={person.stageKey} />
+      </td>
+    </tr>
+  );
+}
+
+function personRowDetail(person: CrmPerson): string | undefined {
+  const parts = [person.jobTitle, person.location]
+    .map((part) => part?.trim())
+    .filter((part): part is string => Boolean(part));
+  return parts.length > 0 ? parts.join(" · ") : undefined;
 }
 
 function NewContactDialog({

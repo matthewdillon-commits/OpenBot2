@@ -51,6 +51,14 @@ describe("naming a tool call", () => {
     expect(readToolName("search_web")).toEqual({ label: "Search web" });
   });
 
+  test("CRM tools are named as actions, not identifiers", () => {
+    expect(readToolName("crm_create")).toEqual({ label: "Add to CRM" });
+    expect(readToolName("crm_search")).toEqual({ label: "Search CRM" });
+    expect(readToolName("crm_get")).toEqual({ label: "Read CRM" });
+    expect(readToolName("crm_update")).toEqual({ label: "Update CRM" });
+    expect(readToolName("crm_send")).toEqual({ label: "Send from CRM" });
+  });
+
   test("a search query is the hint beside the action", () => {
     expect(toolHintFrom({ query: "ontario mortgage broker" })).toBe(
       "ontario mortgage broker",
@@ -59,5 +67,11 @@ describe("naming a tool call", () => {
       "ontario mortgage broker",
     );
     expect(toolHintFrom({ url: "https://example.com" })).toBeUndefined();
+  });
+
+  test("a CRM create uses the person's name as the hint", () => {
+    expect(toolHintFrom({ kind: "person", name: "Maya Chen" })).toBe(
+      "Maya Chen",
+    );
   });
 });

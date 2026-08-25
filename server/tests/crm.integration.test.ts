@@ -264,6 +264,64 @@ describe("CRM against a real store", () => {
     expect(written[0]?.orgId).toBe(actor.orgId);
   });
 
+  test("creating a person with company_name finds or creates the company", async () => {
+    if (!databaseUrl) return;
+    await ensureLocalOrganization(database);
+    const actor = await createUser();
+    const botId = await createAgent(actor, "Risk Analyst");
+    const { auditStore } = recorder();
+    const gateway = createCrmGateway({
+      store,
+      database,
+      auditStore,
+      policy: () => PERMISSIVE,
+    });
+    const orgId = actor.orgId ?? LOCAL_ORGANIZATION_ID;
+
+    const answer = await gateway.create({
+      botId,
+      actor,
+      kind: "person",
+      fields: {
+        name: "Sadiq Boodoo",
+        jobTitle: "Owner",
+        location: "Ontario",
+        companyName: "Approved Financial Services",
+        website: "https://approved.test",
+      },
+    });
+
+    expect(answer).toContain("Created person");
+    expect(answer).toContain("Approved Financial Services");
+    const match = answer.match(
+      /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i,
+    );
+    expect(match?.[0]).toBeTruthy();
+    if (match?.[0]) createdPersonIds.push(match[0]);
+
+    const created = await store.getPerson(orgId, match?.[0] ?? "");
+    expect(created?.company?.name).toBe("Approved Financial Services");
+    expect(created?.jobTitle).toBe("Owner");
+    expect(created?.location).toBe("Ontario");
+    if (created?.companyId) createdCompanyIds.push(created.companyId);
+
+    const again = await gateway.create({
+      botId,
+      actor,
+      kind: "person",
+      fields: {
+        name: "Other Contact",
+        companyName: "approved financial services",
+      },
+    });
+    const second = again.match(
+      /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i,
+    );
+    if (second?.[0]) createdPersonIds.push(second[0]);
+    const linked = await store.getPerson(orgId, second?.[0] ?? "");
+    expect(linked?.companyId).toBe(created?.companyId);
+  });
+
   test("policy deny writes nothing", async () => {
     if (!databaseUrl) return;
     await ensureLocalOrganization(database);

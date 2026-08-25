@@ -31,8 +31,9 @@
 }
 
 .crm-table td {
-  height: 2.75rem;
-  padding: 0 0.75rem;
+  min-height: 2.75rem;
+  height: auto;
+  padding: 0.35rem 0.75rem;
   border-bottom: 1px solid color-mix(in oklch, var(--border) 70%, transparent);
   font-size: 0.875rem;
   color: var(--foreground);

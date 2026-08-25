@@ -193,14 +193,21 @@ export function createCrmGateway(options: {
       if (!decision.ok) return decision.refused;
 
       try {
-        const created = await createOf(
+        const fields = await withLinkedCompany(
           store,
           decision.orgId,
           input.kind,
           input.fields,
           decision.createdBy,
         );
-        return `Created ${input.kind} ${created.id}: ${labelOf(input.kind, created)}.`;
+        const created = await createOf(
+          store,
+          decision.orgId,
+          input.kind,
+          fields,
+          decision.createdBy,
+        );
+        return describeWrite("Created", input.kind, created);
       } catch (error) {
         return error instanceof Error
           ? error.message
@@ -222,15 +229,22 @@ export function createCrmGateway(options: {
       if (!decision.ok) return decision.refused;
 
       try {
+        const fields = await withLinkedCompany(
+          store,
+          decision.orgId,
+          input.kind,
+          input.fields,
+          decision.createdBy,
+        );
         const updated = await updateOf(
           store,
           decision.orgId,
           input.kind,
           id,
-          input.fields,
+          fields,
         );
         if (!updated) return `No ${input.kind} with that id.`;
-        return `Updated ${input.kind} ${updated.id}: ${labelOf(input.kind, updated)}.`;
+        return describeWrite("Updated", input.kind, updated);
       } catch (error) {
         return error instanceof Error
           ? error.message
@@ -396,6 +410,61 @@ async function getOf(
   }
 }
 
+/**
+ * A person create/update may name the employer instead of an id.
+ *
+ * The model otherwise stuffs "Works at Acme" into notes and never writes a company row, so the
+ * People list shows a dash. Find or create here, in the same permitted write, so linking does not
+ * depend on a second tool call.
+ */
+async function withLinkedCompany(
+  store: CrmStore,
+  orgId: string,
+  kind: CrmKind,
+  fields: Record<string, unknown>,
+  createdBy: CrmCreatedBy,
+): Promise<Record<string, unknown>> {
+  if (kind !== "person") return fields;
+
+  const next = { ...fields };
+  const companyName =
+    typeof next.companyName === "string" ? next.companyName.trim() : "";
+  delete next.companyName;
+  const companyId =
+    typeof next.companyId === "string" ? next.companyId.trim() : "";
+  if (companyId || !companyName) return next;
+
+  const website = typeof next.website === "string" ? next.website.trim() : "";
+  const domain = typeof next.domain === "string" ? next.domain.trim() : "";
+  delete next.website;
+  delete next.domain;
+
+  const page = await store.listCompanies({
+    orgId,
+    search: companyName,
+    limit: 50,
+  });
+  const match = page.items.find(
+    (company) => company.name.toLowerCase() === companyName.toLowerCase(),
+  );
+  if (match) {
+    next.companyId = match.id;
+    return next;
+  }
+
+  const created = await store.createCompany(
+    orgId,
+    {
+      name: companyName,
+      ...(domain ? { domain } : {}),
+      ...(website ? { website } : {}),
+    },
+    createdBy,
+  );
+  next.companyId = created.id;
+  return next;
+}
+
 async function createOf(
   store: CrmStore,
   orgId: string,
@@ -466,6 +535,32 @@ function labelOf(kind: CrmKind, record: AnyRecord): string {
   if (kind === "conversation") return (record as CrmConversation).subject;
   if (kind === "send") return (record as CrmSend).toAddress;
   return (record as { name: string }).name;
+}
+
+/**
+ * What the Bot should tell the person watching after a write.
+ *
+ * A one-field "Created person uuid: Name." led models to echo only the name. Spell out title,
+ * company, location, and email, and say to confirm it in a sentence.
+ */
+function describeWrite(
+  verb: "Created" | "Updated",
+  kind: CrmKind,
+  record: AnyRecord,
+): string {
+  const head = `${verb} ${kind} ${record.id}: ${labelOf(kind, record)}.`;
+  if (kind !== "person") return head;
+  const person = record as CrmPerson;
+  const facts: string[] = [];
+  if (person.jobTitle) facts.push(person.jobTitle);
+  if (person.company?.name) facts.push(`at ${person.company.name}`);
+  if (person.location) facts.push(`in ${person.location}`);
+  if (person.emails[0]) facts.push(`email ${person.emails[0]}`);
+  const factLine = facts.length > 0 ? ` ${facts.join(", ")}.` : "";
+  return (
+    `${head}${factLine} Confirm this save to the person in a sentence: name them, ` +
+    `the company if there is one, and that they are in the CRM. Do not reply with only the name.`
+  );
 }
 
 function summarise(kind: CrmKind, record: AnyRecord): string {

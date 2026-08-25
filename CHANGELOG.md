@@ -11,10 +11,15 @@ Newest first. `Unreleased` is what is on `main` and not yet tagged.
 ### Chat
 
 - **The working line stays until the Bot starts writing.** Sending used to show a thinking line that vanished the moment a tool appeared, so a web search or CRM call left a blank transcript with only a Stop button and a tiny function name. The line now says Working (with motion) for the whole wait, the composer repeats it next to Stop, and built-in tools such as web search are named as actions rather than raw identifiers.
+- **CRM tools are named as actions.** `crm_create` reads Add to CRM, not "Crm create", and the person's name sits beside it. After a write, the tool result lists title, company, location, and email so the Bot can confirm the save in a sentence instead of echoing only the name.
 - **The thinking line appears as soon as a message is sent.** It used to wait until the runtime marked the run as started, so the first send sat still for a second or more with no sign the Bot had heard. The person's message is posted first — including the first message of a new channel, which used to wait for the thread to join before showing thinking. Thinking follows immediately.
 - **Web search no longer dies on a one-character query.** Tavily refuses anything shorter than two characters, and CopilotKit Intelligence was turning a failed tool schema into a red "Unprocessable Entity". The tool now answers with a sentence the Bot can act on, tool schemas sent to the model are stripped of JSON Schema draft metadata some providers reject, and a 422 on the turn is explained in a sentence rather than a status phrase.
 - **A tool loop now finishes on OpenAI-compatible hosts.** CopilotKit's `openai/<id>` string uses the Responses API, which emits `item_reference` on the second step. Hosts such as xAI reject that as Unprocessable Entity after the search has already run, so the answer never arrives. When `OPENAI_BASE_URL` is set, built-in Bots use Chat Completions instead. Real OpenAI, with no base URL, still uses Responses.
 - **A tenant chat no longer 500s its computer or 404s home.** Package agent ids are already org-scoped; prefixing them again overflowed the computer's 64-character id limit and failed every control poll. The limit is 128, already-scoped ids are left alone, and the home page no longer polls grants for the `"default"` placeholder. A brand-new channel also skips restoring a thread Intelligence has not created yet.
+
+### CRM
+
+- **A person create can name the employer.** Passing `company_name` finds or creates that company and links it in the same write, so a research add does not leave Company blank. The People list shows job title and location under the name.
 
 ### Multi-tenant organizations
 

@@ -122,7 +122,7 @@ People carry `stage_key` (the outreach pipeline) and `do_not_contact`. The Peopl
 
 Sends are email, SMS, or call. SMTP and Twilio deliver when configured; otherwise the row is `logged` rather than pretending a message left. A person marked DNC cannot be sent to. Email opens and clicks use a tracking token that is write-only on the list: a 1×1 pixel and an http(s) click redirect.
 
-Bots are offered `crm_search`, `crm_get`, `crm_create`, `crm_update`, and `crm_send`. Every call goes through the gateway: resolve the kind and fields, decide against the live policy (`intent == "crm"` or the tool name), write an audit row (`crm.record_read`, `crm.record_written`, or `crm.record_refused`), and only then act. A deny leaves the tables alone.
+Bots are offered `crm_search`, `crm_get`, `crm_create`, `crm_update`, and `crm_send`. Every call goes through the gateway: resolve the kind and fields, decide against the live policy (`intent == "crm"` or the tool name), write an audit row (`crm.record_read`, `crm.record_written`, or `crm.record_refused`), and only then act. A deny leaves the tables alone. A person create may pass `company_name` instead of `company_id`; the gateway finds or creates that company in the same write and links it.
 
 ## Components
 

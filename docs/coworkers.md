@@ -102,6 +102,6 @@ A coworker's role does not grant capabilities. Capabilities are governed separat
 - MCP tools are granted per Bot by administrators;
 - personal skills can be attached only to Bots the author owns;
 - deployment skills are managed by administrators;
-- CRM tools (`crm_search`, `crm_get`, `crm_create`, `crm_update`, `crm_send`) are offered to every Bot. The gateway still decides (`intent == "crm"` or the tool name) and writes `crm.record_read`, `crm.record_written`, or `crm.record_refused`. A deny writes nothing. SMTP and Twilio deliver a send when configured; otherwise it is recorded as logged.
+- CRM tools (`crm_search`, `crm_get`, `crm_create`, `crm_update`, `crm_send`) are offered to every Bot. The gateway still decides (`intent == "crm"` or the tool name) and writes `crm.record_read`, `crm.record_written`, or `crm.record_refused`. A deny writes nothing. A person create may pass `company_name`; the gateway finds or creates that company and links it. SMTP and Twilio deliver a send when configured; otherwise it is recorded as logged.
 
 See [architecture.md](architecture.md).

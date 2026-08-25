@@ -15,6 +15,7 @@ import {
   normalizeDealStage,
 } from "../src/crm/stages";
 import type {
+  CrmCompany,
   CrmCreatedBy,
   CrmPage,
   CrmPerson,
@@ -85,6 +86,23 @@ function send(overrides: Partial<CrmSend> = {}): CrmSend {
   };
 }
 
+function company(overrides: Partial<CrmCompany> = {}): CrmCompany {
+  return {
+    id: "33333333-3333-3333-3333-333333333333",
+    name: "Acme",
+    domain: null,
+    website: null,
+    industry: null,
+    phone: null,
+    location: null,
+    notes: null,
+    createdBy: CREATED_BY,
+    createdAt: "2026-08-22T00:00:00.000Z",
+    updatedAt: "2026-08-22T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
 function page<T>(items: T[]): CrmPage<T> {
   return { items, nextCursor: null, total: items.length };
 }
@@ -95,9 +113,11 @@ function unused(): never {
 
 function fakeStore(overrides: Partial<CrmStore> = {}): CrmStore & {
   created: CrmPerson[];
+  companies: CrmCompany[];
   sent: CrmSend[];
 } {
   const created: CrmPerson[] = [];
+  const companies: CrmCompany[] = [];
   const sent: CrmSend[] = [];
   const emptyPage = async () => page([]);
   const store: CrmStore = {
@@ -105,18 +125,47 @@ function fakeStore(overrides: Partial<CrmStore> = {}): CrmStore & {
     listThreads: async () => page([]),
     getPerson: async () => undefined,
     createPerson: async (_orgId, input, createdBy) => {
+      const linked = companies.find((row) => row.id === input.companyId);
       const row = person({
         name: input.name,
         emails: input.emails ?? [],
+        phones: input.phones ?? [],
+        jobTitle: input.jobTitle ?? null,
+        location: input.location ?? null,
+        notes: input.notes ?? null,
+        companyId: input.companyId ?? null,
+        company: linked
+          ? { id: linked.id, name: linked.name, domain: linked.domain }
+          : null,
         createdBy,
       });
       created.push(row);
       return row;
     },
     updatePerson: async () => undefined,
-    listCompanies: emptyPage,
+    listCompanies: async (query) => {
+      const search = query?.search?.trim().toLowerCase();
+      const items = search
+        ? companies.filter(
+            (row) =>
+              row.name.toLowerCase().includes(search) ||
+              (row.domain ?? "").toLowerCase().includes(search),
+          )
+        : companies;
+      return page(items);
+    },
     getCompany: unused,
-    createCompany: unused,
+    createCompany: async (_orgId, input, createdBy) => {
+      const row = company({
+        id: `33333333-3333-3333-3333-${String(companies.length + 1).padStart(12, "0")}`,
+        name: input.name,
+        domain: input.domain ?? null,
+        website: input.website ?? null,
+        createdBy,
+      });
+      companies.push(row);
+      return row;
+    },
     updateCompany: unused,
     listOpportunities: emptyPage,
     getOpportunity: unused,
@@ -160,7 +209,7 @@ function fakeStore(overrides: Partial<CrmStore> = {}): CrmStore & {
     getTrackingToken: async () => undefined,
     ...overrides,
   };
-  return Object.assign(store, { created, sent });
+  return Object.assign(store, { created, companies, sent });
 }
 
 function recorder() {
@@ -377,6 +426,101 @@ describe("CRM gateway", () => {
       kind: "person",
       action: "write",
       decision: { carriedOut: true },
+    });
+  });
+
+  test("creating a person with company_name finds or creates the company and confirms the save", async () => {
+    const store = fakeStore();
+    const { auditStore } = recorder();
+    const gateway = createCrmGateway({
+      store,
+      database: databaseStub,
+      auditStore,
+      policy: () => PERMISSIVE,
+    });
+
+    const answer = await gateway.create({
+      botId: "risk",
+      actor: ACTOR,
+      kind: "person",
+      fields: {
+        name: "Sadiq Boodoo",
+        jobTitle: "Owner",
+        location: "Ontario",
+        companyName: "Approved Financial Services",
+        website: "https://approved.test",
+      },
+    });
+
+    expect(store.companies).toHaveLength(1);
+    expect(store.companies[0]?.name).toBe("Approved Financial Services");
+    expect(store.companies[0]?.website).toBe("https://approved.test");
+    expect(store.created[0]?.companyId).toBe(store.companies[0]?.id);
+    expect(store.created[0]?.company?.name).toBe("Approved Financial Services");
+    expect(answer).toContain("Created person");
+    expect(answer).toContain("Sadiq Boodoo");
+    expect(answer).toContain("Owner");
+    expect(answer).toContain("Approved Financial Services");
+    expect(answer).toContain("Ontario");
+    expect(answer).toContain("CRM");
+  });
+
+  test("a second person at the same company reuses the row", async () => {
+    const store = fakeStore();
+    const { auditStore } = recorder();
+    const gateway = createCrmGateway({
+      store,
+      database: databaseStub,
+      auditStore,
+      policy: () => PERMISSIVE,
+    });
+
+    await gateway.create({
+      botId: "risk",
+      actor: ACTOR,
+      kind: "person",
+      fields: { name: "Ada", companyName: "Acme Ltd" },
+    });
+    await gateway.create({
+      botId: "risk",
+      actor: ACTOR,
+      kind: "person",
+      fields: { name: "Grace", companyName: "acme ltd" },
+    });
+
+    expect(store.companies).toHaveLength(1);
+    expect(store.created).toHaveLength(2);
+    expect(store.created[1]?.companyId).toBe(store.created[0]?.companyId);
+  });
+
+  test("crm_create maps company_name onto the gateway fields", async () => {
+    let captured: Record<string, unknown> | undefined;
+    const tools = crmTools({
+      crm: {
+        search: async () => "",
+        get: async () => "",
+        create: async (input) => {
+          captured = input.fields;
+          return "ok";
+        },
+        update: async () => "",
+        send: async () => "",
+      },
+      botId: "risk",
+      actor: ACTOR,
+    });
+    const create = tools.find((tool) => tool.name === "crm_create");
+    expect(create).toBeDefined();
+    await create?.execute({
+      kind: "person",
+      name: "Maya Chen",
+      company_name: "Northwind",
+      job_title: "Buyer",
+    });
+    expect(captured).toMatchObject({
+      name: "Maya Chen",
+      companyName: "Northwind",
+      jobTitle: "Buyer",
     });
   });
 
