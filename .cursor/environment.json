@@ -6,7 +6,7 @@
     {
       "name": "server",
       "description": "LimitlessAI API on port 3001. Reads ../.env. OPENBOT_SINGLE_USER=true admits every request as the local administrator.",
-      "command": "export PATH=\"$HOME/.bun/bin:$PATH\"; cd server && bun --env-file=../.env src/index.ts"
+      "command": "export PATH=\"$HOME/.bun/bin:$PATH\"; bash scripts/ensure-dev-env.sh; for i in $(seq 1 60); do pg_isready -h localhost -q && break; sleep 1; done; cd server && bun --env-file=../.env src/index.ts"
     },
     {
       "name": "app",
@@ -16,7 +16,7 @@
     {
       "name": "worker",
       "description": "Claims unattended jobs (Send-and-go, cron, webhook, inbound email).",
-      "command": "export PATH=\"$HOME/.bun/bin:$PATH\"; cd worker && bun --env-file=../.env src/index.ts"
+      "command": "export PATH=\"$HOME/.bun/bin:$PATH\"; bash scripts/ensure-dev-env.sh; for i in $(seq 1 60); do pg_isready -h localhost -q && break; sleep 1; done; cd worker && bun --env-file=../.env src/index.ts"
     }
   ],
   "ports": [{ "name": "app", "port": 3010 }, { "name": "api", "port": 3001 }]

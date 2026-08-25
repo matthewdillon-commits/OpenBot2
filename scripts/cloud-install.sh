@@ -20,9 +20,9 @@ if ! command -v psql >/dev/null 2>&1; then
   sudo apt-get install -y -qq unzip xz-utils postgresql postgresql-contrib postgresql-16-pgvector lsof
 fi
 
-if [ ! -f .env ]; then
-  cp .env.example .env
-fi
+# Placeholders in .env belong on disk before terminals start. Cursor may launch
+# those in parallel with `start`, and an empty INTELLIGENCE_API_KEY refuses boot.
+bash scripts/ensure-dev-env.sh
 
 bun install --frozen-lockfile
 
