@@ -29,7 +29,6 @@ export type JobPayload = {
   result?: {
     text?: string;
     persisted?: boolean;
-    messages?: unknown[];
   };
 };
 
@@ -115,17 +114,31 @@ export type JobStore = {
 };
 
 function collectPayloadTexts(payload: JobPayload): string[] {
-  const texts: string[] = [];
-  if (payload.result?.text) texts.push(payload.result.text);
-  for (const message of payload.result?.messages ?? []) {
-    if (!message || typeof message !== "object") continue;
-    const content = (message as { content?: unknown }).content;
-    if (typeof content === "string") texts.push(content);
-  }
-  return texts;
+  return payload.result?.text ? [payload.result.text] : [];
 }
 
-function asPayload(value: Record<string, unknown> | JobPayload): JobPayload {
+function skinnyResult(value: unknown): JobPayload["result"] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  const text = typeof record.text === "string" ? record.text : undefined;
+  const persisted =
+    typeof record.persisted === "boolean" ? record.persisted : undefined;
+  if (text === undefined && persisted === undefined) return undefined;
+  return {
+    ...(text !== undefined ? { text } : {}),
+    ...(persisted !== undefined ? { persisted } : {}),
+  };
+}
+
+/**
+ * Read a stored payload without keeping a `messages[]` chat store. Intelligence is the
+ * transcript. The job may keep the prompt and a skinny `result.text` / `persisted` flag.
+ */
+export function asJobPayload(
+  value: Record<string, unknown> | JobPayload,
+): JobPayload {
   const prompt =
     typeof value.prompt === "string"
       ? value.prompt
@@ -136,11 +149,9 @@ function asPayload(value: Record<string, unknown> | JobPayload): JobPayload {
       )
     : undefined;
   const agentId = typeof value.agentId === "string" ? value.agentId : undefined;
-  const rawResult = value.result;
-  const result =
-    rawResult && typeof rawResult === "object" && !Array.isArray(rawResult)
-      ? (rawResult as JobPayload["result"])
-      : undefined;
+  const result = skinnyResult(
+    "result" in value ? (value as { result?: unknown }).result : undefined,
+  );
   return {
     prompt,
     ...(skillInstructions && skillInstructions.length > 0
@@ -160,7 +171,7 @@ function toJob(row: typeof jobs.$inferSelect): UnattendedJob {
     coworkerId: row.coworkerId,
     actingUserId: row.actingUserId,
     trigger: row.trigger,
-    payload: asPayload(row.payload),
+    payload: asJobPayload(row.payload),
     status: row.status,
     threadId: row.threadId,
     needsYou: row.needsYou,
@@ -268,8 +279,8 @@ export function createJobStore(database: Database): JobStore {
         .where(eq(jobs.id, id));
       if (!existing) return null;
       const payload = update.payload
-        ? { ...asPayload(existing.payload), ...update.payload }
-        : asPayload(existing.payload);
+        ? asJobPayload({ ...asJobPayload(existing.payload), ...update.payload })
+        : asJobPayload(existing.payload);
       const finishedAt = new Date();
       const sourceTexts = collectPayloadTexts(payload);
       const outcome = buildJobOutcome({

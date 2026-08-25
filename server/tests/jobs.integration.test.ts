@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
+import { z } from "zod";
 import { createAgentProfileStore } from "../src/agents/profile-store";
 import type { AgentActor } from "../src/agents/profile-types";
 import { createChannelStore } from "../src/channels/routes";
@@ -93,6 +94,8 @@ describe.skipIf(!postgresReachable)(
         title: "Research",
         roleDescription: "Research people.",
         visibility: "public",
+        // create() is remote AG-UI unless a managed Bot is configured. CI has none.
+        endpoint: "http://127.0.0.1:9/ag-ui",
       });
       createdAgentIds.push(agent.id);
       const channel = await channelStore.create(actor, [agent.id]);
@@ -163,7 +166,7 @@ describe.skipIf(!postgresReachable)(
             {
               name: "crm_search",
               description: "Search CRM",
-              parameters: { parse: () => ({}) } as never,
+              parameters: z.object({ query: z.string().optional() }),
               execute: async () => "Ada is at Acme.",
             },
           ],

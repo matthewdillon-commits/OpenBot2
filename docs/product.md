@@ -195,8 +195,14 @@ Intelligence thread. `startUnattendedRun` may take `goalId`; it must be that
 channel. A second transcript is not minted. The API inserts a `jobs` row; the
 `worker` claims it with `FOR UPDATE SKIP LOCKED` and runs the coworker with
 server tools only (CRM, `search_web`, knowledge, granted MCP). A missing
-mapping or missing thread is a refuse. Persist writes that same thread; if the
-write fails the job is failed. Computer tools still need the tab. The job row
+mapping or missing thread is a refuse. Persist must write that same mapped
+thread. The client this tree already uses for thread reads is
+`CopilotKitIntelligence.getThread` (`server/src/intelligence-client.ts`,
+`server/src/channels/thread-status.ts`). That class has no method that appends
+chat messages — tab turns persist through the CopilotRuntime runner, which
+this path does not use. Persist therefore fails closed and the job is failed,
+never succeeded. The job row is not a second transcript: prompt plus a skinny
+`resultText` / outcome only. Computer tools still need the tab. The job row
 stores a skinny outcome: status Active | Needs you | Done, `last_action` (one
 sentence), `last_action_at`, plus who ran and any CRM record ids the write
 already returned. That is not an approval card. There is no Goals home UI.
@@ -228,8 +234,9 @@ Once a turn has started — in the tab or from a claimed job:
   when a job finishes.
 
 So: a person can send “research these two people and write the CRM” with
-Send-and-go, close the tab, and come back to that same channel for the result.
-Anything that needs the computer still needs the tab.
+Send-and-go, close the tab, and the worker still runs those server tools. The
+turn is not written onto the Intelligence thread, so coming back does not yet
+show that result on the same mapped thread. Computer still needs the tab.
 
 ### Organizations
 
@@ -289,6 +296,7 @@ It does not measure whether the work moved the business.
 | Server CRM / search tools | `server/src/index.ts` `loadToolsForActor` |
 | Twenty tool steps | `server/src/copilot.ts` `TOOL_STEPS` |
 | Send-and-go / unattended jobs | `server/src/jobs/`, `worker/src/index.ts` |
+| Unattended persist fails closed | `server/src/jobs/thread.ts` `createThreadPersister` (`getThread` only) |
 | Shared computer without supervisor | `docs/deployment.md`, `COMPUTER_SUPERVISOR_URL` |
 | Composio keyed by org | `server/src/composio/client.ts` |
 
@@ -301,8 +309,10 @@ other two have not:
 
 1. **Unattended computer and scheduled starts.** Send-and-go exists (Part B):
    the worker claims a job and continues CRM / research / MCP after the tab
-   closes. There is still no cron, no webhook, and no inbound email that opens
-   a run. Computer tools still need the tab.
+   closes. Persist onto the Intelligence thread fails closed — close-tab /
+   come-back on the same mapped thread is not true yet. There is still no
+   cron, no webhook, and no inbound email that opens a run. Computer tools
+   still need the tab.
 2. **Self-serve SaaS.** No RLS, no Stripe, no seat quota, no invite email, no
    per-org SSO, no spend cap, no multi-replica story beyond “Postgres is the
    shared state.” `/platform` is sales-led provisioning, not a checkout.

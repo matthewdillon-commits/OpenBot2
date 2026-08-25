@@ -368,6 +368,8 @@ export async function startUnattendedRun(input: {
     } catch {
       persisted = false;
     }
+    // Persist false or throw is FAILED. The in-memory transcript is not written to the
+    // job row — Intelligence remains the source of truth when a write exists.
     if (!persisted) {
       try {
         await input.deps.recordActivity({

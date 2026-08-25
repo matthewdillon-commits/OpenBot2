@@ -4,10 +4,14 @@
  * Do not mint a thread. Intelligence user ids are already `org:user`. The mapping row for
  * (acting user, channel) is the source of truth; a job that cannot find that row is refused.
  *
- * Intelligence WebSocket is for replay to an open tab. Persistence is a write to that same
- * mapped thread (runtime `updateThread` or HTTP append). Persist failure is not success.
- * A missing mapping or missing thread is a refuse — do not mint one. A second chat store
- * must not become the source of truth.
+ * Tab turns persist through the CopilotRuntime Intelligence runner while the browser is on the
+ * turn. This path is not that runner. The client this tree already uses for thread reads is
+ * `CopilotKitIntelligence.getThread` (see `intelligence-client.ts` and `channels/thread-status.ts`).
+ * That class has no method that appends chat messages. Persist therefore confirms the mapped
+ * thread with `getThread` and fails closed. Never probe guessed names, never POST a speculative
+ * `/api/threads/:id/messages`, never treat `updateThread` (metadata) as a transcript write, and
+ * never call `createThread` / `getOrCreateThread`. Persist false or throw is FAILED, never
+ * succeeded. The job row is not a second transcript.
  */
 import { identifyUserFromContext } from "./actor";
 
@@ -47,6 +51,18 @@ export type ThreadPersister = {
     messages: UnattendedMessage[];
     agentId?: string;
   }) => Promise<boolean>;
+};
+
+/**
+ * The Intelligence methods this tree may call for an unattended persist attempt.
+ *
+ * Matches `createThreadReader` / `createThreadIdleChecker`: `getThread` only. Mint methods are
+ * typed so a test can prove they are never invoked, not so this file can call them.
+ */
+export type IntelligenceThreadClient = {
+  getThread: (params: { threadId: string; userId: string }) => Promise<unknown>;
+  createThread?: (...args: never[]) => unknown;
+  getOrCreateThread?: (...args: never[]) => unknown;
 };
 
 function statusOf(error: unknown): number | undefined {
@@ -111,78 +127,24 @@ export async function waitForThreadIdle(
 }
 
 /**
- * Write the unattended transcript onto the mapped Intelligence thread.
+ * Confirm the mapped Intelligence thread still exists, then fail closed.
  *
- * Confirms the thread exists, then tries the runtime write path (`updateThread` / append
- * methods) and finally HTTP POST `/api/threads/:id/messages`. Returns whether that same
- * thread accepted the write. Never calls createThread / getOrCreateThread.
+ * `CopilotKitIntelligence` in this deployment exposes `getThread` for that check — the same
+ * method `createThreadReader` uses. It does not expose a chat-message write. Returning false
+ * here is the honest answer; the job becomes FAILED. Do not invent a REST append.
  */
 export function createThreadPersister(options: {
-  intelligence?: Record<string, unknown>;
-  apiUrl?: string;
-  apiKey?: string;
-  fetchImpl?: typeof fetch;
+  intelligence?: IntelligenceThreadClient;
 }): ThreadPersister {
-  const fetchImpl = options.fetchImpl ?? fetch;
   return {
-    async append({ threadId, userId, messages, agentId }) {
+    async append({ threadId, userId }) {
       const client = options.intelligence;
-      if (client) {
-        const getThread = client.getThread;
-        if (typeof getThread === "function") {
-          try {
-            await (
-              getThread as (input: {
-                threadId: string;
-                userId: string;
-              }) => Promise<unknown>
-            ).call(client, { threadId, userId });
-          } catch (error) {
-            if (statusOf(error) === 404) return false;
-            throw error;
-          }
-        }
-        for (const method of [
-          "appendMessages",
-          "addMessages",
-          "createMessages",
-        ] as const) {
-          const fn = client[method];
-          if (typeof fn === "function") {
-            await (
-              fn as (input: {
-                threadId: string;
-                userId: string;
-                messages: UnattendedMessage[];
-              }) => Promise<unknown>
-            ).call(client, {
-              threadId,
-              userId,
-              messages,
-              ...(agentId ? { agentId } : {}),
-            });
-            return true;
-          }
-        }
-      }
-      const apiUrl = options.apiUrl?.replace(/\/$/, "");
-      if (!apiUrl || !options.apiKey) return false;
-      const paths = [
-        `${apiUrl}/api/threads/${encodeURIComponent(threadId)}/messages`,
-        `${apiUrl}/threads/${encodeURIComponent(threadId)}/messages`,
-      ];
-      for (const path of paths) {
-        const response = await fetchImpl(path, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            authorization: `Bearer ${options.apiKey}`,
-            "x-user-id": userId,
-          },
-          body: JSON.stringify({ userId, messages }),
-        });
-        if (response.status === 404) return false;
-        if (response.ok) return true;
+      if (!client || typeof client.getThread !== "function") return false;
+      try {
+        await client.getThread({ threadId, userId });
+      } catch (error) {
+        if (statusOf(error) === 404) return false;
+        throw error;
       }
       return false;
     },
