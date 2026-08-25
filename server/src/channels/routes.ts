@@ -434,6 +434,7 @@ export function createChannelStore(
               agentId: channelAgents.agentId,
               threadId: intelligenceChannelMappings.threadId,
               deletedAt: agentProfiles.deletedAt,
+              loop: channels.loop,
             })
             .from(channels)
             .innerJoin(
