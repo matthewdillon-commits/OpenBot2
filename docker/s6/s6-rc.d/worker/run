@@ -11,4 +11,7 @@
 # A service directory is not enough. s6 only launches names in user/contents.d; without
 # `worker` there the API looks healthy and every job stays queued.
 cd /app/worker
+# stderr: s6-rc also logs here, and Railway surfaces it even when a JSON
+# stdout line is parsed as a structured event and dropped from the message.
+echo "worker-exec" >&2
 exec s6-setuidgid pwuser /usr/local/bin/bun --preload /app/server/src/compat/eventsource.ts src/index.ts

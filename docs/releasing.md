@@ -68,8 +68,8 @@ A job added to `ci.yml` is covered by it without anybody updating a list.
 `image` matters more than its position suggests. Everything above it can pass on a tree whose image
 never starts, because nothing else here runs the thing it ships. It builds the container, boots it
 with embedded PostgreSQL, waits for `/api/capabilities`, and fails if the worker is missing from
-the s6 user bundle, boot logs lack `worker-start`, a process hits `require() async module`, or a
-supervised service is respawning.
+the s6 user bundle, boot logs lack `worker-start`, a queued job never gets `startedAt`, a process
+hits `require() async module`, or a supervised service is respawning.
 
 These checks run again, against the release commit, when the release PR is merged. They gate the
 publish rather than the proposal, which is why the release PR arriving without its own checks does

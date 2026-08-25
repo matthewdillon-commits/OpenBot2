@@ -229,6 +229,16 @@ jobs:
             docker logs openbot-ci
             exit 1
           fi
+          if ! docker logs openbot-ci 2>&1 | grep -F 'worker-boot'; then
+            echo "::error::The worker never logged worker-boot; bun did not reach the entry body."
+            docker logs openbot-ci
+            exit 1
+          fi
+          if ! docker logs openbot-ci 2>&1 | grep -F 'worker-exec'; then
+            echo "::error::s6 never exec'd the worker bun process."
+            docker logs openbot-ci
+            exit 1
+          fi
           if docker logs openbot-ci 2>&1 | grep -Eic 'restarting|respawn' | grep -qv '^0$'; then
             echo "::error::A supervised service is restarting."
             docker logs openbot-ci 2>&1 | grep -Ei 'restarting|respawn' | head -20
@@ -239,6 +249,13 @@ jobs:
             docker logs openbot-ci
             exit 1
           }
+      - name: A queued job gets startedAt
+        run: |
+          set -euo pipefail
+          # worker-start is not enough. The bar is a jobs row leaving queued.
+          # Persist onto Intelligence can still 404 after started_at.
+          docker exec -e PGHOST=127.0.0.1 openbot-ci \
+            /bin/sh /app/worker/scripts/ci-claim-probe.sh
       - if: always()
         run: docker rm -f openbot-ci >/dev/null 2>&1 || true
 
