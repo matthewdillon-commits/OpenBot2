@@ -10,7 +10,9 @@ Newest first. `Unreleased` is what is on `main` and not yet tagged.
 
 ### Docs
 
-- **The README describes this product.** LimitlessAI is the name on the chrome. CopilotKit is how a turn runs. [docs/product.md](docs/product.md) says what a coworker does when the app is closed (nothing new starts; computer tools need the tab; CRM and search can finish an already-started turn) and what organizations are (query-scoped `org_id`, not RLS, not Stripe, not per-org SSO, not a computer per tenant in the one-container image).
+- **[docs/product.md](docs/product.md) is the LimitlessAI contract.** Part A is the GTM: not a bot builder; one intelligence layer above specialized agents; OBSERVE → UNDERSTAND → PRIORITIZE → ACT → MEASURE → IMPROVE; governed self-improving (see, test, approve, learn); swappable models; CopilotKit is the conversation layer, not the product. Part B is what a deployment does today (turns start in the open app; computer tools need the tab; the worker is idle; orgs are query-scoped, not RLS). Part C is what is not built: unattended runs, self-serve SaaS, the self-improving loop.
+- **[docs/roadmap.md](docs/roadmap.md) is the phase plan.** Unattended runs, then computer-on-the-server, then cron/webhook/inbound email, then orchestrator + workers (reimplement; do not merge PR #11), then measure/improve, then SaaS. Code for those phases is other pull requests.
+- **The README describes that product**, not the CopilotKit OpenBot alpha laptop clone. How-to-run, surfaces, and configuration are unchanged and still accurate. Sign-in copy uses the same tagline. CopilotKit is how a turn runs.
 - **Release images publish to this repository.** `ghcr.io/matthewdillon-commits/openbot2`, not `ghcr.io/copilotkit/openbot`.
 
 ### Chat

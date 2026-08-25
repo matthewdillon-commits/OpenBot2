@@ -1,8 +1,10 @@
 # Architecture
 
 LimitlessAI is a React app, a Hono API server, PostgreSQL, CopilotKit Intelligence, AG-UI Bot
-endpoints, governed browser computers, an org-scoped CRM, and Composio plugins. What that is
-ready to run as — and what a coworker does when nobody is looking — is in [product.md](product.md).
+endpoints, governed browser computers, an org-scoped CRM, and Composio plugins. What the
+product is *for*, what this stack is ready to run as, and what a coworker does when nobody
+is looking, is in [product.md](product.md). How the rest is supposed to land is
+[roadmap.md](roadmap.md).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../assets/architecture-dark.svg">

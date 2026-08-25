@@ -2,37 +2,52 @@
 
 # LimitlessAI
 
-**Coworkers that research, write the CRM, and work a computer you can actually govern.** Each
-organization gets its own people, deals, plugins, and channels. Every acting call is decided
-before it happens and recorded after.
+**The operating system for self-improving businesses.** Agents are the workers.
+The product is the intelligence and coordination layer above them: one business
+brain → many specialized agents.
 
-[**What this product is**](docs/product.md) · [**Quick start**](#quick-start) · [**Docs**](docs/README.md)
+[**What this product is**](docs/product.md) · [**Roadmap**](docs/roadmap.md) · [**Quick start**](#quick-start) · [**Docs**](docs/README.md)
 
 [![CI](https://github.com/matthewdillon-commits/OpenBot2/actions/workflows/ci.yml/badge.svg)](https://github.com/matthewdillon-commits/OpenBot2/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
 </div>
 
-LimitlessAI is this repository. CopilotKit Runtime and Intelligence run the turn and keep the
-thread; they are dependencies, not the product name on the chrome.
+LimitlessAI connects a company’s data, AI agents, and people into one
+intelligence layer that understands what is happening, takes the next best
+action, measures the result, and continuously improves how the business
+operates.
 
-A coworker is any AG-UI agent — the packaged General Assistant, a LangGraph Bot, or an endpoint
-you register. The gateway is still the only way a Bot reaches a computer, a file, CRM, MCP, or
-the public web.
+Other AI agents do work. LimitlessAI learns which work actually moves the
+business forward — and gets better every time it does it.
 
-## What a coworker does
+That is the product. It is not a bot builder. CopilotKit Runtime and
+Intelligence run the turn and keep the thread; they are the conversation layer,
+not the name on the chrome and not the moat.
 
-A turn starts when someone sends a message in the open app. Closing the app does not start work,
-and nothing in this tree is a scheduler.
+**This tree is not that loop yet.** Code today is late Stage 1 / early Stage 2:
+in-app, org-scoped, no unattended run. [docs/product.md](docs/product.md) is the
+contract — Part A the GTM, Part B what a deployment does now, Part C what is
+not built. [docs/roadmap.md](docs/roadmap.md) is the sequence (other PRs).
 
-During that turn, CRM, web search, company knowledge, and granted MCP tools run on the API (up to
-twenty steps). Clicking, typing, and files run in the tab: those are frontend tools, and they
-stop if the tab is gone. The transcript lives in CopilotKit Intelligence, so reopening the
-channel shows what was said.
+A coworker is any AG-UI agent — the packaged General Assistant, a LangGraph Bot,
+or an endpoint you register. The gateway is still the only way a Bot reaches a
+computer, a file, CRM, MCP, or the public web.
 
-[docs/product.md](docs/product.md) is the source of truth for what is in this code and what is
-not: org-scoped data without Postgres RLS, no Stripe or seat quotas, no per-org SSO, a shared
-browser unless the supervisor is actually running.
+## What a coworker does today
+
+A turn starts when someone sends a message in the open app. Closing the app does
+not start work, and nothing in this tree is a scheduler.
+
+During that turn, CRM, web search, company knowledge, and granted MCP tools run
+on the API (up to twenty steps). Clicking, typing, and files run in the tab:
+those are frontend tools, and they stop if the tab is gone. The transcript lives
+in CopilotKit Intelligence, so reopening the channel shows what was said.
+
+[docs/product.md](docs/product.md) Part B is the source of truth for what is in
+this code and what is not: org-scoped data without Postgres RLS, no Stripe or
+seat quotas, no per-org SSO, a shared browser unless the supervisor is actually
+running, no outcome-tied learning loop.
 
 ## Quick start
 
@@ -124,7 +139,9 @@ notes. [docs/product.md](docs/product.md) says when that image is and is not a t
 
 A Bot is any endpoint speaking [AG-UI](https://github.com/ag-ui-protocol/ag-ui). Packaged agents
 are `built-in` (a system prompt on CopilotKit) or `remote-ag-ui` (LangGraph or anything else that
-speaks the protocol). Governance rides the protocol, not the framework.
+speaks the protocol). Governance rides the protocol, not the framework. Models are swappable:
+OpenAI, or any OpenAI-compatible host (`OPENAI_BASE_URL`) including Anthropic, Google, and xAI
+gateways.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/architecture-dark.svg">
@@ -262,7 +279,8 @@ Use `bash scripts/start.sh` for the whole stack. Use `bun run dev` only when you
 
 ## Documentation
 
-- [docs/product.md](docs/product.md) — what this code is, and is not, ready to do
+- [docs/product.md](docs/product.md) — the contract: GTM, what this code does today, and what is not built
+- [docs/roadmap.md](docs/roadmap.md) — implementation phases (other pull requests)
 - [docs/README.md](docs/README.md)
 - [docs/architecture.md](docs/architecture.md)
 - [docs/configuration.md](docs/configuration.md)
