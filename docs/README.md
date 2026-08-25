@@ -5,7 +5,8 @@ Start with [What this product is](product.md) — the contract — then the
 
 - [Product](product.md): Part A is the GTM (intelligence layer, the loop, the
   moat). Part B is what this code does today. Part C is what is not built.
-- [Roadmap](roadmap.md): implementation phases. Code for those phases is other
+- [Roadmap](roadmap.md): implementation phases. Phase 4 is one manager and
+  specialists on demand, not a five-bot fleet. Code for those phases is other
   pull requests. Do not merge PR #11.
 - [Architecture](architecture.md): services, ports, how a turn runs, organizations, CRM, plugins, computers, and security boundaries.
 - [Configuration](configuration.md): environment variables and tenant package YAML.

@@ -53,8 +53,11 @@ better.”
 
 ### Who talks to whom
 
-The person talks to an **orchestrator coworker** — the manager. Specialized
-workers do the jobs:
+The person talks to **LimitlessAI** — one orchestrator, the company. The unit
+they see is a **goal**, not a sidebar of five Bots.
+
+Specialists still exist. They are workers underneath that manager, not the
+first screen:
 
 | Family | Job |
 | --- | --- |
@@ -64,11 +67,18 @@ workers do the jobs:
 | Marketing | Campaigns, lists, the message and whether it moved anything. |
 | Operations | The work of running the company that is not a customer conversation. |
 
+They message each other in rooms. A parent can start a sub-agent, including
+one with a computer. That room is for the system and for an operator who
+wants to watch. A typical business owner should not have to sit in the
+multi-agent chat.
+
+Two doors: the customer talks to LimitlessAI; an operator can open the room.
+
 Later verticals sit on the same brain: mortgage, home services, commerce. They
 are playbooks and tools on the shared context, not a second product.
 
-A room of coworkers is not the product either. The product is that they share
-one business context and one loop.
+The product is one business context and one loop under one manager. A room of
+coworkers is how specialists work, not the default door.
 
 ### Architecture (this stack)
 
@@ -76,10 +86,13 @@ Shaped like a Grok Bot: a manager the person talks to, workers underneath, a
 shared context, tools that actually act. Built on this tree, not on a vendor
 runtime as the product.
 
-- **Orchestrator.** The coworker the person addresses. It prioritizes and
-  delegates. It does not replace the workers.
-- **Specialized workers.** The families above, each an AG-UI agent — packaged
-  built-in or a remote endpoint you register.
+- **Orchestrator.** LimitlessAI — the coworker the person addresses. It
+  prioritizes and delegates. It is the customer-facing default. It does not
+  replace the workers.
+- **Specialized workers.** The families above, on demand: skills and
+  playbooks, a sub-agent a parent starts, or members of an A2A room. Not a
+  forced five-bot fleet in the sidebar. Each is an AG-UI agent when it
+  exists — packaged built-in or a remote endpoint you register.
 - **Shared business context.** Org CRM, knowledge, Intelligence threads,
   campaign and outcome history. The same customer fact is visible to every
   agent in the org. A Sales worker and a Customer worker must not hold two
@@ -238,9 +251,11 @@ Three things people will assume from Part A, none of which this tree does:
    shared state.” `/platform` is sales-led provisioning, not a checkout.
 3. **The self-improving loop.** Observe / understand / prioritize / act can be
    *performed by a person talking to a Bot*. Measure and improve are not
-   product surfaces. The orchestrator-and-workers shape is not in the package:
-   today’s roster is General Assistant, Knowledge, and an optional Risk
-   Analyst, not Sales / Website / Marketing / Customer / Operations.
+   product surfaces. There are no outcome events. The customer-facing
+   orchestrator is not in the package: today’s roster is General Assistant,
+   Knowledge, and an optional Risk Analyst. A person still picks a coworker.
+   There is no single company door, and no operator room of specialists
+   underneath it.
 
 When a pull request claims one of those, it is done only when Part B of this
 file can say so with a file citation. Until then the honest sentence is the

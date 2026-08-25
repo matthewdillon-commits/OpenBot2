@@ -15,6 +15,13 @@ without a runner is a manager with no workers who stay on the job.
 
 ---
 
+## Phase 0 — Source of truth (done)
+
+On `main`. [product.md](product.md) is the contract: Part A is the product,
+Part B is what this tree does, Part C is what it is not. This file is the
+sequence. The running software is late Stage 1 / early Stage 2 as Part B
+describes. Later phases are other pull requests.
+
 ## Phase 1 — Unattended runs
 
 **Send-and-go.** A person starts work and leaves. The worker finishes it.
@@ -41,6 +48,10 @@ What must not happen: a second way to store the transcript, a job that starts
 a new thread when the channel already has one, or a worker that takes computer
 work this phase cannot finish without the tab.
 
+When the job finishes and we know an outcome, record a simple one: the job
+succeeded, a CRM row was written, or a reply or booking is known. This is not
+Phase 5 and not an experimentation platform.
+
 ## Phase 2 — Computer on the server, and a pause
 
 Move click / type / snapshot / files / shell onto the server so an unattended
@@ -52,6 +63,9 @@ tab.
 image is acceptable for one trusted team. It is not a boundary between
 customers. Do not give a second organization a computer until
 `COMPUTER_SUPERVISOR_URL` is how computers are made — one computer per org×bot.
+
+When a computer job finishes and we know an outcome, record the same simple
+one Phase 1 already records. Still not Phase 5.
 
 ## Phase 3 — Cron, then webhook, then inbound email
 
@@ -67,19 +81,26 @@ Order matters:
 Do not invent a second execution path per trigger. If it cannot be
 `startUnattendedRun` (or the same job row), it is not this phase.
 
-## Phase 4 — Orchestrator and specialized workers
+## Phase 4 — One manager, specialists on demand
 
-The person talks to the manager. The manager delegates to workers:
+The customer talks to **LimitlessAI** — one orchestrator. They talk to the
+company. The unit they see is a **goal**, not a roster of five Bots. Do not
+ship a forced five-bot fleet as the product.
 
-- Sales
-- Website
-- Marketing
-- Customer
-- Operations
+Specialists still exist: sales, website, marketing, customer, operations.
+They are workers underneath the manager, not the first screen. They come in
+as skills and playbooks, as a sub-agent a parent starts (including one with
+a computer), or as members of an A2A room. A Grok-Bot-style room of agents
+that talk to each other is for the system and for an operator who wants to
+watch. It is a second door, not the only door.
 
-A2A rooms and sub-agents exist so a finite chunk of work can leave the
-orchestrator and come back. Shared CRM context is the rule: the same customer
-fact is visible to every agent in the org.
+Two doors:
+
+1. **Customer** — talks to LimitlessAI.
+2. **Operator** — can open the room and watch the specialists work.
+
+Shared CRM context is the rule: the same customer fact is visible to every
+agent in the org.
 
 **Do not merge PR #11.** Rooms, sub-agents, schedules, and inbound in that
 stack are not the implementation. Reimplement cleanly on the Phase 1–3 runner
@@ -99,7 +120,7 @@ Close the loop in [product.md](product.md):
 
 Low-risk actions may still auto-run under the gateway. High-risk actions wait.
 The audit trail already stores permit / refuse. This phase stores *whether it
-worked*.
+worked*. A one-line outcome from Phase 1 or 2 is not this phase.
 
 ## Phase 6 — SaaS
 
@@ -122,8 +143,9 @@ deployment. `/platform` stays provisioning, not checkout.
 ## What this roadmap is not
 
 It is not a menu, a new route, or an API you can call in this tree. It is not
-permission to describe Phase 4 coworkers as shipping because the YAML could
-name them. It is not permission to take PR #11.
+permission to ship a five-bot fleet as the product, or to describe Phase 4
+specialists as the customer door because the YAML could name them. It is not
+permission to take PR #11.
 
 When a phase lands, update [product.md](product.md) Part B with the file that
 proves it, and shrink Part C.
