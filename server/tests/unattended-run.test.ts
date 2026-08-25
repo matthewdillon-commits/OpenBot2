@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { HttpAgent } from "@ag-ui/client";
+import { BuiltInAgent } from "@copilotkit/runtime/v2";
 import { z } from "zod";
 import { standingRoleMessage } from "../src/copilot";
 import { crmTools } from "../src/crm/tools";
@@ -243,7 +244,7 @@ describe("startUnattendedRun", () => {
     expect(result.text).toBe("Ada is at Acme.");
   });
 
-  test("runs a built-in coworker that executes a server tool without a Request", async () => {
+  test("runs a built-in coworker through buildAgents / BuiltInAgent", async () => {
     const calls: unknown[] = [];
     const crmSearch: GrantedTool = {
       name: "crm_search",
@@ -255,55 +256,66 @@ describe("startUnattendedRun", () => {
       },
     };
     const activities: string[] = [];
+    const seen: unknown[] = [];
+    const originalRunAgent = BuiltInAgent.prototype.runAgent;
+    BuiltInAgent.prototype.runAgent = async function () {
+      seen.push(this);
+      const text = await crmSearch.execute({ query: "Ada" });
+      const next = [
+        ...((
+          this as {
+            messages?: Array<{ id: string; role: string; content: string }>;
+          }
+        ).messages ?? []),
+        { id: "assistant-1", role: "assistant" as const, content: text },
+      ];
+      this.setMessages?.(next);
+      return { newMessages: next };
+    };
 
-    const result = await startUnattendedRun({
-      actor,
-      orgId: actor.orgId,
-      channelId: "channel_1",
-      threadId: "thread-1",
-      prompt: "Find Ada.",
-      coworkerId: "researcher",
-      deps: {
-        lookupMapping: async () => ({
-          threadId: "thread-1",
-          channelId: "channel_1",
-          userId: actor.id,
-        }),
-        waitForThread: async () => "idle",
-        persistThread: async () => true,
-        recordActivity: async ({ activity }) => {
-          activities.push(activity.text);
-        },
-        loadAgents: async () => [
-          {
-            id: "researcher",
-            name: "Researcher",
-            type: "built_in",
-            systemPrompt: "Research people.",
+    try {
+      const result = await startUnattendedRun({
+        actor,
+        orgId: actor.orgId,
+        channelId: "channel_1",
+        threadId: "thread-1",
+        prompt: "Find Ada.",
+        coworkerId: "researcher",
+        deps: {
+          lookupMapping: async () => ({
+            threadId: "thread-1",
+            channelId: "channel_1",
+            userId: actor.id,
+          }),
+          waitForThread: async () => "idle",
+          persistThread: async () => true,
+          recordActivity: async ({ activity }) => {
+            activities.push(activity.text);
           },
-        ],
-        loadTools: () => async () => [crmSearch],
-        resolveModelApiKey: async () => "unused",
-        model: { provider: "openai", defaultModel: "gpt-4.1" },
-        timeoutMs: 5_000,
-        runCoworker: async ({ messages }) => {
-          const text = await crmSearch.execute({ query: "Ada" });
-          return {
-            text,
-            messages: [
-              ...messages,
-              { id: "assistant-1", role: "assistant", content: text },
-            ],
-          };
+          loadAgents: async () => [
+            {
+              id: "researcher",
+              name: "Researcher",
+              type: "built_in",
+              systemPrompt: "Research people.",
+            },
+          ],
+          loadTools: () => async () => [crmSearch],
+          resolveModelApiKey: async () => "unused",
+          model: { provider: "openai", defaultModel: "gpt-4.1" },
+          timeoutMs: 5_000,
         },
-      },
-    });
+      });
 
-    expect(result.outcome).toBe("succeeded");
-    expect(result.text).toBe("Found Ada at Acme.");
-    expect(calls).toEqual([{ query: "Ada" }]);
-    expect(activities).toEqual(["Found Ada at Acme."]);
-    expect(result.crmRecordIds).toEqual([]);
+      expect(seen[0]).toBeInstanceOf(BuiltInAgent);
+      expect(result.outcome).toBe("succeeded");
+      expect(result.text).toBe("Found Ada at Acme.");
+      expect(calls).toEqual([{ query: "Ada" }]);
+      expect(activities).toEqual(["Found Ada at Acme."]);
+      expect(result.crmRecordIds).toEqual([]);
+    } finally {
+      BuiltInAgent.prototype.runAgent = originalRunAgent;
+    }
   });
 
   test("keeps CRM write ids from assistant text for the job outcome", async () => {

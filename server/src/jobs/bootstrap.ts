@@ -117,11 +117,7 @@ export async function createUnattendedWorkerRuntime(
   );
   const intelligence = createIntelligenceClient(config.runtime.intelligence);
   const threadIdle = createThreadIdleChecker(intelligence);
-  const persistThread = createThreadPersister({
-    intelligence: intelligence as unknown as Record<string, unknown>,
-    apiUrl: config.runtime.intelligence.apiUrl,
-    apiKey: config.runtime.intelligence.apiKey,
-  });
+  const persistThread = createThreadPersister({ intelligence });
 
   async function actorFromJob(
     job: UnattendedJob,
@@ -253,7 +249,6 @@ export async function createUnattendedWorkerRuntime(
           result: {
             text: result.text,
             persisted: result.persisted,
-            messages: result.messages,
           },
         },
         crmRecordIds: result.crmRecordIds,
