@@ -8,6 +8,10 @@ Newest first. `Unreleased` is what is on `main` and not yet tagged.
 
 ## Unreleased
 
+### Fixes
+
+- **Email/password signup could not create a user.** Every request binds Postgres RLS, including `/api/auth/sign-up/email`. The Bun SQL wrapper ran Better Auth's `INSERT ... RETURNING` twice with the same id, so Postgres rejected the second as `users_pkey` (and the same for accounts and sessions). A new address now creates the user, credential account, and session.
+
 ### Features
 
 - **Self-serve multi-tenant SaaS.** Postgres RLS is the second fence on org-owned tables (a missed `WHERE org_id` no longer leaks). Stripe Checkout and webhooks write `plan` and `seat_limit`; the first owned workspace is free and a second requires checkout. Owner invites email the existing token and fail closed without SMTP. Google / Microsoft / Okta / email are configurable per organization. A spend cap refuses new unattended, model, or computer work out loud. API and worker emit OpenTelemetry traces. Billing, seats, SSO, and spend live in Postgres/Stripe — replica B sees the same rows; no in-process Map. Home is still Composer + Goals. Rooms stay behind See the work. Approval cards stay on the goal. Persist onto the Intelligence thread still fails closed (`getThread` only). `/platform` remains for superadmins.

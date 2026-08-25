@@ -62,10 +62,76 @@ function runWithBinding<T>(
   });
 }
 
+type BoundQuery = Promise<unknown> & { values: () => Promise<unknown> };
+
+/**
+ * One execution of a bound query, in the shape Drizzle's bun-sql driver expects.
+ *
+ * That driver calls `unsafe(sql, params).values()` for any statement with a
+ * RETURNING clause, including Better Auth's user / account / session inserts.
+ * Bun's own query is lazy: constructing it does not run it, and `.values()`
+ * only changes how the same execution is decoded.
+ *
+ * Running the statement when `unsafe` is called and again in `.values()` is
+ * two transactions with the same primary key. The first commits. The second
+ * is `users_pkey` / `accounts_pkey` / `sessions_pkey`, which Better Auth
+ * reports as FAILED_TO_CREATE_USER. Sign-up then looks like a colliding
+ * generator; the id was new, it was just inserted twice.
+ *
+ * Production binds RLS on every request, including `/api/auth/sign-up/email`
+ * (`org_id` empty, every row visible). The wrapper is therefore on the
+ * sign-up insert, not only on tenant-scoped reads.
+ */
+function boundUnsafe(
+  pool: UnsafeClient,
+  binding: StoredBinding,
+  query: string,
+  params: unknown[] | undefined,
+): BoundQuery {
+  const execute = (useValues: boolean) =>
+    runWithBinding(pool, binding, (tx) => {
+      const result = tx.unsafe(query, params);
+      if (useValues && typeof result.values === "function") {
+        return result.values();
+      }
+      return result;
+    });
+
+  let started: Promise<unknown> | undefined;
+  const run = (useValues: boolean) => {
+    started ??= execute(useValues);
+    return started;
+  };
+
+  return {
+    // Bun's sql.unsafe() is a Promise with `.values()`. Drizzle awaits one or
+    // the other; a property named `then` is the contract, not a mistake.
+    // biome-ignore lint/suspicious/noThenProperty: matches Bun SQL's lazy query
+    then(
+      onFulfilled?: ((value: unknown) => unknown) | null,
+      onRejected?: ((reason: unknown) => unknown) | null,
+    ) {
+      return run(false).then(onFulfilled, onRejected);
+    },
+    catch(onRejected?: ((reason: unknown) => unknown) | null) {
+      return run(false).catch(onRejected);
+    },
+    finally(onFinally?: (() => void) | null) {
+      return run(false).finally(onFinally ?? undefined);
+    },
+    values() {
+      return run(true);
+    },
+  } as BoundQuery;
+}
+
 /**
  * Wrap the Bun SQL pool so every query on a bound request uses `SET LOCAL` on
  * that query's connection. Session GUCs on a random pooled connection are not
  * enough: the next statement might hop.
+ *
+ * Bound `unsafe` is lazy. See `boundUnsafe`: Drizzle's bun-sql driver follows
+ * `unsafe` with `.values()` for RETURNING, and those must be one execution.
  */
 export function wrapClientWithRls(client: SQL): SQL {
   const pool = client as unknown as UnsafeClient;
@@ -84,19 +150,7 @@ export function wrapClientWithRls(client: SQL): SQL {
           if (!binding) {
             return pool.unsafe(query, params);
           }
-          const execute = (useValues: boolean) =>
-            runWithBinding(pool, binding, (tx) => {
-              const result = tx.unsafe(query, params);
-              if (useValues && typeof result.values === "function") {
-                return result.values();
-              }
-              return result;
-            });
-          const promise = execute(false);
-          Object.assign(promise, {
-            values: () => execute(true),
-          });
-          return promise;
+          return boundUnsafe(pool, binding, query, params);
         };
       }
       if (prop === "begin") {
