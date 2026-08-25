@@ -622,3 +622,24 @@ export function mountCopilotRuntime(
 
   return createCopilotHonoHandler({ runtime, basePath });
 }
+
+/**
+ * The same CopilotRuntime Intelligence construction a tab turn uses, without the
+ * Hono handler. The worker calls `runtime.runner.run` on the existing mapped
+ * thread. identifyUser is required by Intelligence mode; the run itself is
+ * attributed by the `threadId` already mapped to the acting user.
+ */
+export function createUnattendedCopilotRuntime(
+  intelligence: CopilotKitIntelligence,
+  licenseToken?: string,
+): CopilotRuntime {
+  return new CopilotRuntime({
+    identifyUser: async () => ({
+      id: "unattended",
+      name: "Unattended",
+    }),
+    intelligence,
+    licenseToken,
+    agents: {},
+  });
+}

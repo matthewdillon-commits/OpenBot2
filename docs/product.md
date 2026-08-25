@@ -199,13 +199,12 @@ granted MCP, and computer tools when the gateway is configured and the
 browser is on. **Cron**, **webhook**, and **inbound email** enqueue that same
 row from a standing org-scoped config (actor, goal/channel, thread, coworker,
 prompt). Missing mapping or missing thread is a refuse — they do not mint a
-thread. Persist must write that same mapped thread. The client this tree
-already uses for thread reads is `CopilotKitIntelligence.getThread`
-(`server/src/intelligence-client.ts`,
-`server/src/channels/thread-status.ts`). That class has no method that appends
-chat messages — tab turns persist through the CopilotRuntime runner, which
-this path does not use. Persist therefore fails closed and the job is failed,
-never succeeded. The job row is not a second transcript: prompt plus a skinny
+thread. The worker starts the coworker through `CopilotRuntime.runner.run` —
+the same Intelligence runner a tab turn uses — on the existing mapped thread.
+After the run, persist is true only when `getThread` / `getThreadMessages`
+on that same thread include the user prompt and the assistant result. Persist
+false or throw is failed, never succeeded. The job row is not a second
+transcript: prompt plus a skinny
 `resultText` / outcome only. The job row stores a skinny outcome: status
 Active | Needs you | Done, `last_action` (one
 sentence), `last_action_at`, plus who ran and any CRM record ids the write
@@ -249,9 +248,9 @@ the CRM” with Send-and-go, close the tab, and the worker still runs those
 server tools — including the computer. A standing cron, a signed webhook POST,
 or an inbound email to a mapped mailbox starts the same job after the tab is
 closed. A login or secret pauses as Needs you; the ask stays on the computer
-if the tab is closed. The turn is not written onto the Intelligence thread, so
-coming back does not yet show that result on the same mapped thread. Reopen
-the channel: the job is honestly failed if persist is still fail-closed.
+if the tab is closed. Persist is `CopilotRuntime.runner.run` on the existing
+mapped thread — close-tab / come-back shows the result when that write is
+confirmed.
 
 ### Organizations
 
@@ -291,12 +290,11 @@ running beside it.
 **Not a self-serve multi-tenant SaaS** until RLS, billing, seats, per-org SSO,
 per-tenant computers, and a spend cap exist.
 
-**Not a durable unattended transcript, and not Goals home.** Send-and-go, cron,
-webhook, and inbound email all enqueue the same job and the worker runs it after
-the tab closes, including computer tools when the gateway is on. Persist onto
-the Intelligence thread still fails closed — close-tab / come-back on the same
-mapped thread is not true yet unless persist is later given a write. There is
-no Goals home UI.
+**Not Goals home.** Send-and-go, cron, webhook, and inbound email all enqueue
+the same job and the worker runs it after the tab closes, including computer
+tools when the gateway is on. Persist is `CopilotRuntime.runner.run` on the
+existing mapped thread — close-tab / come-back shows the result when that
+write is confirmed. There is no Goals home UI.
 
 **Not the self-improving loop.** There are no outcome events tied to actions,
 no approval cards with expected impact, and no keep / revise / revert that
@@ -321,7 +319,7 @@ It does not measure whether the work moved the business.
 | One enqueue path for every start | `server/src/jobs/enqueue.ts` `enqueueUnattendedJob` |
 | Cron standing row and due claim | `server/src/jobs/triggers.ts` `CLAIM_DUE_CRON_SQL`, `tickDueCrons`; `job_triggers` |
 | Webhook and inbound email | `server/src/jobs/inbound.ts` `POST /api/inbound/webhook/:id`, `POST /api/inbound/email` |
-| Unattended persist fails closed | `server/src/jobs/thread.ts` `createThreadPersister` (`getThread` only) |
+| Unattended persist via runtime runner | `server/src/jobs/runtime-run.ts` `runUnattendedThroughRuntime` (`CopilotRuntime.runner.run`) |
 | Shared computer without supervisor | `docs/deployment.md`, `COMPUTER_SUPERVISOR_URL` |
 | Composio keyed by org | `server/src/composio/client.ts` |
 
@@ -329,17 +327,13 @@ It does not measure whether the work moved the business.
 
 ## C. What it is not yet
 
-Three things people will assume from Part A. Scheduled and inbound starts
-have landed; persist and the customer home have not:
+Two things people will assume from Part A. Scheduled and inbound starts
+have landed. Unattended persist is in Part B. The remaining two have not:
 
-1. **A durable unattended transcript.** Send-and-go, cron, webhook, and
-   inbound email exist (Part B), including computer tools on the server and a
-   `needs_you` pause. Persist onto the Intelligence thread still fails
-   closed — close-tab / come-back on the same mapped thread is not true yet.
-2. **Self-serve SaaS.** No RLS, no Stripe, no seat quota, no invite email, no
+1. **Self-serve SaaS.** No RLS, no Stripe, no seat quota, no invite email, no
    per-org SSO, no spend cap, no multi-replica story beyond “Postgres is the
    shared state.” `/platform` is sales-led provisioning, not a checkout.
-3. **The UX contract and the loop.** Home is not Composer + Goals. A person
+2. **The UX contract and the loop.** Home is not Composer + Goals. A person
    still picks a coworker from a roster (General Assistant, Knowledge, an
    optional Risk Analyst). A goal in this tree is the existing channel plus
    its thread; the job row can hold Active | Needs you | Done and last
