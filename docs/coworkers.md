@@ -39,7 +39,9 @@ Filtering happens in server/database queries. Package-provided agents cannot be 
 
 ## Channels
 
-Starting a channel creates a new conversation and Intelligence thread. Two channels with the same coworker stay separate.
+Starting a channel creates a new conversation and Intelligence thread. Two channels with the same coworker stay separate. A channel may hold a room of up to eight coworkers; one of them speaks per send.
+
+A turn starts from the open app. Computer tools need that tab. CRM, web search, knowledge, and MCP callbacks run on the server during the turn. See [product.md](product.md).
 
 Each channel routes through a channel-local proxy agent id, pinned to that channel's thread id, then forwards to the coworker runtime id.
 

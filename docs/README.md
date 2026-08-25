@@ -1,8 +1,9 @@
-# OpenBot docs
+# LimitlessAI docs
 
-Start with the root [README](../README.md), then use these references:
+Start with [What this product is](product.md), then the root [README](../README.md).
 
-- [Architecture](architecture.md): services, ports, browser governance, computers, components, plugins, knowledge, and security boundaries.
+- [Product](product.md): what this code does, how a coworker runs, and what is not a tenant boundary.
+- [Architecture](architecture.md): services, ports, how a turn runs, organizations, CRM, plugins, computers, and security boundaries.
 - [Configuration](configuration.md): environment variables and tenant package YAML.
 - [Development](development.md): local setup, migrations, ports, and quality checks.
 - [Coworkers](coworkers.md): durable Bot profiles, channels, visibility, deletion, and external AG-UI registration.

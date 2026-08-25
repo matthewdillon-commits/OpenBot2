@@ -1,12 +1,17 @@
 # Changelog
 
-What changed, for somebody deciding whether to upgrade. Written for the person running OpenBot, not
+What changed, for somebody deciding whether to upgrade. Written for the person running LimitlessAI, not
 for the person who wrote the commit: a line belongs here when a deployment behaves differently
 afterwards, and does not when only the code moved.
 
 Newest first. `Unreleased` is what is on `main` and not yet tagged.
 
 ## Unreleased
+
+### Docs
+
+- **The README describes this product.** LimitlessAI is the name on the chrome. CopilotKit is how a turn runs. [docs/product.md](docs/product.md) says what a coworker does when the app is closed (nothing new starts; computer tools need the tab; CRM and search can finish an already-started turn) and what organizations are (query-scoped `org_id`, not RLS, not Stripe, not per-org SSO, not a computer per tenant in the one-container image).
+- **Release images publish to this repository.** `ghcr.io/matthewdillon-commits/openbot2`, not `ghcr.io/copilotkit/openbot`.
 
 ### Chat
 
@@ -92,7 +97,7 @@ Sessions survive and nobody signs in again.
   first connector that writes one.
 - **Releases are cut by a workflow, not by hand.** `Create release PR` bumps the version and promotes
   `## Unreleased` to a numbered section; merging the pull request it opens is what publishes. Merging
-  builds and pushes one image to `ghcr.io/copilotkit/openbot`, signs a build provenance attestation
+  builds and pushes one image to `ghcr.io/matthewdillon-commits/openbot2`, signs a build provenance attestation
   for its digest, tags the commit and creates the GitHub Release with `container-images.json` so a
   deployment can name an exact digest rather than a tag somebody could move. See
   [docs/releasing.md](docs/releasing.md).

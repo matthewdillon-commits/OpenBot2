@@ -1,5 +1,7 @@
 # Development
 
+Local setup for LimitlessAI. What the running product is — and is not — is in [product.md](product.md).
+
 ## Setup
 
 Install Docker, [Bun](https://bun.sh) 1.3+, `lsof`, `python3`, and `curl`.
