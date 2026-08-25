@@ -20,7 +20,7 @@ import { jobTriggers } from "../db/schema/jobs";
 import { orgIdOf } from "../orgs/constants";
 import type { SpendStore } from "../orgs/spend";
 import { enqueueUnattendedJob } from "./enqueue";
-import type { JobStore } from "./store";
+import { parseClaimedIds, type JobStore } from "./store";
 
 export const JOB_TRIGGER_KINDS = ["cron", "webhook", "email"] as const;
 export type JobTriggerKind = (typeof JOB_TRIGGER_KINDS)[number];
@@ -204,22 +204,6 @@ function toTrigger(row: typeof jobTriggers.$inferSelect): JobTrigger {
   };
 }
 
-function claimedIds(result: unknown): string[] {
-  if (Array.isArray(result)) {
-    return result
-      .map((row) =>
-        row && typeof row === "object" && "id" in row
-          ? String((row as { id: unknown }).id)
-          : "",
-      )
-      .filter(Boolean);
-  }
-  if (result && typeof result === "object" && "rows" in result) {
-    return claimedIds((result as { rows: unknown }).rows);
-  }
-  return [];
-}
-
 export function createJobTriggerStore(database: Database): JobTriggerStore {
   return {
     async create(input) {
@@ -330,8 +314,7 @@ export function createJobTriggerStore(database: Database): JobTriggerStore {
     },
 
     async claimDueCron() {
-      return database.transaction(async (tx) => {
-        const result = await tx.execute(sql`
+      const result = await database.execute(sql`
           UPDATE job_triggers
           SET next_run_at = now() + (every_seconds * interval '1 second'),
               updated_at = now()
@@ -349,14 +332,13 @@ export function createJobTriggerStore(database: Database): JobTriggerStore {
           )
           RETURNING id
         `);
-        const id = claimedIds(result)[0];
-        if (!id) return null;
-        const [row] = await tx
-          .select()
-          .from(jobTriggers)
-          .where(eq(jobTriggers.id, id));
-        return row ? toTrigger(row) : null;
-      });
+      const id = parseClaimedIds(result)[0];
+      if (!id) return null;
+      const [row] = await database
+        .select()
+        .from(jobTriggers)
+        .where(eq(jobTriggers.id, id));
+      return row ? toTrigger(row) : null;
     },
 
     async recordFire(id, update) {

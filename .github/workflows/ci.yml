@@ -239,6 +239,11 @@ jobs:
             docker logs openbot-ci
             exit 1
           fi
+          if ! docker logs openbot-ci 2>&1 | grep -F 'worker-claim-empty'; then
+            echo "::error::The worker never polled for a queued job; claim hung before the first UPDATE."
+            docker logs openbot-ci
+            exit 1
+          fi
           if docker logs openbot-ci 2>&1 | grep -Eic 'restarting|respawn' | grep -qv '^0$'; then
             echo "::error::A supervised service is restarting."
             docker logs openbot-ci 2>&1 | grep -Ei 'restarting|respawn' | head -20

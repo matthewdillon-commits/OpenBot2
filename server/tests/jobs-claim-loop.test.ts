@@ -42,6 +42,37 @@ function unusedStore(): JobStore {
 }
 
 describe("unattended claim loop", () => {
+  test("does not start the coworker graph until the first claim returns", async () => {
+    let loadRuntimeCalls = 0;
+    let graphStartedDuringClaim = false;
+    const abort = new AbortController();
+
+    const loop = runUnattendedClaimLoop(
+      { unattendedJobPollMs: 10 } as DeploymentConfig,
+      {
+        signal: abort.signal,
+        jobStore: {
+          ...unusedStore(),
+          claim: async () => {
+            graphStartedDuringClaim = loadRuntimeCalls > 0;
+            abort.abort();
+            return null;
+          },
+        },
+        loadRuntime: async () => {
+          loadRuntimeCalls += 1;
+          return {
+            processJob: async () => undefined,
+            tickDueCrons: async () => 0,
+          };
+        },
+      },
+    );
+
+    await loop;
+    expect(graphStartedDuringClaim).toBe(false);
+  });
+
   test("claims a queued row before the coworker graph finishes loading", async () => {
     const job = queuedJob();
     let claims = 0;

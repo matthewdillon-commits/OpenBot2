@@ -14,7 +14,11 @@ import {
   jobs,
   users,
 } from "../src/db/schema";
-import { CLAIM_QUEUED_JOB_SQL, createJobStore } from "../src/jobs/store";
+import {
+  CLAIM_QUEUED_JOB_SQL,
+  createJobStore,
+  parseClaimedIds,
+} from "../src/jobs/store";
 import { TEST_POOL } from "./support/database";
 import {
   ensureLocalOrganization,
@@ -26,6 +30,30 @@ describe("unattended job claim", () => {
     expect(CLAIM_QUEUED_JOB_SQL).toContain("FOR UPDATE SKIP LOCKED");
     expect(CLAIM_QUEUED_JOB_SQL).toContain("status = 'queued'");
     expect(CLAIM_QUEUED_JOB_SQL).toContain("running.status = 'running'");
+  });
+
+  test("claim is one UPDATE, not a drizzle transaction that can deadlock bun-sql", async () => {
+    const source = await Bun.file(
+      new URL("../src/jobs/store.ts", import.meta.url),
+    ).text();
+    const start = source.indexOf("async claim()");
+    const end = source.indexOf("async finish", start);
+    const claim = source.slice(start, end);
+    expect(claim).toContain("FOR UPDATE SKIP LOCKED");
+    expect(claim).toContain("database.execute");
+    expect(claim).not.toContain("database.transaction(");
+    expect(claim).not.toContain("tx.execute");
+    expect(claim).not.toContain("tx.select");
+  });
+
+  test("parseClaimedIds reads bun-sql execute shapes that used to look empty", () => {
+    expect(parseClaimedIds([{ id: "job_1" }])).toEqual(["job_1"]);
+    expect(parseClaimedIds({ rows: [{ id: "job_1" }] })).toEqual(["job_1"]);
+    expect(parseClaimedIds([["job_1"]])).toEqual(["job_1"]);
+    expect(parseClaimedIds({ rows: [["job_1"]] })).toEqual(["job_1"]);
+    expect(parseClaimedIds("job_1")).toEqual(["job_1"]);
+    expect(parseClaimedIds(undefined)).toEqual([]);
+    expect(parseClaimedIds({ command: "UPDATE", count: 0 })).toEqual([]);
   });
 });
 
@@ -149,6 +177,38 @@ describe.skipIf(!postgresReachable)(
       } finally {
         await first.$client.close();
         await second.$client.close();
+      }
+    });
+
+    test("a pool of one claims a queued row and sets started_at", async () => {
+      const { actor, agent, channel } = await seedChannel();
+      const single = createDatabase(databaseUrl, { max: 1 });
+      try {
+        const store = createJobStore(single);
+        const job = await store.enqueue({
+          orgId: "org_local",
+          channelId: channel.id,
+          coworkerId: agent.id,
+          actingUserId: actor.id,
+          threadId: channel.threadId,
+          prompt: "Claim on one connection.",
+        });
+        createdJobIds.push(job.id);
+
+        const claimed = await Promise.race([
+          store.claim(),
+          new Promise<never>((_, reject) => {
+            setTimeout(
+              () => reject(new Error("claim hung on a pool of one")),
+              5_000,
+            );
+          }),
+        ]);
+        expect(claimed?.id).toBe(job.id);
+        expect(claimed?.status).toBe("running");
+        expect(claimed?.startedAt).toBeInstanceOf(Date);
+      } finally {
+        await single.$client.close();
       }
     });
   },
