@@ -37,6 +37,8 @@ Use `bash scripts/start.sh` for the full local stack. It starts Docker services,
 
 Use `bun run dev` only when you want the app and API server without starting the Docker Bots and computers.
 
+Cloud Agents (and any machine without Docker) use `bash scripts/cloud-install.sh` then `bash scripts/cloud-start.sh`. That path installs Bun and PostgreSQL with pgvector, writes `.env` from `.env.example`, applies migrations, and leaves the API on port 3001 and the app on port 3010 to the configured terminals. Chat against CopilotKit Intelligence still needs `INTELLIGENCE_API_KEY`, `COPILOTKIT_LICENSE_TOKEN`, and a model key in the Cloud Agent secrets tab; without them the UI and API still boot so screens can be exercised.
+
 | Service           | Port                       |
 | ----------------- | -------------------------- |
 | `app`             | 3010                       |
