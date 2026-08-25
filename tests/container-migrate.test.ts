@@ -38,7 +38,31 @@ test("starts the API only after migrate has finished", () => {
       join(repositoryRoot, "docker/s6/s6-rc.d/api/dependencies.d/migrate"),
     ),
   ).toBe(true);
-  expect(read("docker/s6/s6-rc.d/worker/dependencies")).toContain("migrate");
+  expect(
+    existsSync(
+      join(repositoryRoot, "docker/s6/s6-rc.d/worker/dependencies.d/migrate"),
+    ),
+  ).toBe(true);
+});
+
+/**
+ * s6 compiles every directory under s6-rc.d, but it only launches names listed
+ * in user/contents.d. The worker service existed while jobs stayed queued
+ * because that list omitted it.
+ */
+test("starts the worker from the s6 user boot bundle", () => {
+  const bundle = join(repositoryRoot, "docker/s6/s6-rc.d/user/contents.d");
+  for (const name of [
+    "worker",
+    "api",
+    "computer",
+    "migrate",
+    "postgres",
+    "postgres-init",
+    "computer-token",
+  ]) {
+    expect(existsSync(join(bundle, name))).toBe(true);
+  }
 });
 
 test("copies the production server install into the runtime image", () => {

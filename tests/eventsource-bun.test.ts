@@ -59,6 +59,11 @@ test("s6 API and worker preload eventsource before their start files", () => {
   expect(read("docker/s6/s6-rc.d/worker/run")).toContain(preload);
   expect(read("docker/s6/s6-rc.d/api/run")).toContain(preload);
   expect(read("docker/s6/s6-rc.d/computer/run")).not.toContain("--preload");
+  expect(
+    existsSync(
+      join(repositoryRoot, "docker/s6/s6-rc.d/user/contents.d/worker"),
+    ),
+  ).toBe(true);
 });
 
 /**

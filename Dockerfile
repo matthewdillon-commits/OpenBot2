@@ -2,7 +2,7 @@
 #
 # WHAT THIS IS FOR. Everything a laptop runs, minus the database, in one image on one port. Deploy it
 # anywhere that runs a container and you get what `scripts/start.sh` gives you locally: the app, the
-# API, and a browser the Bots can drive.
+# API, the worker that claims unattended jobs, and a browser the Bots can drive.
 #
 # WHAT IS NOT HERE, AND WHY.
 #
