@@ -4,8 +4,9 @@
  * `createUnattendedWorkerRuntime` pulls CopilotKit, MCP, computer, and Intelligence.
  * That import is what `worker/src/index.ts` used to do before `worker-start`, and on
  * Railway the process never reached the log or a `jobs.started_at`. Claiming uses
- * only the database and `FOR UPDATE SKIP LOCKED`. The coworker graph loads in the
- * background and is awaited only after a row is already `running`.
+ * only the database and `FOR UPDATE SKIP LOCKED`. The coworker graph is not started
+ * until a claim attempt has returned — a leftover queued row at boot must be able
+ * to get `started_at` without waiting for that graph to finish evaluating.
  */
 import type { DeploymentConfig } from "../config";
 import { createDatabase } from "../db/client";
@@ -35,35 +36,52 @@ function loadProductionRuntime(
   );
 }
 
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export async function runUnattendedClaimLoop(
   config: DeploymentConfig,
   options: ClaimLoopOptions = {},
 ) {
   const pollMs = config.unattendedJobPollMs;
+  // One connection: the claim statement is a single UPDATE. A second pooled
+  // connection is how drizzle `transaction()` plus a follow-up select deadlocks
+  // (the UPDATE holds FOR UPDATE; the select waits for it). The coworker graph
+  // opens its own pool later; it must not exist yet on the first claim.
   const jobStore =
-    options.jobStore ?? createJobStore(createDatabase(config.databaseUrl));
+    options.jobStore ??
+    createJobStore(createDatabase(config.databaseUrl, { max: 1 }));
   const loadRuntime = options.loadRuntime ?? loadProductionRuntime;
 
   let runtime: ClaimLoopRuntime | undefined;
-  const runtimeReady = loadRuntime(config)
-    .then((loaded) => {
-      runtime = loaded;
-      return loaded;
-    })
-    .catch((error) => {
-      console.error(
-        JSON.stringify({
-          type: "unattended-runtime-load-error",
-          error: error instanceof Error ? error.message : String(error),
-        }),
-      );
-      throw error;
-    });
+  let runtimeReady: Promise<ClaimLoopRuntime> | undefined;
+
+  const ensureRuntime = (): Promise<ClaimLoopRuntime> => {
+    runtimeReady ??= loadRuntime(config)
+      .then((loaded) => {
+        runtime = loaded;
+        return loaded;
+      })
+      .catch((error) => {
+        console.error(`worker-claim-error runtime ${errorText(error)}`);
+        console.error(
+          JSON.stringify({
+            type: "unattended-runtime-load-error",
+            error: errorText(error),
+          }),
+        );
+        throw error;
+      });
+    return runtimeReady;
+  };
 
   while (!options.signal?.aborted) {
     try {
+      console.error("worker-claim");
       const job = await jobStore.claim();
       if (job) {
+        console.error(`worker-claim ${job.id}`);
         console.info(
           JSON.stringify({
             type: "unattended-job-claimed",
@@ -71,18 +89,21 @@ export async function runUnattendedClaimLoop(
             orgId: job.orgId,
           }),
         );
-        const loaded = runtime ?? (await runtimeReady);
+        const loaded = runtime ?? (await ensureRuntime());
         await loaded.processJob(job);
         continue;
       }
+      console.error("worker-claim-empty");
+      if (!runtime) void ensureRuntime();
       if (runtime) {
         await runtime.tickDueCrons();
       }
     } catch (error) {
+      console.error(`worker-claim-error ${errorText(error)}`);
       console.error(
         JSON.stringify({
           type: "unattended-job-loop-error",
-          error: error instanceof Error ? error.message : String(error),
+          error: errorText(error),
         }),
       );
     }

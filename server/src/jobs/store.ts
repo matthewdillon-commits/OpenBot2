@@ -200,18 +200,37 @@ function toJob(row: typeof jobs.$inferSelect): UnattendedJob {
   };
 }
 
-function claimedIds(result: unknown): string[] {
-  if (Array.isArray(result)) {
-    return result
-      .map((row) =>
-        row && typeof row === "object" && "id" in row
-          ? String((row as { id: unknown }).id)
-          : "",
-      )
-      .filter(Boolean);
+/**
+ * Ids from `UPDATE … RETURNING id` under drizzle bun-sql.
+ *
+ * The driver awaits `unsafe()` with no field mapper, so the runtime value is
+ * whatever Bun SQL decoded: an array of `{ id }`, an array of `[id]` from
+ * `.values()`, or a `{ rows }` wrapper. Missing any of those shapes used to
+ * look like an empty queue even after the UPDATE had run.
+ */
+export function parseClaimedIds(result: unknown): string[] {
+  if (result == null) return [];
+  if (
+    typeof result === "string" ||
+    typeof result === "number" ||
+    typeof result === "bigint"
+  ) {
+    const id = String(result);
+    return id ? [id] : [];
   }
-  if (result && typeof result === "object" && "rows" in result) {
-    return claimedIds((result as { rows: unknown }).rows);
+  if (Array.isArray(result)) {
+    return result.flatMap((row) => parseClaimedIds(row));
+  }
+  if (typeof result !== "object") return [];
+  const record = result as Record<string, unknown>;
+  if ("id" in record && record.id != null && typeof record.id !== "object") {
+    return [String(record.id)];
+  }
+  if ("rows" in record) {
+    return parseClaimedIds(record.rows);
+  }
+  if (typeof record.length === "number" && record.length > 0) {
+    return parseClaimedIds(Array.from(record as unknown as ArrayLike<unknown>));
   }
   return [];
 }
@@ -261,8 +280,12 @@ export function createJobStore(database: Database): JobStore {
     },
 
     async claim() {
-      return database.transaction(async (tx) => {
-        const result = await tx.execute(sql`
+      // One statement, then a read of the committed row. A drizzle
+      // transaction plus a second select on the same client is the bun-sql
+      // pool deadlock: BEGIN on connection 1, UPDATE holds FOR UPDATE, SELECT
+      // borrows connection 2 and waits for the lock that connection 1 will
+      // not release until the select returns. `started_at` stays invisible.
+      const result = await database.execute(sql`
           UPDATE jobs
           SET status = 'running',
               started_at = COALESCE(started_at, now()),
@@ -281,11 +304,10 @@ export function createJobStore(database: Database): JobStore {
           )
           RETURNING id
         `);
-        const id = claimedIds(result)[0];
-        if (!id) return null;
-        const [row] = await tx.select().from(jobs).where(eq(jobs.id, id));
-        return row ? toJob(row) : null;
-      });
+      const id = parseClaimedIds(result)[0];
+      if (!id) return null;
+      const [row] = await database.select().from(jobs).where(eq(jobs.id, id));
+      return row ? toJob(row) : null;
     },
 
     async finish(id, status, update = {}) {
