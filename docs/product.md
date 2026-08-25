@@ -189,33 +189,47 @@ company knowledge, MCP, and computer actions are the same rule.
 Conversations are durable. CopilotKit Intelligence holds the thread. Reopening
 a channel shows what was said, including after a process restart.
 
+**Send-and-go** starts an unattended job on that same channel. The owner-facing
+unit is a goal: in this tree a goal is the existing channel plus its
+Intelligence thread. `startUnattendedRun` may take `goalId`; it must be that
+channel. A second transcript is not minted. The API inserts a `jobs` row; the
+`worker` claims it with `FOR UPDATE SKIP LOCKED` and runs the coworker with
+server tools only (CRM, `search_web`, knowledge, granted MCP). A missing
+mapping or missing thread is a refuse. Persist writes that same thread; if the
+write fails the job is failed. Computer tools still need the tab. The job row
+stores a skinny outcome: status Active | Needs you | Done, `last_action` (one
+sentence), `last_action_at`, plus who ran and any CRM record ids the write
+already returned. That is not an approval card. There is no Goals home UI.
+
 ### How a coworker actually runs
 
-A turn starts because someone sent a message in the open app. Channel chat uses
-the CopilotKit browser client. There is no scheduler, no inbound-email-to-Bot,
-and no webhook that starts a run on its own. The `worker` package logs `idle`
-and does not run agents. A standing role is a system prompt on the next user
-turn, not a process that keeps working.
+A turn usually starts because someone sent a message in the open app. Channel
+chat uses the CopilotKit browser client. **Send-and-go** is the other start: an
+explicit “continue this channel after I leave” from the composer. There is no
+scheduler, no inbound-email-to-Bot, and no webhook that starts a run on its own.
+A standing role is a system prompt on the next user turn.
 
-Once a turn has started:
+Once a turn has started — in the tab or from a claimed job:
 
 - **Server tools run on the API.** CRM (`crm_search`, `crm_get`, `crm_create`,
   `crm_update`, `crm_send`), `search_web` when `TAVILY_API_KEY` is set, company
   knowledge when there are documents, and granted MCP tools. Built-in Bots may
   take twenty of those steps in one run. A remote AG-UI Bot calls the same list
-  back through `/api/agent-tools/call`.
+  back through `/api/agent-tools/call`. An unattended job uses this list only.
 - **Computer tools run in the tab.** Click, type, snapshot, files, and the
   shell are frontend tools. The run ends, the open browser executes them, then
   the client starts another run with the result. Gallery and sandboxed
   components are the same shape. Close the tab and that loop stops.
   Human-in-the-loop waits (login, 2FA, a secret) also live in the tab.
+  Send-and-go does not register these tools.
 - **The transcript is not the Activity tab.** Activity is held in the browser
   for the open conversation and is gone on reload. The audit trail is the
-  record that survives.
+  record that survives. The roster preview is `channels.lastMessage`, updated
+  when a job finishes.
 
-So: a person can send “research these two people and write the CRM” and, while
-that turn is running, CRM and web search do not need the tab. Anything that
-needs the computer does. Nothing new starts after they leave.
+So: a person can send “research these two people and write the CRM” with
+Send-and-go, close the tab, and come back to that same channel for the result.
+Anything that needs the computer still needs the tab.
 
 ### Organizations
 
@@ -254,8 +268,9 @@ running beside it.
 **Not a self-serve multi-tenant SaaS** until RLS, billing, seats, per-org SSO,
 per-tenant computers, and a spend cap exist.
 
-**Not unattended coworkers** until something other than the open tab starts a
-run, and computer tools execute somewhere that is not the person’s browser.
+**Not unattended computer, cron, webhook, or inbound email.** Send-and-go runs
+CRM / research / MCP after the tab closes. Computer tools still execute in the
+person’s browser. Scheduled and inbound starts are later phases.
 
 **Not the self-improving loop.** There are no outcome events tied to actions,
 no approval cards with expected impact, and no keep / revise / revert that
@@ -273,7 +288,7 @@ It does not measure whether the work moved the business.
 | Computer tools are frontend | `app/src/lib/copilot/computer-tools.tsx`, `server/src/channels/turn-watchdog.ts` |
 | Server CRM / search tools | `server/src/index.ts` `loadToolsForActor` |
 | Twenty tool steps | `server/src/copilot.ts` `TOOL_STEPS` |
-| Worker is idle | `worker/src/index.ts`, `worker/src/status.ts` |
+| Send-and-go / unattended jobs | `server/src/jobs/`, `worker/src/index.ts` |
 | Shared computer without supervisor | `docs/deployment.md`, `COMPUTER_SUPERVISOR_URL` |
 | Composio keyed by org | `server/src/composio/client.ts` |
 
@@ -281,20 +296,23 @@ It does not measure whether the work moved the business.
 
 ## C. What it is not yet
 
-Three things people will assume from Part A, none of which this tree does:
+Three things people will assume from Part A. The first has started; the
+other two have not:
 
-1. **Unattended.** Close the tab and nothing new starts. There is no
-   Send-and-go, no job the worker claims, no cron, no webhook, no inbound
-   email that opens a run. Computer tools still need the tab.
+1. **Unattended computer and scheduled starts.** Send-and-go exists (Part B):
+   the worker claims a job and continues CRM / research / MCP after the tab
+   closes. There is still no cron, no webhook, and no inbound email that opens
+   a run. Computer tools still need the tab.
 2. **Self-serve SaaS.** No RLS, no Stripe, no seat quota, no invite email, no
    per-org SSO, no spend cap, no multi-replica story beyond “Postgres is the
    shared state.” `/platform` is sales-led provisioning, not a checkout.
 3. **The UX contract and the loop.** Home is not Composer + Goals. A person
    still picks a coworker from a roster (General Assistant, Knowledge, an
-   optional Risk Analyst). There is no goal object, no skinny status + last
-   action, no “See the work,” no approval cards. Observe / understand /
-   prioritize / act can be *performed by a person talking to a Bot*. Measure
-   and improve are not product surfaces. There are no outcome events.
+   optional Risk Analyst). A goal in this tree is the existing channel plus
+   its thread; the job row can hold Active | Needs you | Done and last
+   action. There is no Goals home, no “See the work,” and no approval cards.
+   Observe / understand / prioritize / act can be *performed by a person
+   talking to a Bot*. Measure and improve are not product surfaces.
 
 When a pull request claims one of those, it is done only when Part B of this
 file can say so with a file citation. Until then the honest sentence is the

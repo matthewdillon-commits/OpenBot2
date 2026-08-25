@@ -1,0 +1,7 @@
+#!/command/with-contenv sh
+# Unattended coworker jobs. Claims a queued row and runs it; the API never holds the loop.
+#
+# `with-contenv` is not decoration. Without it s6 starts a service with none of the container's
+# environment, and the failure is a config error naming a variable that is plainly set.
+cd /app/worker
+exec s6-setuidgid pwuser /usr/local/bin/bun src/index.ts

@@ -26,7 +26,10 @@ import { ConversationProvider } from "@/lib/copilot/conversation";
 import { repairUnansweredToolCalls } from "@/lib/copilot/repair-history";
 import { stoppedReason } from "@/lib/copilot/stopped-turn";
 import { readThreadMessages } from "@/lib/copilot/thread-messages";
+import { enqueueJobMutationOptions } from "@/lib/jobs/mutations";
+import { jobQueryOptions } from "@/lib/jobs/queries";
 import { useSkillCommands } from "@/lib/plugins/skill-commands";
+import { queryClient } from "@/query-client";
 import { newId } from "../../lib/new-id";
 
 /**
@@ -261,6 +264,18 @@ export function ChannelChat({
    * Tell the roster what was just said. Failures here must not block the conversation.
    */
   const recordActivity = useMutation(recordChannelActivityMutationOptions());
+  const enqueueJob = useMutation(enqueueJobMutationOptions(queryClient));
+  const [awayJobId, setAwayJobId] = useState<string | null>(null);
+  const [awayNotice, setAwayNotice] = useState<string | null>(null);
+  const appliedAwayJob = useRef<string | null>(null);
+  const awayJob = useQuery({
+    ...jobQueryOptions(awayJobId ?? ""),
+    enabled: Boolean(awayJobId),
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === "queued" || status === "running" ? 1500 : false;
+    },
+  });
   const report = (text: string, agentId: string | null) => {
     const trimmed = text.trim();
     if (!trimmed) return;
@@ -406,6 +421,32 @@ export function ChannelChat({
   const sayRef = useRef(say);
   sayRef.current = say;
 
+  useEffect(() => {
+    const job = awayJob.data;
+    if (!job || !awayJobId || appliedAwayJob.current === job.id) return;
+    if (job.status === "queued" || job.status === "running") {
+      setAwayNotice("This coworker will continue after you leave.");
+      return;
+    }
+    appliedAwayJob.current = job.id;
+    if (job.status === "succeeded" && job.resultText) {
+      const reply: Message = {
+        content: job.resultText,
+        id: newId(),
+        role: "assistant",
+        ...(speakerNameRef.current ? { name: speakerNameRef.current } : {}),
+      };
+      agent.addMessage(reply);
+      setAwayNotice(null);
+      return;
+    }
+    if (job.status === "failed" || job.status === "cancelled") {
+      setAwayNotice(
+        job.error ?? "The coworker could not finish after you left.",
+      );
+    }
+  }, [agent, awayJob.data, awayJobId]);
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: must also re-run when useAgent returns a new instance for the speaker
   useEffect(() => {
     const pending = pendingSendRef.current;
@@ -464,14 +505,54 @@ export function ChannelChat({
           outgoing,
         )}
         notice={
-          channel.active ? null : (
+          !channel.active ? (
             <p className="pb-2 text-sm text-muted-foreground" role="status">
               A coworker in this channel has been deleted. The conversation
               stays readable, but it can no longer reply.
             </p>
-          )
+          ) : awayNotice ? (
+            <p className="pb-2 text-sm text-muted-foreground" role="status">
+              {awayNotice}
+            </p>
+          ) : null
         }
         onDraftChange={setComposerDraft}
+        onSendAndGo={async (draft) => {
+          const trimmed = draft.text.trim();
+          if (!trimmed) return;
+          const skillInstructions = draft.commandIds
+            .map(
+              (id) =>
+                skillCommands.find((command) => command.id === id)?.prompt,
+            )
+            .filter((instruction): instruction is string =>
+              Boolean(instruction),
+            );
+          const nextSpeaker =
+            resolveSpeaker(channel.agentIds, draft.agentId, speaker) ?? speaker;
+          if (nextSpeaker !== speaker) {
+            snapshotMessages();
+            setSpeaker(nextSpeaker);
+          }
+          const job = await enqueueJob.mutateAsync({
+            channelId: channel.id,
+            prompt: trimmed,
+            agentId: nextSpeaker,
+            ...(skillInstructions.length > 0 ? { skillInstructions } : {}),
+          });
+          const userMessage: Message = {
+            content: trimmed,
+            id: newId(),
+            role: "user",
+          };
+          setOutgoing(userMessage);
+          agent.addMessage(userMessage);
+          report(trimmed, null);
+          setOutgoing(null);
+          appliedAwayJob.current = null;
+          setAwayJobId(job.id);
+          setAwayNotice("This coworker will continue after you leave.");
+        }}
         onSubmit={async (draft) => {
           // Honour a member `@` as the speaker for this send only. A stranger stays in the text;
           // inviting them is a later phase.

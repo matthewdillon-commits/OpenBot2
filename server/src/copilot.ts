@@ -269,7 +269,7 @@ export function builtInAgentConfiguration(
  * calls before it has finished the first person, and the run ends on a tool with no closing
  * sentence. Twenty covers that shape of work. A model going in a circle is still bounded.
  */
-const TOOL_STEPS = 20;
+export const TOOL_STEPS = 20;
 
 /**
  * Build the built-in and remote AG-UI agent map the runtime serves.

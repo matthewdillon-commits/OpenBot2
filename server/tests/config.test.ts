@@ -437,6 +437,15 @@ describe("deployment configuration", () => {
     expect(loadConfig(baseEnvironment).agentStallTimeoutMs).toBe(0);
   });
 
+  test("gives unattended jobs a wall-clock limit without requiring env", () => {
+    expect(loadConfig(baseEnvironment).unattendedJobTimeoutMs).toBe(600_000);
+    expect(loadConfig(baseEnvironment).unattendedJobPollMs).toBe(1_500);
+    expect(
+      loadConfig({ ...baseEnvironment, UNATTENDED_JOB_TIMEOUT_MS: "120000" })
+        .unattendedJobTimeoutMs,
+    ).toBe(120_000);
+  });
+
   test("takes a timeout in milliseconds, and zero as switching it off", () => {
     expect(
       loadConfig({ ...baseEnvironment, AGENT_STALL_TIMEOUT_MS: "120000" })

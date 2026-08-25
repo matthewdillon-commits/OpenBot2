@@ -102,6 +102,7 @@ COPY --from=deps /src/server/node_modules server/node_modules
 COPY --from=deps /src/agent-computer/node_modules agent-computer/node_modules
 
 COPY server server
+COPY worker worker
 COPY shared shared
 COPY examples examples
 COPY agent-computer/src agent-computer/src

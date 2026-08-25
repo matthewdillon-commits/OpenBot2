@@ -105,7 +105,7 @@ echo
 echo "OpenBot"
 echo "======="
 
-info "1/4  Docker services"
+info "1/5  Docker services"
 SERVICES=(postgres)
 if [ "$ONE_COMPUTER_EACH" = "true" ]; then
   SERVICES+=(supervisor)
@@ -149,7 +149,7 @@ if [ -z "$MANAGED_URL" ]; then
 fi
 green "  managed coworker endpoint: $MANAGED_URL"
 
-info "2/4  Server"
+info "2/5  Server"
 require_free_or_ours "$SERVER_PORT" server
 if ! curl -fsS --max-time 3 "http://localhost:$SERVER_PORT/api/capabilities" >/dev/null 2>&1; then
   if [ "$ONE_COMPUTER_EACH" = "true" ]; then
@@ -164,7 +164,13 @@ if ! curl -fsS --max-time 3 "http://localhost:$SERVER_PORT/api/capabilities" >/d
 fi
 wait_for "http://localhost:$SERVER_PORT/api/capabilities" "server"
 
-info "3/4  Runtime health"
+info "3/5  Worker"
+if ! pgrep -f "worker/src/index.ts" >/dev/null 2>&1; then
+  (cd worker && bun --env-file=../.env src/index.ts >"$LOGS/worker.log" 2>&1 &)
+fi
+info "  worker claiming unattended jobs"
+
+info "4/5  Runtime health"
 INFO="$(curl -fsS --max-time 8 "http://localhost:$SERVER_PORT/api/copilotkit/info")"
 python3 - "$INFO" <<'PY'
 import json, sys
@@ -181,7 +187,7 @@ if not agents:
 print(f"\033[32m  licence valid · mode {info.get('mode')} · Bots: {', '.join(agents)}\033[0m")
 PY
 
-info "4/4  App"
+info "5/5  App"
 require_free_or_ours "$APP_PORT" app
 if ! curl -fsS --max-time 3 "http://localhost:$APP_PORT/" >/dev/null 2>&1; then
   (cd app && bun run dev --port "$APP_PORT" --strictPort >"$LOGS/app.log" 2>&1 &)
@@ -210,5 +216,5 @@ Try:
 
 Logs: $LOGS
 Stop Docker services: docker compose down
-Stop host app/server: kill the processes using ports $APP_PORT and $SERVER_PORT
+Stop host app/server/worker: kill the processes using ports $APP_PORT and $SERVER_PORT, and the worker bun process
 EOF

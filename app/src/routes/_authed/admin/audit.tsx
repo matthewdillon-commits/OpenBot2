@@ -330,6 +330,12 @@ const DECISIONS: Record<string, string> = {
 
   "configuration.changed": "Configuration changed",
   "credential.created": "Credential saved",
+
+  "job.enqueued": "Unattended job queued",
+  "job.claimed": "Unattended job claimed",
+  "job.succeeded": "Unattended job finished",
+  "job.failed": "Unattended job failed",
+  "job.refused": "Unattended job refused",
 };
 
 function hostOf(url: string): string {

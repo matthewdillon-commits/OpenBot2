@@ -230,6 +230,17 @@ export const auditEventTypes = [
   "crm.record_read",
   "crm.record_written",
   "crm.record_refused",
+  /**
+   * An unattended coworker job. Enqueued by the API, claimed and run by the worker.
+   *
+   * Refusals (no mapped thread, acting user gone, thread busy) and failures each write a row,
+   * so a trail can tell "it never started" from "it started and broke".
+   */
+  "job.enqueued",
+  "job.claimed",
+  "job.succeeded",
+  "job.failed",
+  "job.refused",
 ] as const;
 
 export type AuditEventType = (typeof auditEventTypes)[number];

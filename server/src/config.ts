@@ -196,6 +196,18 @@ export type DeploymentConfig = {
    * config in the Composio dashboard and connect should use that one rather than minting another.
    */
   gmailAuthConfigId?: string;
+  /**
+   * How long one unattended coworker job may run, in milliseconds.
+   *
+   * A default, not an unset-means-forever: a job that never finishes would sit `running` and
+   * block the next claim on that thread. Ten minutes covers a twenty-step CRM/research loop
+   * without letting a stuck model hold the channel.
+   */
+  unattendedJobTimeoutMs: number;
+  /**
+   * How long the worker waits between empty claims. A default so the loop runs without env.
+   */
+  unattendedJobPollMs: number;
 };
 
 type Environment = Record<string, string | undefined>;
@@ -639,6 +651,25 @@ function agentStallTimeoutMs(environment: Environment): number {
   return milliseconds;
 }
 
+const DEFAULT_UNATTENDED_JOB_TIMEOUT_MS = 10 * 60 * 1000;
+const DEFAULT_UNATTENDED_JOB_POLL_MS = 1500;
+
+function wholeMilliseconds(
+  environment: Environment,
+  name: string,
+  fallback: number,
+): number {
+  const raw = optional(environment, name);
+  if (!raw) return fallback;
+  const milliseconds = Number(raw);
+  if (!Number.isInteger(milliseconds) || milliseconds < 1) {
+    throw new Error(
+      `${name} must be a whole number of milliseconds, at least 1`,
+    );
+  }
+  return milliseconds;
+}
+
 export function loadConfig(
   environment: Environment = process.env,
 ): DeploymentConfig {
@@ -655,6 +686,16 @@ export function loadConfig(
       optional(environment, "TENANT_PACKAGE_DIR") ?? "../examples/fintech",
     runtime: runtimeCapabilities(environment),
     agentStallTimeoutMs: agentStallTimeoutMs(environment),
+    unattendedJobTimeoutMs: wholeMilliseconds(
+      environment,
+      "UNATTENDED_JOB_TIMEOUT_MS",
+      DEFAULT_UNATTENDED_JOB_TIMEOUT_MS,
+    ),
+    unattendedJobPollMs: wholeMilliseconds(
+      environment,
+      "UNATTENDED_JOB_POLL_MS",
+      DEFAULT_UNATTENDED_JOB_POLL_MS,
+    ),
     auditRetentionDays: auditRetentionDays(environment),
     oauth: { google },
     auth,

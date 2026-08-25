@@ -8,6 +8,10 @@ Newest first. `Unreleased` is what is on `main` and not yet tagged.
 
 ## Unreleased
 
+### Features
+
+- **Send-and-go continues a channel after the tab closes.** The composer’s Send-and-go control queues a `jobs` row. The worker claims it with `FOR UPDATE SKIP LOCKED` and runs the same built-in or remote AG-UI coworker, with CRM, web search, knowledge, and granted MCP only — not computer tools. The existing Intelligence thread is reused — persist failure is not success, and a missing mapping or thread is a refuse. The roster `lastMessage` updates when the job finishes. A finished job also stores a skinny goal outcome on the row (Active | Needs you | Done, last_action, last_action_at, who ran, CRM record ids if a write already returned them) — not an approval card. In this tree the goal is the existing channel plus its Intelligence thread. Computer still needs the tab. Cron, webhook, and inbound email are not in this release.
+
 ### Docs
 
 - **UX contract: home is goals + one brain.** First screen is Composer to LimitlessAI, then Goals (name, status, last action, time) — not chats, not agents. Owner talks only to LimitlessAI. “See the work” (operator / admin) opens that goal’s A2A room; Cmd-K “Rooms” is for power users. Phase 1 skinny goal is status + last action (Active | Needs you | Done). Phase 5 adds measure/improve on the same object. Do not put Sales / Website / Marketing / Customer / Ops in the owner nav. Do not merge PR #11. A deployment behaves no differently.
