@@ -289,6 +289,8 @@ export async function buildAgents(
   signRun?: SignRun,
   /** What every built-in Bot is told about the computer. Absent means this deployment has none. */
   computerGuidance?: string,
+  /** Phase 5 loop on this goal, so the next turn can see keep / revise / revert. */
+  extraGuidance?: string,
 ): Promise<Record<string, AbstractAgent>> {
   return Object.fromEntries(
     await Promise.all(
@@ -302,6 +304,7 @@ export async function buildAgents(
           loadTools,
           signRun,
           computerGuidance,
+          extraGuidance,
         ),
       ]),
     ),
@@ -316,15 +319,19 @@ async function buildAgent(
   loadTools: LoadToolsForBot,
   signRun?: SignRun,
   computerGuidance?: string,
+  extraGuidance?: string,
 ): Promise<AbstractAgent> {
   if (agent.type === "built_in") {
+    const guidance = [computerGuidance, extraGuidance]
+      .filter((item): item is string => Boolean(item?.trim()))
+      .join("\n\n");
     return new BuiltInAgent(
       builtInAgentConfiguration(
         agent,
         model,
         apiKey,
         await loadTools(agent.id),
-        computerGuidance,
+        guidance || undefined,
       ),
     );
   }
@@ -336,6 +343,7 @@ async function buildAgent(
     stallGuard,
     await loadTools(agent.id),
     signRun,
+    extraGuidance,
   );
 }
 
@@ -363,6 +371,7 @@ function remoteAgentWithStandingRole(
    */
   tools: GrantedTool[] = [],
   signRun?: SignRun,
+  extraGuidance?: string,
 ) {
   const remote = new HttpAgent({
     url: agent.endpoint,
@@ -374,13 +383,23 @@ function remoteAgentWithStandingRole(
       ? { fetch: stallGuard.watch({ id: agent.id, name: agent.name }) }
       : {}),
   });
+  const loopMessage = extraGuidance?.trim()
+    ? {
+        id: `goal-loop:${agent.id}`,
+        role: "system" as const,
+        content: extraGuidance,
+      }
+    : null;
   remote.use((input, next) =>
     next.run({
       ...input,
       messages: [
         agent.standingMessage,
+        ...(loopMessage ? [loopMessage] : []),
         ...input.messages.filter(
-          (message) => message.id !== agent.standingMessage.id,
+          (message) =>
+            message.id !== agent.standingMessage.id &&
+            message.id !== loopMessage?.id,
         ),
       ],
       /*
@@ -458,6 +477,7 @@ export async function resolveRuntimeAgents(
   loadTools?: LoadToolsForBot,
   signRun?: SignRun,
   computerGuidance?: string,
+  extraGuidance?: string,
 ): Promise<Record<string, AbstractAgent>> {
   const registered = await loadAgents();
   if (registered.length === 0) {
@@ -477,6 +497,7 @@ export async function resolveRuntimeAgents(
     loadTools,
     signRun,
     computerGuidance,
+    extraGuidance,
   );
 }
 
@@ -542,11 +563,22 @@ export function createRequestAgents(
     actor: AgentActor,
     request: Request,
   ) => Promise<ToolRunContext | undefined>,
+  /**
+   * Phase 5 loop on this goal. Asked per request so keep / revise / revert
+   * recorded a moment ago apply to the next turn.
+   */
+  goalLoopGuidance?: (
+    actor: AgentActor,
+    runContext?: ToolRunContext,
+  ) => Promise<string | undefined>,
 ) {
   return async ({ request }: { request: Request }) => {
     const actor = await identifyActor(request);
     const runContext = resolveRunContext
       ? await resolveRunContext(actor, request)
+      : undefined;
+    const extraGuidance = goalLoopGuidance
+      ? await goalLoopGuidance(actor, runContext)
       : undefined;
     return resolveRuntimeAgents(
       () => loadAgents(actor),
@@ -558,6 +590,7 @@ export function createRequestAgents(
       typeof computerGuidance === "function"
         ? computerGuidance(actor.orgId)
         : computerGuidance,
+      extraGuidance,
     );
   };
 }
@@ -600,6 +633,10 @@ export function mountCopilotRuntime(
     actor: AgentActor,
     request: Request,
   ) => Promise<ToolRunContext | undefined>,
+  goalLoopGuidance?: (
+    actor: AgentActor,
+    runContext?: ToolRunContext,
+  ) => Promise<string | undefined>,
   basePath = "/api/copilotkit",
 ) {
   const { intelligence } = config.runtime;
@@ -642,6 +679,7 @@ export function mountCopilotRuntime(
        */
       computerGuidance ?? (config.computer ? COMPUTER_GUIDANCE : undefined),
       resolveRunContext,
+      goalLoopGuidance,
     ) as never,
   });
 

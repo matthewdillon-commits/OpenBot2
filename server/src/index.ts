@@ -59,6 +59,11 @@ import { createLoadToolsForActor } from "./jobs/tools";
 import { threadIdFromCopilotRequest } from "./jobs/run-context";
 import { startSpecialist } from "./jobs/specialist";
 import { createKnowledgeSearch } from "./knowledge/search";
+import {
+  createGoalLoopStore,
+  createHighRiskWait,
+  orchestratorContextFromLoop,
+} from "./loop";
 import { bootstrapOrganizations } from "./orgs/bootstrap";
 import {
   computerIdFor,
@@ -266,11 +271,20 @@ const policyListener = await startPolicyListener(
  * unavailable, and the row is a note for a reader rather than something the server depends on.
  */
 const bootAuditStore = createAuditStore(database);
+const jobStore = createJobStore(database);
+const jobTriggerStore = createJobTriggerStore(database);
+const loopStore = createGoalLoopStore(database);
+const highRiskWait = createHighRiskWait({
+  loopStore,
+  jobStore,
+  auditStore: bootAuditStore,
+});
 const crmGateway = createCrmGateway({
   store: crmStore,
   database,
   auditStore: bootAuditStore,
   policy: (orgId) => policyStore.get(orgId),
+  highRiskWait,
 });
 /*
  * Old audit rows removed on a schedule, when a deployment has asked for that.
@@ -296,6 +310,7 @@ const computerGateway = computerProvider
       ...(computerProvider.isolation === "shared"
         ? { sharedClaim: createSharedComputerClaimStore(database) }
         : {}),
+      highRiskWait,
     })
   : undefined;
 
@@ -315,6 +330,7 @@ const pluginStore = createPluginStore({
   credentials: credentialStore,
   encryptionKey: config.keyEncryptionKey,
   policy: (orgId) => policyStore.get(orgId),
+  highRiskWait,
 });
 
 /**
@@ -423,8 +439,6 @@ const webSearch = config.tavilyApiKey
  * search or a key to spend, not when an administrator ticked a grant. A framework Bot calls the
  * same list back through `/api/agent-tools/call`.
  */
-const jobStore = createJobStore(database);
-const jobTriggerStore = createJobTriggerStore(database);
 const loadToolsForActor = createLoadToolsForActor({
   pluginStore,
   knowledgeSearch,
@@ -530,6 +544,11 @@ const app = createApp(
         goalId: channel.id,
       };
     },
+    async (actor, runContext) => {
+      if (!runContext?.goalId) return undefined;
+      const loop = await loopStore.get(orgIdOf(actor), runContext.goalId);
+      return orchestratorContextFromLoop(loop) || undefined;
+    },
   ),
   // The only path to an acting call.
   computerGateway,
@@ -586,6 +605,21 @@ const app = createApp(
   crmStore,
   jobStore,
   jobTriggerStore,
+  {
+    store: loopStore,
+    executePending: async (input) => {
+      const tools = await loadToolsForActor(input.actorId, input.orgId, {
+        channelId: input.channelId,
+        threadId: input.threadId ?? "",
+        goalId: input.goalId,
+      })(input.botId);
+      const tool = tools.find((item) => item.name === input.toolName);
+      if (!tool) {
+        return "That action is no longer available. The decision was still recorded.";
+      }
+      return tool.execute(input.args);
+    },
+  },
 );
 
 /**

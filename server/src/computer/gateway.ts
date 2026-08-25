@@ -40,6 +40,7 @@ export {
   SharedComputerIsolationError,
 } from "./shared-claim";
 
+import type { HighRiskWait } from "../loop/wait";
 import {
   type ActionPolicy,
   evaluateActionPolicy,
@@ -91,6 +92,17 @@ export class ActionRefusedError extends Error {
   }
 }
 
+/**
+ * Policy permitted a high-risk action; it was not carried out. The approval
+ * card is on the goal. Not a refusal — the company still has the wheel.
+ */
+export class ActionWaitingError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ActionWaitingError";
+  }
+}
+
 /** Who is asking. The gateway records this; it does not decide it. */
 export type ActionActor = {
   /** The signed-in person, or the local actor when authentication is not configured. */
@@ -128,6 +140,12 @@ export type ComputerGatewayOptions = {
    * claim in this process, which is what a unit test wants.
    */
   sharedClaim?: SharedComputerClaim;
+  /**
+   * After policy permits a high-risk write, wait as an approval card on the
+   * goal instead of silently acting. Absent, permitted actions still run
+   * (tests that are not about Phase 5).
+   */
+  highRiskWait?: HighRiskWait;
 };
 
 export interface ComputerGateway {
@@ -527,6 +545,25 @@ export function createComputerGateway(
     });
     if (!decision.forward) {
       throw new ActionRefusedError(decision.reason, decision.matched);
+    }
+
+    if (options.highRiskWait) {
+      const waited = await options.highRiskWait({
+        context,
+        args: {
+          ...(subject.ref ? { ref: subject.ref } : {}),
+          ...(subject.snapshotId !== undefined
+            ? { snapshotId: subject.snapshotId }
+            : {}),
+          ...(filePath ? { path: filePath } : {}),
+          ...(subject.command ? { command: subject.command } : {}),
+          ...(subject.key ? { key: subject.key } : {}),
+          ...(subject.targetUrl ? { url: subject.targetUrl } : {}),
+        },
+      });
+      if (waited) {
+        throw new ActionWaitingError(waited);
+      }
     }
 
     let result: T;

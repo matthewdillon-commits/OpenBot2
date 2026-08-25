@@ -174,8 +174,9 @@ Low-risk actions may still auto-run under the gateway. High-risk actions
 wait. The audit trail already stores permit / refuse. This phase stores
 *whether it worked*. Approval cards are how the company keeps the wheel.
 
-Phase 1 skinny status + last action is not this phase. No loop-stage chrome
-on home until this phase.
+Phase 1 skinny status + last action is not this phase. Loop-stage chrome
+on the goal (home row / goal thread / approval card) belongs here, never
+as a new owner nav.
 
 ## Phase 6 — SaaS
 

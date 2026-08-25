@@ -7,6 +7,7 @@ import { z } from "zod";
 import { AgentProfile } from "@/components/agents/agent-profile";
 import { ChannelAvatar } from "@/components/channels/avatar";
 import { ChannelChat } from "@/components/channels/channel-chat";
+import { GoalLoopCard } from "@/components/channels/goal-loop-card";
 import { SeeTheWorkPanel } from "@/components/channels/see-the-work";
 import { ActivityLog } from "@/components/computer/activity-log";
 import { ComputerView } from "@/components/computer/computer-view";
@@ -396,11 +397,14 @@ function ChannelBody({
 
   // Remount on channel changes so CopilotKit agent/thread state cannot leak between channels.
   return (
-    <ChannelChat
-      channel={channel}
-      {...(focusAgentId ? { focusAgentId } : {})}
-      key={channel.id}
-      {...(onSpeakerChange ? { onSpeakerChange } : {})}
-    />
+    <>
+      <GoalLoopCard channel={channel} />
+      <ChannelChat
+        channel={channel}
+        {...(focusAgentId ? { focusAgentId } : {})}
+        key={channel.id}
+        {...(onSpeakerChange ? { onSpeakerChange } : {})}
+      />
+    </>
   );
 }

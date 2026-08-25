@@ -195,6 +195,64 @@ describe("startUnattendedRun", () => {
     expect(result.persisted).toBeUndefined();
   });
 
+  test("keep / revise / revert on this goal is visible on the next unattended turn", async () => {
+    const result = await startUnattendedRun({
+      actor,
+      orgId: actor.orgId,
+      channelId: "channel_1",
+      threadId: "thread-1",
+      prompt: "Follow up.",
+      coworkerId: "researcher",
+      deps: {
+        lookupMapping: async () => ({
+          threadId: "thread-1",
+          channelId: "channel_1",
+          userId: actor.id,
+        }),
+        waitForThread: async () => "idle",
+        persistThread: async () => false,
+        recordActivity: async () => undefined,
+        loadAgents: async () => [
+          {
+            id: "researcher",
+            name: "Researcher",
+            type: "built_in",
+            systemPrompt: "Research people.",
+          },
+        ],
+        loadTools: () => async () => [],
+        resolveModelApiKey: async () => "unused",
+        model: { provider: "openai", defaultModel: "gpt-4.1" },
+        timeoutMs: 5_000,
+        goalLoopGuidance:
+          "Goal loop (this goal — measure and improve on the same object):\nOwner's last decision on this goal: revise (was crm_send) at 2026-08-25T12:00:00.000Z. Note: Too aggressive.",
+        runCoworker: async ({ messages }) => {
+          const loop = messages.find(
+            (message) =>
+              message.role === "system" &&
+              message.content.includes(
+                "Owner's last decision on this goal: revise",
+              ),
+          );
+          expect(loop).toBeDefined();
+          return {
+            text: "I will revise the send.",
+            messages: [
+              ...messages,
+              {
+                id: "assistant-1",
+                role: "assistant",
+                content: "I will revise the send.",
+              },
+            ],
+          };
+        },
+      },
+    });
+
+    expect(result.text).toBe("I will revise the send.");
+  });
+
   test("a persist failure is not a success", async () => {
     const result = await startUnattendedRun({
       actor,

@@ -48,6 +48,7 @@ import {
   type ChannelSummary,
   channelListQueryOptions,
 } from "@/lib/channels/queries";
+import { loopStageLabel } from "@/lib/channels/loop";
 import { useChannelEvents } from "@/lib/channels/use-channel-events";
 import { appConfig } from "@/lib/generated/application-config";
 import { ownerNavItems } from "@/lib/nav/owner-nav";
@@ -151,6 +152,7 @@ function ChannelRow({
               : undefined
         }
         goalStatus={channel.goalStatus}
+        loopStage={loopStageLabel(channel.loopStage)}
       />
     </motion.div>
   );

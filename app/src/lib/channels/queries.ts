@@ -1,6 +1,32 @@
 import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 import { client } from "@/lib/client";
 
+export type LoopOutcome = "worked" | "didn't" | "unknown";
+export type LoopDecision = "keep" | "revise" | "revert";
+export type LoopStage =
+  | "observe"
+  | "understand"
+  | "prioritize"
+  | "act"
+  | "measure"
+  | "improve";
+
+export type PublicApprovalCard = {
+  rationale: string;
+  expectedImpact: string;
+  before: string;
+  after: string;
+  rollback: string;
+  status: "waiting" | "decided";
+  jobId: string | null;
+};
+
+export type PublicLoopDecision = {
+  decision: LoopDecision;
+  at: string;
+  note: string | null;
+};
+
 /**
  * A channel as the browser sees it.
  *
@@ -14,6 +40,11 @@ export type AgentChannel = {
   agentIds: string[];
   threadId: string;
   active: boolean;
+  expectedImpact?: string | null;
+  outcome?: LoopOutcome | null;
+  loopStage?: LoopStage | null;
+  approval?: PublicApprovalCard | null;
+  lastDecision?: PublicLoopDecision | null;
 };
 
 /** A channel plus the last thing said in it, which is what the roster renders. */

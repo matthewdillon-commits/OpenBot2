@@ -7,6 +7,7 @@ import { channelListQueryOptions } from "@/lib/channels/queries";
 import { useStartChannel } from "@/lib/channels/start";
 import { appConfig } from "@/lib/generated/application-config";
 import { coworkerDisplayName, pickOrchestrator } from "@/lib/orchestrator";
+import { loopStageLabel } from "@/lib/channels/loop";
 
 export const Route = createFileRoute("/_authed/_app/")({
   component: RouteComponent,
@@ -129,6 +130,11 @@ function RouteComponent() {
                   </div>
                   <div className="flex h-4 items-center gap-1.5 text-[12px] leading-4 text-muted-foreground">
                     <span className="shrink-0">{goal.goalStatus}</span>
+                    {loopStageLabel(goal.loopStage) ? (
+                      <span className="shrink-0 text-muted-foreground/70">
+                        {loopStageLabel(goal.loopStage)}
+                      </span>
+                    ) : null}
                     <span className="min-w-0 truncate">
                       {goal.lastAction ?? goal.lastMessage}
                     </span>

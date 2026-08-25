@@ -35,6 +35,7 @@ import type {
 } from "./thread";
 import { waitForThreadIdle } from "./thread";
 import { extractCrmRecordIds } from "./outcome";
+import { APPROVAL_WAIT_MARKER } from "../loop/types";
 import {
   gateUserOAuthTools,
   serverSideToolsOnly,
@@ -82,6 +83,11 @@ export type UnattendedRunDeps = {
   userOAuth?: UserOAuthLookup;
   /** What built-in Bots are told about the computer. Absent means this run has none. */
   computerGuidance?: string;
+  /**
+   * Phase 5 loop on this goal, so keep / revise / revert and the last
+   * outcome are visible on the next unattended turn.
+   */
+  goalLoopGuidance?: string;
   /**
    * Test seam. Production builds the coworker through `buildAgents` and calls `runAgent`.
    */
@@ -140,7 +146,11 @@ function observeServerTools(tools: GrantedTool[]): {
         const result = await tool.execute(args);
         const text = typeof result === "string" ? result : "";
         if (text) texts.push(text);
-        if (text && !text.includes(REFUSAL_MARKER)) {
+        if (
+          text &&
+          !text.includes(REFUSAL_MARKER) &&
+          !text.startsWith(APPROVAL_WAIT_MARKER)
+        ) {
           toolSuccessCount += 1;
         }
         return result;
@@ -316,6 +326,15 @@ export async function startUnattendedRun(input: {
   }
 
   const runMessages: UnattendedMessage[] = [
+    ...(input.deps.goalLoopGuidance
+      ? [
+          {
+            id: newMessageId("loop"),
+            role: "system" as const,
+            content: input.deps.goalLoopGuidance,
+          },
+        ]
+      : []),
     ...(input.skillInstructions ?? []).map((instruction) => ({
       id: newMessageId("skill"),
       role: "system" as const,

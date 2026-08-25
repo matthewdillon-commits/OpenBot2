@@ -9,6 +9,7 @@ import {
 } from "../computer/policy";
 import type { Database } from "../db/client";
 import { agents } from "../db/schema";
+import type { HighRiskWait } from "../loop/wait";
 import { orgIdOf } from "../orgs/constants";
 import { REFUSAL_MARKER } from "../plugins/tools";
 import { deliverSend } from "./deliver";
@@ -92,8 +93,10 @@ export function createCrmGateway(options: {
   database: Database;
   auditStore: AuditStore;
   policy: (orgId: string) => ActionPolicy | undefined;
+  /** After policy permits a CRM write, wait as an approval card. Absent, writes still run. */
+  highRiskWait?: HighRiskWait;
 }): CrmGateway {
-  const { store, database, auditStore, policy } = options;
+  const { store, database, auditStore, policy, highRiskWait } = options;
 
   const decide = async (input: {
     botId: string;
@@ -102,6 +105,7 @@ export function createCrmGateway(options: {
     kind: CrmKind;
     action: "read" | "write";
     targetId?: string;
+    fields?: Record<string, unknown>;
   }): Promise<
     | { ok: false; refused: string }
     | {
@@ -112,14 +116,39 @@ export function createCrmGateway(options: {
       }
   > => {
     const orgId = orgIdOf(input.actor);
-    const verdict = evaluateActionPolicy(
-      policy(orgId),
-      policyContext({
-        tool: input.tool,
+    const context = policyContext({
+      tool: input.tool,
+      botId: input.botId,
+      actorId: input.actor.id,
+    });
+    const verdict = evaluateActionPolicy(policy(orgId), context);
+
+    if (!verdict.forward) {
+      await writeAudit(auditStore, {
+        actor: input.actor,
         botId: input.botId,
-        actorId: input.actor.id,
-      }),
-    );
+        tool: input.tool,
+        kind: input.kind,
+        action: input.action,
+        targetId: input.targetId,
+        verdict,
+        orgId,
+      });
+      return { ok: false, refused: `${REFUSAL_MARKER} ${verdict.reason}` };
+    }
+
+    if (input.action === "write" && highRiskWait) {
+      const waited = await highRiskWait({
+        context,
+        args: {
+          kind: input.kind,
+          ...(input.fields ?? {}),
+        },
+      });
+      if (waited) {
+        return { ok: false, refused: waited };
+      }
+    }
 
     await writeAudit(auditStore, {
       actor: input.actor,
@@ -131,10 +160,6 @@ export function createCrmGateway(options: {
       verdict,
       orgId,
     });
-
-    if (!verdict.forward) {
-      return { ok: false, refused: `${REFUSAL_MARKER} ${verdict.reason}` };
-    }
 
     return {
       ok: true,
@@ -194,6 +219,7 @@ export function createCrmGateway(options: {
         tool: CRM_CREATE_TOOL,
         kind: input.kind,
         action: "write",
+        fields: input.fields,
       });
       if (!decision.ok) return decision.refused;
 
@@ -244,6 +270,7 @@ export function createCrmGateway(options: {
         kind: input.kind,
         action: "write",
         targetId: id,
+        fields: { id, ...input.fields },
       });
       if (!decision.ok) return decision.refused;
 
@@ -278,6 +305,7 @@ export function createCrmGateway(options: {
         tool: CRM_SEND_TOOL,
         kind: "send",
         action: "write",
+        fields: input.fields,
       });
       if (!decision.ok) return decision.refused;
 

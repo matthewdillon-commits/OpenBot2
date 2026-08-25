@@ -31,6 +31,12 @@ import { createDatabase, type Database } from "../db/client";
 import { users } from "../db/schema";
 import { createIntelligenceClient } from "../intelligence-client";
 import { createKnowledgeSearch } from "../knowledge/search";
+import {
+  createGoalLoopStore,
+  createHighRiskWait,
+  orchestratorContextFromLoop,
+  recordUnknownOutcomeIfAbsent,
+} from "../loop";
 import { orgIdOf } from "../orgs/constants";
 import { createOrganizationStore } from "../orgs/store";
 import { createPluginStore } from "../plugins/store";
@@ -92,17 +98,24 @@ export async function createUnattendedWorkerRuntime(
   const jobStore = createJobStore(database);
   const triggerStore = createJobTriggerStore(database);
   const auditStore = createAuditStore(database);
+  const loopStore = createGoalLoopStore(database);
   const policyStore = createPolicyStore(
     config.computer?.policy ?? DEFAULT_ACTION_POLICY,
     database,
   );
   await policyStore.load();
+  const highRiskWait = createHighRiskWait({
+    loopStore,
+    jobStore,
+    auditStore,
+  });
   const crmStore = createCrmStore(database);
   const crmGateway = createCrmGateway({
     store: crmStore,
     database,
     auditStore,
     policy: (orgId) => policyStore.get(orgId),
+    highRiskWait,
   });
   const pluginStore = createPluginStore({
     database,
@@ -110,6 +123,7 @@ export async function createUnattendedWorkerRuntime(
     credentials: credentialStore,
     encryptionKey: config.keyEncryptionKey,
     policy: (orgId) => policyStore.get(orgId),
+    highRiskWait,
   });
   const knowledgeSearch = createKnowledgeSearch(database);
   const webSearch = config.tavilyApiKey
@@ -129,6 +143,7 @@ export async function createUnattendedWorkerRuntime(
         ...(computerProvider.isolation === "shared"
           ? { sharedClaim: createSharedComputerClaimStore(database) }
           : {}),
+        highRiskWait,
       })
     : undefined;
   const loadToolsForActor = createLoadToolsForActor({
@@ -222,6 +237,7 @@ export async function createUnattendedWorkerRuntime(
       return;
     }
 
+    const loop = await loopStore.get(job.orgId, job.channelId);
     const result = await startUnattendedRun({
       actor,
       orgId: job.orgId,
@@ -280,6 +296,7 @@ export async function createUnattendedWorkerRuntime(
           config.computer && isBrowserEnabled(policyStore.get(job.orgId))
             ? COMPUTER_GUIDANCE
             : undefined,
+        goalLoopGuidance: orchestratorContextFromLoop(loop) || undefined,
       },
     });
 
@@ -319,6 +336,12 @@ export async function createUnattendedWorkerRuntime(
         intelligenceUser: intelligenceUserForActor(actor),
       },
     }).catch(() => undefined);
+    await recordUnknownOutcomeIfAbsent({
+      loopStore,
+      orgId: job.orgId,
+      goalId: job.channelId,
+      jobId: job.id,
+    });
   }
 
   return {

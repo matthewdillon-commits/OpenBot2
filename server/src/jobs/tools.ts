@@ -36,6 +36,7 @@ import {
 } from "./specialist";
 import { startSpecialistTool } from "./specialist-tool";
 import { agentIsOrchestrator } from "../orchestrator";
+import { currentGoalActionScope, runInGoalActionScope } from "../loop/scope";
 
 export type UserOAuthLookup = {
   hasConnection: (input: {
@@ -109,6 +110,66 @@ export async function gateUserOAuthTools(
       };
     }),
   );
+}
+
+function asArgs(value: unknown): Record<string, unknown> {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return {};
+}
+
+/**
+ * Bind a turn's tools to this goal so a high-risk permit can wait on the
+ * channel rather than acting with no card. Nested ALS (keep carrying the
+ * action out) is left alone.
+ */
+function wrapGoalScope(
+  tools: GrantedTool[],
+  input: {
+    orgId: string;
+    actorId: string;
+    botId: string;
+    runContext?: ToolRunContext;
+    jobStore?: JobStore;
+  },
+): GrantedTool[] {
+  if (!input.runContext) return tools;
+  const { channelId, threadId, goalId } = input.runContext;
+  return tools.map((tool) => ({
+    ...tool,
+    execute: async (args) => {
+      const parent = currentGoalActionScope();
+      if (parent) return tool.execute(args);
+      let jobId: string | undefined;
+      if (input.jobStore) {
+        try {
+          const running = await input.jobStore.listForChannel(
+            input.orgId,
+            channelId,
+            5,
+          );
+          jobId = running.find((job) => job.status === "running")?.id;
+        } catch {
+          jobId = undefined;
+        }
+      }
+      return runInGoalActionScope(
+        {
+          orgId: input.orgId,
+          channelId,
+          goalId,
+          threadId,
+          actorId: input.actorId,
+          botId: input.botId,
+          toolName: tool.name,
+          args: asArgs(args),
+          ...(jobId ? { jobId } : {}),
+        },
+        () => tool.execute(args),
+      );
+    },
+  }));
 }
 
 /**
@@ -223,10 +284,17 @@ export function createLoadToolsForActor(deps: LoadToolsForActorDeps) {
         );
       }
       const combined = extra.length === 0 ? granted : [...granted, ...extra];
-      return gateUserOAuthTools(
+      const gated = await gateUserOAuthTools(
         combined,
         { id: actorId, orgId: scoped },
         deps.userOAuth,
       );
+      return wrapGoalScope(gated, {
+        orgId: scoped,
+        actorId,
+        botId,
+        runContext,
+        jobStore: deps.jobStore,
+      });
     };
 }

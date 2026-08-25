@@ -18,6 +18,7 @@ import {
   pluginGrants,
   skills,
 } from "../db/schema";
+import type { HighRiskWait } from "../loop/wait";
 import {
   orgIdOf,
   scopedResourceId,
@@ -34,6 +35,7 @@ import {
   CatalogueEntryUnknownError,
   CustomServerRefusedError,
   PluginRefusedError,
+  PluginWaitingError,
 } from "./errors";
 import { callTool as callRemoteTool, listTools, McpServerError } from "./mcp";
 
@@ -41,6 +43,7 @@ export {
   CatalogueEntryUnknownError,
   CustomServerRefusedError,
   PluginRefusedError,
+  PluginWaitingError,
 } from "./errors";
 
 /**
@@ -151,10 +154,13 @@ export type PluginStoreOptions = {
   encryptionKey: string;
   /** Read at call time, never captured, so a policy changed a moment ago applies to this call. */
   policy: (orgId?: string) => ActionPolicy;
+  /** After policy permits an MCP write, wait as an approval card. Absent, writes still run. */
+  highRiskWait?: HighRiskWait;
 };
 
 export function createPluginStore(options: PluginStoreOptions) {
-  const { database, auditStore, credentials, encryptionKey } = options;
+  const { database, auditStore, credentials, encryptionKey, highRiskWait } =
+    options;
 
   const scope = (orgId?: string) => orgIdOf({ orgId });
 
@@ -932,8 +938,42 @@ export function createPluginStore(options: PluginStoreOptions) {
 
       const verdict = evaluateActionPolicy(options.policy(orgId), context);
 
+      if (!verdict.forward) {
+        await recordAuditEvent(auditStore, {
+          eventType: "mcp.call_rejected",
+          targetType: "mcp_tool",
+          targetId: input.ref,
+          orgId,
+          payload: {
+            actor: input.actorId,
+            bot: input.botId,
+            server: serverId,
+            tool: toolName,
+            effect,
+            decision: {
+              allowed: verdict.allowed,
+              mode: verdict.mode,
+              rule: verdict.matched,
+              source: verdict.source,
+              carriedOut: false,
+            },
+          },
+        });
+        throw new PluginRefusedError(verdict.reason, verdict.matched);
+      }
+
+      if (highRiskWait) {
+        const waited = await highRiskWait({
+          context,
+          args,
+        });
+        if (waited) {
+          throw new PluginWaitingError(waited);
+        }
+      }
+
       await recordAuditEvent(auditStore, {
-        eventType: verdict.forward ? "mcp.call_succeeded" : "mcp.call_rejected",
+        eventType: "mcp.call_succeeded",
         targetType: "mcp_tool",
         targetId: input.ref,
         orgId,
@@ -948,14 +988,10 @@ export function createPluginStore(options: PluginStoreOptions) {
             mode: verdict.mode,
             rule: verdict.matched,
             source: verdict.source,
-            carriedOut: verdict.forward,
+            carriedOut: true,
           },
         },
       });
-
-      if (!verdict.forward) {
-        throw new PluginRefusedError(verdict.reason, verdict.matched);
-      }
 
       const token = await tokenFor(row.credentialId, orgId);
       const result = await callRemoteTool(

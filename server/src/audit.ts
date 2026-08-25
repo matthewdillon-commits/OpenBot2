@@ -241,6 +241,13 @@ export const auditEventTypes = [
   "job.succeeded",
   "job.failed",
   "job.refused",
+  /**
+   * Phase 5 on the same goal: a high-risk action waited as an approval card,
+   * the owner answered keep | revise | revert, or an outcome was recorded.
+   */
+  "goal.approval_opened",
+  "goal.decision_recorded",
+  "goal.outcome_recorded",
 ] as const;
 
 export type AuditEventType = (typeof auditEventTypes)[number];

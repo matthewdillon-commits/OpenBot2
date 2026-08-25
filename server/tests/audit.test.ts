@@ -55,6 +55,9 @@ describe("audit payload redaction", () => {
         "job.succeeded",
         "job.failed",
         "job.refused",
+        "goal.approval_opened",
+        "goal.decision_recorded",
+        "goal.outcome_recorded",
       ]),
     );
   });

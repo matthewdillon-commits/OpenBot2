@@ -45,6 +45,11 @@ import { createJobRoutes } from "./jobs/routes";
 import { createRoomRoutes } from "./jobs/room-routes";
 import type { JobStore } from "./jobs/store";
 import type { JobTriggerStore } from "./jobs/triggers";
+import {
+  createGoalLoopRoutes,
+  type ExecutePendingAction,
+  type GoalLoopStore,
+} from "./loop";
 import { canSeeTheWork } from "./orchestrator";
 import { LOCAL_ORGANIZATION_ID, orgIdOf } from "./orgs/constants";
 import { createOrganizationRoutes } from "./orgs/routes";
@@ -198,6 +203,15 @@ export function createApp(
    * wired the table should not pretend it can.
    */
   jobTriggerStore?: JobTriggerStore,
+  /**
+   * Phase 5 loop on the existing goal/channel. Absent leaves keep/revise/revert
+   * unmounted: the card lives on the goal, and a deployment that has not wired
+   * the column should not pretend it can.
+   */
+  goalLoop?: {
+    store: GoalLoopStore;
+    executePending?: ExecutePendingAction;
+  },
 ) {
   const app = new Hono<{ Variables: AppVariables }>();
 
@@ -829,6 +843,18 @@ export function createApp(
       "/api/channels",
       createChannelRoutes(channelStore, requireUser, channelEvents),
     );
+    if (goalLoop) {
+      app.route(
+        "/api/channels",
+        createGoalLoopRoutes({
+          requireUser,
+          channelStore,
+          loopStore: goalLoop.store,
+          executePending: goalLoop.executePending,
+          auditStore,
+        }),
+      );
+    }
   }
 
   if (componentStore) {
