@@ -1,3 +1,4 @@
+import "./compat/eventsource";
 import { serve } from "bun";
 import { COMPUTER_GUIDANCE } from "../../shared/bot-prompt";
 import { mintRunAssertion } from "./agents/callback-token";

@@ -2,20 +2,20 @@
  * Loaded before any test file, to make module loading deterministic.
  *
  * Deep inside the runtime's dependencies, `@modelcontextprotocol/sdk`
- * does `require("eventsource")` from CommonJS, and eventsource ships as ESM only. Bun permits that
- * only when the module has already been evaluated as ESM by something earlier in the process, so
- * whether it works depends on the order the test files happen to be walked, an order that changes
- * whenever a test file is added or renamed.
+ * does `require("eventsource")` from CommonJS. eventsource@3 ships dual ESM/CJS, but its
+ * `exports.bun` condition pointed Bun's `require()` at the ESM build, so the throw was
+ * `require() async module` rather than a missing package. Whether a file imported depended
+ * on the order the suite happened to be walked, an order that changes whenever a test file
+ * is added or renamed.
  *
- * The failure is not a failing test. The file throws while being imported, so its tests are never
- * registered and never reported.
+ * The failure is not a failing test. The file throws while being imported, so its tests are
+ * never registered and never reported.
  *
- * Importing it here evaluates it as ESM once, before anything requires it, so the order no longer
- * decides the outcome. `eventsource` is declared as a dev dependency of this package for the same
- * reason; test determinism depends on it.
- *
- * This compatibility shim is narrow enough to delete when the SDK ships an ESM-safe require or Bun
- * handles it.
+ * Production uses the same evaluation (`server/src/compat/eventsource.ts` via `--preload`
+ * and a first import) plus a patched `eventsource` that gives `require()` the CJS build.
+ * This file stays so `bun test` does not depend on that patch applying before the first
+ * test file is walked. `eventsource` is a production dependency of this package for the
+ * same reason.
  */
 
 import "eventsource";

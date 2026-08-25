@@ -1,5 +1,9 @@
 #!/command/with-contenv sh
 # The API, and the app it serves. Started after the browser so a Bot's first action does not race a
 # computer that is still coming up.
+#
+# Same eventsource preload as the worker: the API also imports `@copilotkit/runtime` →
+# `@ag-ui/mcp-apps-middleware`. The import order often wins here and the process still
+# listens, but a CJS require of ESM eventsource is not unique to the worker.
 cd /app/server
-exec s6-setuidgid pwuser /usr/local/bin/bun src/index.ts
+exec s6-setuidgid pwuser /usr/local/bin/bun --preload /app/server/src/compat/eventsource.ts src/index.ts

@@ -3,5 +3,9 @@
 #
 # `with-contenv` is not decoration. Without it s6 starts a service with none of the container's
 # environment, and the failure is a config error naming a variable that is plainly set.
+#
+# `--preload` is the production copy of the test eventsource shim. This graph loads
+# `@ag-ui/mcp-apps-middleware`, which CommonJS-requires ESM eventsource under Bun 1.3 and
+# otherwise exits before a queued job can be claimed.
 cd /app/worker
-exec s6-setuidgid pwuser /usr/local/bin/bun src/index.ts
+exec s6-setuidgid pwuser /usr/local/bin/bun --preload /app/server/src/compat/eventsource.ts src/index.ts

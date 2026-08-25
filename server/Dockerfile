@@ -16,6 +16,7 @@ COPY package.json bun.lock ./
 # without it, in a stack trace that names esbuild rather than a missing file.
 COPY tsconfig.base.json tsconfig.base.json
 COPY bunfig.toml bunfig.toml
+COPY patches patches
 COPY app/package.json app/package.json
 COPY server/package.json server/package.json
 COPY worker/package.json worker/package.json
@@ -69,4 +70,4 @@ WORKDIR /app/server
 
 # Migrations are a release step, not a start step: two replicas starting together would race, and a
 # failed migration should stop a deploy rather than leave a half-migrated database serving.
-CMD ["bun", "src/index.ts"]
+CMD ["bun", "--preload", "./src/compat/eventsource.ts", "src/index.ts"]

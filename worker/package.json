@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc --noEmit",
-    "dev": "bun --watch src/index.ts",
+    "dev": "bun --watch --preload ../server/src/compat/eventsource.ts src/index.ts",
     "typecheck": "tsc --noEmit"
   }
 }

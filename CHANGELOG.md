@@ -10,6 +10,7 @@ Newest first. `Unreleased` is what is on `main` and not yet tagged.
 
 ### Fixes
 
+- **Unattended jobs stayed queued because the worker died on boot.** Bun 1.3 `require()`d `eventsource`'s ESM build (via `@ag-ui/mcp-apps-middleware` → MCP SSE client). The API usually still listened; the computer was fine; queued rows never got `startedAt`. The worker — and the API, which loads the same graph — now preload eventsource and install a patched export map so `require()` gets the CJS build.
 - **Email/password signup could not create a user.** Every request binds Postgres RLS, including `/api/auth/sign-up/email`. The Bun SQL wrapper ran Better Auth's `INSERT ... RETURNING` twice with the same id, so Postgres rejected the second as `users_pkey` (and the same for accounts and sessions). A new address now creates the user, credential account, and session.
 
 ### Features
