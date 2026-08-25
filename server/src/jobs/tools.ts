@@ -150,10 +150,7 @@ export function createLoadToolsForActor(deps: LoadToolsForActorDeps) {
         publicOrigin: deps.publicOrigin,
       }),
     );
-    if (
-      deps.computerGateway &&
-      isBrowserEnabled(deps.policyFor(scoped))
-    ) {
+    if (deps.computerGateway && isBrowserEnabled(deps.policyFor(scoped))) {
       extra.push(
         ...computerTools({
           computer: deps.computerGateway,

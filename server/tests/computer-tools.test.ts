@@ -34,7 +34,12 @@ function fakeComputer(overrides: Partial<ComputerGateway> = {}) {
     },
     read: async (_botId, orgId) => {
       calls.push({ method: "read", orgId, args: [] });
-      return { url: "https://example.com", title: "Example", text: "", truncated: false };
+      return {
+        url: "https://example.com",
+        title: "Example",
+        text: "",
+        truncated: false,
+      };
     },
     snapshot: async (_botId, orgId) => {
       calls.push({ method: "snapshot", orgId, args: [] });
@@ -86,11 +91,19 @@ function fakeComputer(overrides: Partial<ComputerGateway> = {}) {
       };
     },
     requestHelp: async (_botId, action, reason) => {
-      calls.push({ method: "requestHelp", orgId: action.orgId, args: [reason] });
+      calls.push({
+        method: "requestHelp",
+        orgId: action.orgId,
+        args: [reason],
+      });
       return { holder: "bot" as const, since: "", requested: true };
     },
     requestSecret: async (_botId, action, input) => {
-      calls.push({ method: "requestSecret", orgId: action.orgId, args: [input] });
+      calls.push({
+        method: "requestSecret",
+        orgId: action.orgId,
+        args: [input],
+      });
       return {
         holder: "bot" as const,
         since: "",
@@ -112,7 +125,11 @@ function byName(tools: ReturnType<typeof computerTools>, name: string) {
 describe("server computer tools", () => {
   test("offers the same computer_* names the surface used to execute", () => {
     const { computer } = fakeComputer();
-    expect(computerTools({ computer, botId: "bot-1", actor }).map((tool) => tool.name)).toEqual([
+    expect(
+      computerTools({ computer, botId: "bot-1", actor }).map(
+        (tool) => tool.name,
+      ),
+    ).toEqual([
       "computer_navigate",
       "computer_read",
       "computer_snapshot",

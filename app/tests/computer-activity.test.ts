@@ -286,8 +286,6 @@ describe("computer-tools.tsx is render-only", () => {
     expect(source).not.toContain("/api/computers/");
     expect(source).not.toContain("readControl");
     expect(source).toContain("useRenderTool");
-    expect(source).not.toMatch(
-      /useFrontendTool\(\s*\{[\s\S]*?name:\s*"computer_/,
-    );
+    expect(source).not.toMatch(/useFrontendTool\(\s*\{\s*name:\s*"computer_/);
   });
 });

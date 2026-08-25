@@ -71,7 +71,9 @@ const listParameters = z.object({
 });
 
 const pathParameters = z.object({
-  path: z.string().describe("Path relative to your workspace, such as notes.md"),
+  path: z
+    .string()
+    .describe("Path relative to your workspace, such as notes.md"),
 });
 
 const writeParameters = z.object({
@@ -179,8 +181,7 @@ function recover(error: unknown): string {
       humanHasControl: true,
     });
   }
-  const reason =
-    error instanceof Error ? error.message : "That did not work.";
+  const reason = error instanceof Error ? error.message : "That did not work.";
   return JSON.stringify({ ok: false, reason });
 }
 
