@@ -51,65 +51,105 @@ This is not “let the agents loose.” It is “let the agents propose and act 
 a policy the company can read, and keep the outcome so the next proposal is
 better.”
 
-### Who talks to whom
+### UX contract
 
-The person talks to **LimitlessAI** — one orchestrator, the company. The unit
-they see is a **goal**, not a sidebar of five Bots.
+**Home = goals + one brain. Rooms = how the system works. Approval cards =
+how the company keeps the wheel. Do not invert that.**
 
-Specialists still exist. They are workers underneath that manager, not the
-first screen:
+This section is the locked customer surface. How we climb to it is
+[roadmap.md](roadmap.md). Nothing here is in the running software unless
+Part B says so.
 
-| Family | Job |
-| --- | --- |
-| Customer | The people already in the book: questions, renewals, saves. |
-| Sales | Pipeline, outreach, the next conversation worth having. |
-| Website | The site as a working surface: pages, forms, what a visitor sees. |
-| Marketing | Campaigns, lists, the message and whether it moved anything. |
-| Operations | The work of running the company that is not a customer conversation. |
+#### Customer home
 
-They message each other in rooms. A parent can start a sub-agent, including
-one with a computer. That room is for the system and for an operator who
-wants to watch. A typical business owner should not have to sit in the
-multi-agent chat.
+First screen after login: Composer to LimitlessAI at the top. Under it,
+Goals — not chats, not agents. Each row: name, status, last action, time.
+Empty state: “What should the business get done?” Owner talks only to
+LimitlessAI. Opening a goal opens that goal’s thread with the orchestrator,
+not a worker.
 
-Two doors: the customer talks to LimitlessAI; an operator can open the room.
+Phase 1 statuses only: Active | Needs you | Done. Last action is one
+sentence. No loop-stage chrome until Phase 5.
 
-Later verticals sit on the same brain: mortgage, home services, commerce. They
-are playbooks and tools on the shared context, not a second product.
+#### Operator door
 
-The product is one business context and one loop under one manager. A room of
-coworkers is how specialists work, not the default door.
+Do NOT put Sales / Website / Marketing / Customer / Ops in the owner nav.
+The room is behind the goal: a secondary control “See the work”
+(role-gated: operator / admin). That opens the A2A room for THIS goal:
+orchestrator + specialists it spawned, computers, traces. Cmd-K “Rooms” is
+fine for power users. First-run never tours the roster.
+
+#### Goal object
+
+Phase 1 skinny: id, name (plain language), status, last_action,
+last_action_at, created_by. One Intelligence thread per goal, shared with
+the owner’s LimitlessAI chat.
+
+Phase 5 adds on the SAME object (not a new surface): expected_impact,
+outcome (worked / didn’t / unknown), approval card (rationale, before/after,
+rollback), keep | revise | revert.
+
+#### What a typical owner does not see
+
+Do not show a typical owner:
+
+- agent roster or family names as nav
+- empty specialist channels
+- live computer / Activity / tool traces
+- MCP, credentials, policy, CEL, audit
+- model names
+- platform admin
+- OpenBot leftovers (Knowledge, Risk Analyst, General Assistant) as
+  first-class coworkers
+- A2A rooms unless they opened “See the work.”
+
+The owner talks only to LimitlessAI. Specialists are workers the
+orchestrator starts on demand — skills/playbooks, a sub-agent, members of
+an A2A room. They are not the product and not items in the owner nav.
+
+Later verticals sit on the same brain: mortgage, home services, commerce.
+They are playbooks and tools on the shared context, not a second product.
 
 ### Architecture (this stack)
 
 Shaped like a Grok Bot: a manager the person talks to, workers underneath, a
 shared context, tools that actually act. Built on this tree, not on a vendor
-runtime as the product.
+runtime as the product. Do not stand up named worker families as the
+product.
 
-- **Orchestrator.** LimitlessAI — the coworker the person addresses. It
-  prioritizes and delegates. It is the customer-facing default. It does not
-  replace the workers.
-- **Specialized workers.** The families above, on demand: skills and
-  playbooks, a sub-agent a parent starts, or members of an A2A room. Not a
-  forced five-bot fleet in the sidebar. Each is an AG-UI agent when it
-  exists — packaged built-in or a remote endpoint you register.
+- **Orchestrator.** LimitlessAI — the one brain the owner addresses. It
+  prioritizes and delegates. Opening a goal is a thread with this
+  orchestrator, not a worker.
+- **Goals.** The unit the owner sees. Composer + goal list on home. One
+  Intelligence thread per goal, shared with the owner’s LimitlessAI chat.
+- **Specialists on demand.** Skills/playbooks, a sub-agent a parent starts
+  (including one with a computer), or members of an A2A room for that goal.
+  Not a five-bot sidebar. Not Sales / Website / Marketing / Customer / Ops
+  in the owner nav.
+- **Rooms.** How the system works. Behind “See the work” on the goal
+  (operator / admin), or Cmd-K “Rooms” for power users. First-run never
+  tours the roster.
 - **Shared business context.** Org CRM, knowledge, Intelligence threads,
   campaign and outcome history. The same customer fact is visible to every
-  agent in the org. A Sales worker and a Customer worker must not hold two
-  different truths about one person.
+  agent in the org. Two specialists must not hold two different truths
+  about one person.
 - **Tool router and gateway.** Every acting call: resolve → policy → audit →
   act (or refuse and name the rule). Computer per org×bot when the supervisor
   is on. The gateway is the only way a worker reaches a computer, a file, CRM,
-  MCP, or the public web.
+  MCP, or the public web. A typical owner does not see MCP, credentials,
+  policy, CEL, or the audit trail.
 - **Swappable models.** OpenAI, Anthropic, Google, xAI, or any OpenAI-compatible
-  host via `OPENAI_BASE_URL`. Do not lock the product to one vendor.
+  host via `OPENAI_BASE_URL`. Do not lock the product to one vendor. A typical
+  owner does not see model names.
 - **Conversation layer.** CopilotKit Runtime + Intelligence stay the turn and
   the thread. They are not the product name, the loop, or the moat.
-- **Execution.** APIs, MCP/Composio, browser/computer, files.
+- **Execution.** APIs, MCP/Composio, browser/computer, files. Live computer /
+  Activity / tool traces are the operator door, not home.
 - **Memory.** Org profile, brand, docs, CRM, and long-term state in
   Intelligence + Postgres.
 - **Permissions, observability, vertical playbooks.** Who may act, what was
-  done, and the industry-shaped default for how to do it.
+  done, and the industry-shaped default for how to do it. Platform admin is
+  not an owner surface.
 
 ### What is defensible
 
@@ -249,13 +289,12 @@ Three things people will assume from Part A, none of which this tree does:
 2. **Self-serve SaaS.** No RLS, no Stripe, no seat quota, no invite email, no
    per-org SSO, no spend cap, no multi-replica story beyond “Postgres is the
    shared state.” `/platform` is sales-led provisioning, not a checkout.
-3. **The self-improving loop.** Observe / understand / prioritize / act can be
-   *performed by a person talking to a Bot*. Measure and improve are not
-   product surfaces. There are no outcome events. The customer-facing
-   orchestrator is not in the package: today’s roster is General Assistant,
-   Knowledge, and an optional Risk Analyst. A person still picks a coworker.
-   There is no single company door, and no operator room of specialists
-   underneath it.
+3. **The UX contract and the loop.** Home is not Composer + Goals. A person
+   still picks a coworker from a roster (General Assistant, Knowledge, an
+   optional Risk Analyst). There is no goal object, no skinny status + last
+   action, no “See the work,” no approval cards. Observe / understand /
+   prioritize / act can be *performed by a person talking to a Bot*. Measure
+   and improve are not product surfaces. There are no outcome events.
 
 When a pull request claims one of those, it is done only when Part B of this
 file can say so with a file citation. Until then the honest sentence is the
