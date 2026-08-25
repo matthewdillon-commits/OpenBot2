@@ -322,6 +322,62 @@ describe("CRM against a real store", () => {
     expect(linked?.companyId).toBe(created?.companyId);
   });
 
+  test("a second create of the same person at that company updates the row", async () => {
+    if (!databaseUrl) return;
+    await ensureLocalOrganization(database);
+    const actor = await createUser();
+    const botId = await createAgent(actor, "Risk Analyst");
+    const { auditStore } = recorder();
+    const gateway = createCrmGateway({
+      store,
+      database,
+      auditStore,
+      policy: () => PERMISSIVE,
+    });
+    const orgId = actor.orgId ?? LOCAL_ORGANIZATION_ID;
+
+    const first = await gateway.create({
+      botId,
+      actor,
+      kind: "person",
+      fields: {
+        name: "Sadiq Boodoo",
+        jobTitle: "Principal Broker & CEO",
+        location: "Ontario",
+        companyName: "Approved Financial Services",
+      },
+    });
+    expect(first).toContain("Created person");
+    const match = first.match(
+      /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i,
+    );
+    expect(match?.[0]).toBeTruthy();
+    if (match?.[0]) createdPersonIds.push(match[0]);
+
+    const second = await gateway.create({
+      botId,
+      actor,
+      kind: "person",
+      fields: {
+        name: "Sadiq Boodoo",
+        jobTitle: "President & CEO",
+        location: "Ontario",
+        companyName: "Approved Financial Services",
+      },
+    });
+    expect(second).toContain("Updated person");
+    expect(second).toContain("President & CEO");
+
+    const listed = await store.listPeople({ orgId, search: "Sadiq Boodoo" });
+    const exact = listed.items.filter(
+      (row) => row.name.toLowerCase() === "sadiq boodoo",
+    );
+    expect(exact).toHaveLength(1);
+    expect(exact[0]?.jobTitle).toBe("President & CEO");
+    expect(exact[0]?.company?.name).toBe("Approved Financial Services");
+    if (exact[0]?.companyId) createdCompanyIds.push(exact[0].companyId);
+  });
+
   test("policy deny writes nothing", async () => {
     if (!databaseUrl) return;
     await ensureLocalOrganization(database);

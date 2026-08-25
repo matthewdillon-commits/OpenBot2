@@ -149,6 +149,7 @@ export function crmTools(options: {
       description:
         "Create a CRM record. Search first (crm_search) so you do not duplicate a person or company that is already there. " +
         "kind=person needs name (emails, phones, job_title, location, notes, stage_key optional). " +
+        "If a person with this email, or the same name at this company, already exists, that row is updated instead of duplicated. " +
         "If they have an employer, pass company_name (and website or domain if you have them) — the company is found or created and linked in this same call; do not only put the employer in notes. " +
         "source=web when this came from research. " +
         "kind=company needs name (domain, website, industry, phone optional). " +

@@ -20,6 +20,7 @@ Newest first. `Unreleased` is what is on `main` and not yet tagged.
 ### CRM
 
 - **A person create can name the employer.** Passing `company_name` finds or creates that company and links it in the same write, so a research add does not leave Company blank. The People list shows job title and location under the name.
+- **A person create does not duplicate.** The same email, or the same name at the same company, updates the existing row — a research add that calls create twice with two titles keeps one person.
 
 ### Multi-tenant organizations
 

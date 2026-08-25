@@ -200,6 +200,20 @@ export function createCrmGateway(options: {
           input.fields,
           decision.createdBy,
         );
+        if (input.kind === "person") {
+          const existing = await existingPerson(store, decision.orgId, fields);
+          if (existing) {
+            const updated = await updateOf(
+              store,
+              decision.orgId,
+              "person",
+              existing.id,
+              fields,
+            );
+            if (!updated) return "No person with that id.";
+            return describeWrite("Updated", "person", updated);
+          }
+        }
         const created = await createOf(
           store,
           decision.orgId,
@@ -463,6 +477,64 @@ async function withLinkedCompany(
   );
   next.companyId = created.id;
   return next;
+}
+
+/**
+ * A person create may be the same human the Bot already wrote.
+ *
+ * Research turns call crm_create twice with slightly different titles; search-then-update is
+ * what we ask the model to do, but the second create still arrives. Match on email, or on the
+ * same name at the same company (or an unlinked row with that name), and update instead.
+ */
+async function existingPerson(
+  store: CrmStore,
+  orgId: string,
+  fields: Record<string, unknown>,
+): Promise<CrmPerson | undefined> {
+  const name = typeof fields.name === "string" ? fields.name.trim() : "";
+  const emails = Array.isArray(fields.emails)
+    ? fields.emails
+        .filter((value): value is string => typeof value === "string")
+        .map((value) => value.trim().toLowerCase())
+        .filter(Boolean)
+    : [];
+  const companyId =
+    typeof fields.companyId === "string" ? fields.companyId.trim() : "";
+
+  const candidates: CrmPerson[] = [];
+  const seen = new Set<string>();
+  async function collect(search: string) {
+    const trimmed = search.trim();
+    if (!trimmed) return;
+    const page = await store.listPeople({ orgId, search: trimmed, limit: 50 });
+    for (const item of page.items) {
+      if (seen.has(item.id)) continue;
+      seen.add(item.id);
+      candidates.push(item);
+    }
+  }
+  if (name) await collect(name);
+  for (const email of emails) await collect(email);
+
+  const byEmail = candidates.find((person) =>
+    person.emails.some((email) => emails.includes(email.toLowerCase())),
+  );
+  if (byEmail) return byEmail;
+
+  if (!name) return undefined;
+  const named = candidates.filter(
+    (person) => person.name.toLowerCase() === name.toLowerCase(),
+  );
+  if (named.length === 0) return undefined;
+
+  if (companyId) {
+    const sameCompany = named.filter((person) => person.companyId === companyId);
+    if (sameCompany[0]) return sameCompany[0];
+  }
+  const unlinked = named.filter((person) => !person.companyId);
+  if (unlinked[0]) return unlinked[0];
+  if (!companyId && named.length === 1) return named[0];
+  return undefined;
 }
 
 async function createOf(

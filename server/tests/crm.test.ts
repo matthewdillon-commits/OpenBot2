@@ -121,12 +121,24 @@ function fakeStore(overrides: Partial<CrmStore> = {}): CrmStore & {
   const sent: CrmSend[] = [];
   const emptyPage = async () => page([]);
   const store: CrmStore = {
-    listPeople: async () => page([]),
+    listPeople: async (query) => {
+      const search = query?.search?.trim().toLowerCase();
+      const items = search
+        ? created.filter(
+            (row) =>
+              row.name.toLowerCase().includes(search) ||
+              (row.jobTitle ?? "").toLowerCase().includes(search) ||
+              row.emails.some((email) => email.toLowerCase().includes(search)),
+          )
+        : created;
+      return page(items);
+    },
     listThreads: async () => page([]),
     getPerson: async () => undefined,
     createPerson: async (_orgId, input, createdBy) => {
       const linked = companies.find((row) => row.id === input.companyId);
       const row = person({
+        id: `11111111-1111-1111-1111-${String(created.length + 1).padStart(12, "0")}`,
         name: input.name,
         emails: input.emails ?? [],
         phones: input.phones ?? [],
@@ -142,7 +154,33 @@ function fakeStore(overrides: Partial<CrmStore> = {}): CrmStore & {
       created.push(row);
       return row;
     },
-    updatePerson: async () => undefined,
+    updatePerson: async (_orgId, id, input) => {
+      const index = created.findIndex((row) => row.id === id);
+      if (index < 0) return undefined;
+      const current = created[index];
+      const companyId =
+        input.companyId !== undefined
+          ? (input.companyId ?? null)
+          : current.companyId;
+      const linked = companyId
+        ? (companies.find((row) => row.id === companyId) ?? current.company)
+        : null;
+      const next = person({
+        ...current,
+        ...(input.name !== undefined ? { name: input.name } : {}),
+        ...(input.emails !== undefined ? { emails: input.emails } : {}),
+        ...(input.phones !== undefined ? { phones: input.phones } : {}),
+        ...(input.jobTitle !== undefined ? { jobTitle: input.jobTitle } : {}),
+        ...(input.location !== undefined ? { location: input.location } : {}),
+        ...(input.notes !== undefined ? { notes: input.notes } : {}),
+        companyId,
+        company: linked
+          ? { id: linked.id, name: linked.name, domain: linked.domain ?? null }
+          : null,
+      });
+      created[index] = next;
+      return next;
+    },
     listCompanies: async (query) => {
       const search = query?.search?.trim().toLowerCase();
       const items = search
@@ -491,6 +529,102 @@ describe("CRM gateway", () => {
     expect(store.companies).toHaveLength(1);
     expect(store.created).toHaveLength(2);
     expect(store.created[1]?.companyId).toBe(store.created[0]?.companyId);
+  });
+
+  test("a second create of the same person at that company updates instead of duplicating", async () => {
+    const store = fakeStore();
+    const { auditStore } = recorder();
+    const gateway = createCrmGateway({
+      store,
+      database: databaseStub,
+      auditStore,
+      policy: () => PERMISSIVE,
+    });
+
+    await gateway.create({
+      botId: "risk",
+      actor: ACTOR,
+      kind: "person",
+      fields: {
+        name: "Sadiq Boodoo",
+        jobTitle: "Principal Broker & CEO",
+        companyName: "Approved Financial Services",
+      },
+    });
+    const answer = await gateway.create({
+      botId: "risk",
+      actor: ACTOR,
+      kind: "person",
+      fields: {
+        name: "Sadiq Boodoo",
+        jobTitle: "President & CEO",
+        companyName: "Approved Financial Services",
+      },
+    });
+
+    expect(store.created).toHaveLength(1);
+    expect(store.created[0]?.jobTitle).toBe("President & CEO");
+    expect(answer).toContain("Updated person");
+    expect(answer).toContain("President & CEO");
+  });
+
+  test("the same email updates even when the name is written differently", async () => {
+    const store = fakeStore();
+    const { auditStore } = recorder();
+    const gateway = createCrmGateway({
+      store,
+      database: databaseStub,
+      auditStore,
+      policy: () => PERMISSIVE,
+    });
+
+    await gateway.create({
+      botId: "risk",
+      actor: ACTOR,
+      kind: "person",
+      fields: { name: "Casey Chen", emails: ["casey@acme.test"] },
+    });
+    await gateway.create({
+      botId: "risk",
+      actor: ACTOR,
+      kind: "person",
+      fields: {
+        name: "Casey C.",
+        emails: ["casey@acme.test"],
+        jobTitle: "Buyer",
+      },
+    });
+
+    expect(store.created).toHaveLength(1);
+    expect(store.created[0]?.name).toBe("Casey C.");
+    expect(store.created[0]?.jobTitle).toBe("Buyer");
+  });
+
+  test("the same name at a different company is a second person", async () => {
+    const store = fakeStore();
+    const { auditStore } = recorder();
+    const gateway = createCrmGateway({
+      store,
+      database: databaseStub,
+      auditStore,
+      policy: () => PERMISSIVE,
+    });
+
+    await gateway.create({
+      botId: "risk",
+      actor: ACTOR,
+      kind: "person",
+      fields: { name: "Jordan Lee", companyName: "Acme Ltd" },
+    });
+    await gateway.create({
+      botId: "risk",
+      actor: ACTOR,
+      kind: "person",
+      fields: { name: "Jordan Lee", companyName: "Globex" },
+    });
+
+    expect(store.created).toHaveLength(2);
+    expect(store.companies).toHaveLength(2);
   });
 
   test("crm_create maps company_name onto the gateway fields", async () => {
