@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
-# Wait for local Postgres, then exec. Used by environment.json terminals.
+# Block until local Postgres accepts connections. Used by run-api and run-worker.
 set -euo pipefail
-cd "$(dirname "$0")/.."
-export PATH="${HOME}/.bun/bin:${PATH}"
-bash scripts/ensure-dev-env.sh
 n=0
 until pg_isready -h localhost -q; do
   n=$((n + 1))
