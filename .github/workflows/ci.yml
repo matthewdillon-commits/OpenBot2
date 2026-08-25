@@ -159,6 +159,13 @@ jobs:
           # queued jobs stay queued.
           docker run --rm --entrypoint /bin/sh openbot:ci -c \
             'cd /app/server && bun -e "const p = await Bun.file(\"node_modules/eventsource/package.json\").json(); if (p.exports[\".\"].bun) throw new Error(\"eventsource still has a bun export condition\"); if (!String(p.exports[\".\"].require).endsWith(\".cjs\")) throw new Error(\"eventsource require is not cjs\"); console.log(\"eventsource require is cjs\");"'
+      - name: Production image includes the worker in the s6 user bundle
+        run: |
+          set -euo pipefail
+          # A worker service directory that is not in user/contents.d is compiled
+          # and then never started. The API still answers /health; jobs stay queued.
+          docker run --rm --entrypoint /bin/sh openbot:ci -c \
+            'test -e /etc/s6-overlay/s6-rc.d/user/contents.d/worker && test -e /etc/s6-overlay/s6-rc.d/user/contents.d/api && test -e /etc/s6-overlay/s6-rc.d/user/contents.d/computer && test -e /etc/s6-overlay/s6-rc.d/user/contents.d/migrate && grep -F -- "--preload /app/server/src/compat/eventsource.ts" /etc/s6-overlay/s6-rc.d/worker/run && grep -F -- "--preload /app/server/src/compat/eventsource.ts" /etc/s6-overlay/s6-rc.d/api/run'
       # Building it says the layers resolve. Running it says the supervision tree comes up and stays
       # up, which is a different claim and the one that has broken before.
       - name: The image boots and serves
@@ -209,6 +216,11 @@ jobs:
           sleep 15
           if docker logs openbot-ci 2>&1 | grep -F 'require() async module'; then
             echo "::error::A bun process crashed requiring ESM eventsource."
+            docker logs openbot-ci
+            exit 1
+          fi
+          if ! docker logs openbot-ci 2>&1 | grep -F 's6-rc: info: service worker: starting'; then
+            echo "::error::s6 never started the worker service; unattended jobs would stay queued."
             docker logs openbot-ci
             exit 1
           fi
