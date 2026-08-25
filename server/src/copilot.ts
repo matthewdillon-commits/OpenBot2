@@ -1,6 +1,9 @@
 import { AbstractAgent, HttpAgent } from "@ag-ui/client";
 import { createOpenAI } from "@ai-sdk/openai";
-import type { BuiltInAgentConfiguration } from "@copilotkit/runtime/v2";
+import type {
+  BuiltInAgentClassicConfig,
+  BuiltInAgentConfiguration,
+} from "@copilotkit/runtime/v2";
 import {
   BuiltInAgent,
   CopilotKitIntelligence,
@@ -124,7 +127,7 @@ export function modelForBuiltInAgent(
   model: RuntimeModel,
   apiKey: string,
   baseURL = process.env.OPENAI_BASE_URL?.trim(),
-): BuiltInAgentConfiguration["model"] {
+): BuiltInAgentClassicConfig["model"] {
   if (model.provider === "openai" && baseURL) {
     return createOpenAI({ apiKey, baseURL }).chat(model.defaultModel);
   }
