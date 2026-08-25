@@ -37,7 +37,6 @@ overlay = [
     "AGENT_TOOL_TOKEN",
     "BETTER_AUTH_SECRET",
     "KEY_ENCRYPTION_KEY",
-    "DATABASE_URL",
 ]
 
 placeholders = {

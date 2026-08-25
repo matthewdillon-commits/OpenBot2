@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# Block until local Postgres accepts connections. Used by run-api and run-worker.
+# Block until the app's Postgres role accepts a TCP login, not merely until
+# the postmaster is up. Cloud Agent terminals can start as soon as pg_isready
+# passes, which is before cloud-start.sh has created the openbot role.
 set -euo pipefail
 n=0
-until pg_isready -h localhost -q; do
+until PGPASSWORD=openbot psql -h localhost -U openbot -d openbot -c 'select 1' >/dev/null 2>&1; do
   n=$((n + 1))
   if [ "$n" -ge 60 ]; then
-    echo "Postgres did not become ready on localhost:5432" >&2
+    echo "Postgres did not accept openbot@localhost/openbot" >&2
     exit 1
   fi
   sleep 1
