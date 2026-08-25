@@ -25,8 +25,9 @@ the container and is deliberately not published: it holds real logins and its on
 process beside it.
 
 **PostgreSQL, if you ask for it.** `EMBEDDED_POSTGRES=on` starts one inside the container, creates
-the database and the `vector` extension the first time, and runs the migrations on every start. It
-listens on loopback only and is never published, so there is no password to manage.
+the database and the `vector` extension the first time. The embedded server listens on loopback only
+and is never published, so there is no password to manage. Migrations run on every start, against
+that database or whatever `DATABASE_URL` names.
 
 Give it a volume at `/var/lib/postgresql/data`. Without one, a redeploy takes the audit trail with
 it, and the audit trail is the product. Platforms that offer no persistent volume are the ones to
@@ -95,12 +96,13 @@ never missing on a laptop. The app no longer depends on any of them, but sign-in
 
 ## Migrations
 
-With `EMBEDDED_POSTGRES=on` they run at start and there is nothing to do. There is exactly one
-process and no deploy pipeline, so the alternative would be a runbook.
+They run at container start, against whatever `DATABASE_URL` names — the embedded database and a
+managed one alike. `drizzle-kit migrate` is idempotent: a second start applies nothing. That is the
+path Railway, Render, Fly, and a single `docker run` all take.
 
-With an external database they are a release step, not a start step. Two replicas starting together
-would race, and a failed migration should stop a deploy rather than leave a half-migrated database
-serving traffic.
+Two replicas starting together would race. This image is meant to run as one replica; if you scale
+past that, run migrate as a release step before the new processes start, and do not let a failed
+migration serve traffic.
 
 ```sh
 docker run --rm --env-file .env openbot \

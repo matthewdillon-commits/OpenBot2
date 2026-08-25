@@ -50,6 +50,7 @@ RUN cd agent-computer && bun install
 
 # A second tree with the build-time dependencies left out, for the runtime stage to take. Vite,
 # biome and the test tooling are a gigabyte that nothing in a running container imports.
+# drizzle-kit stays: migrate.sh runs it against DATABASE_URL before the API starts.
 RUN mkdir -p /prod && cp package.json bun.lock /prod/ \
   && cp -r app/package.json /prod/app-package.json \
   && cd /prod && mkdir -p app server worker \
@@ -98,7 +99,8 @@ WORKDIR /app
 COPY --from=deps /prod/node_modules node_modules
 COPY --from=deps /src/package.json package.json
 COPY --from=deps /src/bun.lock bun.lock
-COPY --from=deps /src/server/node_modules server/node_modules
+# Production workspace links, so `bun x drizzle-kit` in migrate.sh resolves without a network fetch.
+COPY --from=deps /prod/server/node_modules server/node_modules
 COPY --from=deps /src/agent-computer/node_modules agent-computer/node_modules
 
 COPY server server

@@ -177,6 +177,10 @@ Sessions survive and nobody signs in again.
   is unavailable never blocks a sign-in.
 
 ### Fixed
+- **The one-container image skipped migrations against an external database.** `migrate.sh` only ran
+  when `EMBEDDED_POSTGRES=on`, so Railway (and any `DATABASE_URL` pointing at managed Postgres)
+  booted an API that crashed on missing tables. Migrations now run at start whenever `DATABASE_URL`
+  is set. `drizzle-kit` is a runtime dependency so the production image can invoke it.
 - **The one-container image registered a coworker it could not run.** `MANAGED_AGENT_AG_UI_URL`
   defaulted to `localhost:4201` and was required, so Risk Analyst appeared on the roster and every
   conversation with it failed. The URL is optional; the package omits that coworker when it is
