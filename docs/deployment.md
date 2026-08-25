@@ -1,7 +1,11 @@
 # Deployment
 
-OpenBot ships as one container. It carries the app, the API that serves it, and the browser the Bots
-drive, and it can carry its own PostgreSQL as well. It does what it does on a laptop.
+LimitlessAI ships as one container. It carries the app, the API that serves it, and the browser the
+Bots drive, and it can carry its own PostgreSQL as well.
+
+What that image is ready to host — one trusted team versus several customers, and whether a
+coworker keeps working after the tab closes — is in [product.md](product.md). Without the
+supervisor, every Bot shares one Chromium, which is not a boundary between tenants.
 
 ```sh
 docker build -t openbot .

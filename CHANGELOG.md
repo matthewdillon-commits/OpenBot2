@@ -1,12 +1,19 @@
 # Changelog
 
-What changed, for somebody deciding whether to upgrade. Written for the person running OpenBot, not
+What changed, for somebody deciding whether to upgrade. Written for the person running LimitlessAI, not
 for the person who wrote the commit: a line belongs here when a deployment behaves differently
 afterwards, and does not when only the code moved.
 
 Newest first. `Unreleased` is what is on `main` and not yet tagged.
 
 ## Unreleased
+
+### Docs
+
+- **[docs/product.md](docs/product.md) is the LimitlessAI contract.** Part A is the GTM: not a bot builder; one intelligence layer above specialized agents; OBSERVE → UNDERSTAND → PRIORITIZE → ACT → MEASURE → IMPROVE; governed self-improving (see, test, approve, learn); swappable models; CopilotKit is the conversation layer, not the product. Part B is what a deployment does today (turns start in the open app; computer tools need the tab; the worker is idle; orgs are query-scoped, not RLS). Part C is what is not built: unattended runs, self-serve SaaS, the self-improving loop.
+- **[docs/roadmap.md](docs/roadmap.md) is the phase plan.** Unattended runs, then computer-on-the-server, then cron/webhook/inbound email, then orchestrator + workers (reimplement; do not merge PR #11), then measure/improve, then SaaS. Code for those phases is other pull requests.
+- **The README describes that product**, not the CopilotKit OpenBot alpha laptop clone. How-to-run, surfaces, and configuration are unchanged and still accurate. Sign-in copy uses the same tagline. CopilotKit is how a turn runs.
+- **Release images publish to this repository.** `ghcr.io/matthewdillon-commits/openbot2`, not `ghcr.io/copilotkit/openbot`.
 
 ### Chat
 
@@ -92,7 +99,7 @@ Sessions survive and nobody signs in again.
   first connector that writes one.
 - **Releases are cut by a workflow, not by hand.** `Create release PR` bumps the version and promotes
   `## Unreleased` to a numbered section; merging the pull request it opens is what publishes. Merging
-  builds and pushes one image to `ghcr.io/copilotkit/openbot`, signs a build provenance attestation
+  builds and pushes one image to `ghcr.io/matthewdillon-commits/openbot2`, signs a build provenance attestation
   for its digest, tags the commit and creates the GitHub Release with `container-images.json` so a
   deployment can name an exact digest rather than a tag somebody could move. See
   [docs/releasing.md](docs/releasing.md).

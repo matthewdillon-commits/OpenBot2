@@ -1,6 +1,6 @@
 # Configuration
 
-OpenBot is configured with environment variables and a tenant package. The API server validates both at startup.
+LimitlessAI is configured with environment variables and a tenant package. The API server validates both at startup.
 
 ## Environment setup
 
@@ -53,6 +53,9 @@ at `agent-langgraph` on a laptop.
 | `BOT_RESPONSES_API`  | `false`                            | Makes `agent-langgraph` use the OpenAI Responses API.               |
 | `AGENT_STALL_TIMEOUT_MS` | unset (off)                    | How long a Bot's stream may produce nothing before the turn is ended for it. |
 | `AGENT_TOOL_TOKEN`   | unset                              | The secret a framework Bot presents when it calls a granted tool back through this server. |
+| `TAVILY_API_KEY`     | unset                              | Offers every Bot `search_web`. Absent, the tool is not registered. |
+| `COMPOSIO_API_KEY`   | unset                              | Loads `/plugins`. Connections are keyed by organization id. |
+| `GMAIL_AUTH_CONFIG_ID` | unset                            | Pins Gmail to an existing Composio auth config. Ignored on localhost. |
 | `APP_DIST_DIR`       | unset                              | Where the built app is, when this process serves it. Set inside the container image; unset in development, where Vite serves the app. |
 
 **`AGENT_STALL_TIMEOUT_MS`** watches for the failure a Bot has that nothing else in the trail can
@@ -101,7 +104,9 @@ Two things are worth knowing before pointing a deployment at any gateway. Not ev
 
 | Variable                     | Meaning                                                                                |
 | ---------------------------- | -------------------------------------------------------------------------------------- |
-| `OPENBOT_SINGLE_USER`        | One fixed administrator and no sign-in. **Required** when no identity provider is configured, or the deployment refuses to start. Ignored when one is. |
+| `OPENBOT_SINGLE_USER`        | One fixed administrator and no sign-in. **Required** when no identity provider and no email auth are configured, or the deployment refuses to start. Ignored when one is. |
+| `OPENBOT_EMAIL_AUTH`         | Email and password. Create-account asks for an organization name. Can run alone or next to OAuth. |
+| `PLATFORM_SUPERADMINS`       | Comma-separated addresses that may provision and suspend organizations on `/platform`. Not an organization's own administrator. |
 | `GOOGLE_OAUTH_CLIENT_ID`     | Google OAuth client id. `GOOGLE_CLIENT_ID` is accepted as the same value.               |
 | `GOOGLE_OAUTH_CLIENT_SECRET` | Google OAuth client secret. `GOOGLE_CLIENT_SECRET` is accepted as the same value.       |
 | `MICROSOFT_OAUTH_CLIENT_ID`  | Microsoft Entra ID application id.                                                     |
@@ -115,10 +120,10 @@ Two things are worth knowing before pointing a deployment at any gateway. Not ev
 | `TRUSTED_ORIGINS`            | Comma-separated app origins accepted by the API, plus every host in a registered OIDC provider's discovery document. |
 | `INITIAL_ADMIN_EMAILS`       | Comma-separated administrators. **Required** with any provider.                        |
 
-**With no provider at all, `OPENBOT_SINGLE_USER=true` is required.** A deployment that configures
+**With no provider at all, `OPENBOT_EMAIL_AUTH=true` or `OPENBOT_SINGLE_USER=true` is required.** A deployment that configures
 nothing to sign anybody in and does not say that was deliberate refuses to start, naming what to
 configure, because a public URL where every visitor is an administrator fails silently. `NODE_ENV`
-does not enter into it. `.env.example` ships the line switched on, so a clone runs with no
+does not enter into it. `.env.example` ships `OPENBOT_SINGLE_USER` switched on, so a clone runs with no
 configuration at all.
 
 **Any one provider turns sign-in on**, and several may be configured at once. Each provider's id and

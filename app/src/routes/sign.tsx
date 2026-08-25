@@ -217,7 +217,7 @@ function SignScreen() {
                 </h1>
                 <p className="mt-2.5 text-[15px] leading-relaxed text-[#555] text-pretty">
                   {mode === "up"
-                    ? "Welcome to LimitlessAI. Put agents to work in your workspace."
+                    ? "Welcome to LimitlessAI. One intelligence layer for your data, agents, and people."
                     : "Sign in to LimitlessAI and pick up where you left off."}
                 </p>
 
@@ -501,8 +501,9 @@ function SignScreen() {
               fontFamily: "ui-serif, Georgia, 'Times New Roman', serif",
             }}
           >
-            LimitlessAI puts agents to work across research, CRM, and outreach —
-            so your team ships while you stay in control.
+            The operating system for self-improving businesses. Other AI agents
+            do work. LimitlessAI learns which work actually moves the business
+            forward.
           </p>
           <div className="mt-8 flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-full bg-white/15 ring-1 ring-white/30 backdrop-blur-sm">

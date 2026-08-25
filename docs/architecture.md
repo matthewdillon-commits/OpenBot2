@@ -1,6 +1,10 @@
 # Architecture
 
-OpenBot combines a React app, a Hono API server, PostgreSQL, CopilotKit Intelligence, AG-UI Bot endpoints, and governed browser computers.
+LimitlessAI is a React app, a Hono API server, PostgreSQL, CopilotKit Intelligence, AG-UI Bot
+endpoints, governed browser computers, an org-scoped CRM, and Composio plugins. What the
+product is *for*, what this stack is ready to run as, and what a coworker does when nobody
+is looking, is in [product.md](product.md). How the rest is supposed to land is
+[roadmap.md](roadmap.md).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="../assets/architecture-dark.svg">
@@ -13,8 +17,8 @@ Regenerate it with `bun run diagram` after changing anything it shows.
 
 | Component                | Port                       | Responsibility                                                                                                                              |
 | ------------------------ | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `app`                    | 3010                       | React/Vite interface for channels, Bot chat, live screen, settings, and admin pages.                                                        |
-| `server`                 | 3001                       | API, CopilotKit runtime, auth, roles, tenant package, coworkers, channels, CRM, policy, audit, credentials, plugins, components, and connectors. |
+| `app`                    | 3010                       | React/Vite interface for channels, CRM, plugins, Bot chat, live screen, settings, organizations, and admin pages. |
+| `server`                 | 3001                       | API, CopilotKit runtime, auth, organizations, tenant package, coworkers, channels, CRM, policy, audit, credentials, plugins, components, and connectors. |
 | `agent-computer`         | 4100                       | Chromium, `/workspace`, browser profile, screenshots, snapshots, and file tools.                                                            |
 | `agent-bot`              | 4200                       | Proof-of-concept AG-UI Bot.                                                                                                                     |
 | `agent-langgraph`        | 4201                       | LangGraph AG-UI Bot.                                                                                                                        |
@@ -28,12 +32,26 @@ The compose file also defines optional SPIRE services. `start.sh` does not start
 
 ## Runtime flow
 
-1. The app opens a channel or direct Bot session.
-2. The server resolves the signed-in actor and selected coworker.
-3. CopilotKit runtime sends the turn to the configured AG-UI endpoint.
-4. The surface registers available frontend tools: browser tools, MCP tools, and components granted to that Bot.
-5. Acting browser/file/MCP calls return to the server for authorization and audit.
-6. The server streams results back to the app and Intelligence thread.
+A turn starts in the open app. There is no scheduler in this tree.
+
+1. A signed-in person opens a channel or `/bot` and sends a message (CopilotKit's browser client).
+2. The server resolves the actor, including the selected organization, and the coworker that is speaking.
+3. Built-in Bots run their tool loop on the API: CRM, `search_web`, company knowledge, and granted MCP, up to twenty steps. Remote AG-UI Bots call that same list back through `/api/agent-tools/call`.
+4. Computer tools, gallery components, and sandboxed components are frontend tools. The run ends, the open tab executes them, then the client starts another run with the result.
+5. Every acting call still goes through the gateway: resolve, decide, audit, then act or refuse.
+6. Events reach the Intelligence gateway. The thread survives a restart; the Activity tab does not.
+
+Closing the tab stops frontend tools. Server-side steps of an already-started turn continue on the API process until they finish or stall. Nothing new starts after that.
+
+## Organizations
+
+A person signs in once and works in one organization at a time (`organization_memberships`, `/o`,
+`/platform`). Tenant-owned tables carry `org_id` and queries filter on it. Intelligence user ids
+are `org:user`. Composio connections use the organization id as Composio's `user_id`.
+
+That is application isolation, not Postgres RLS. One tenant package is loaded per process. Without
+the supervisor, computers are not a tenant boundary. Billing, seats, and per-org SSO are not in
+this code. See [product.md](product.md).
 
 ## Browser action governance
 
@@ -61,7 +79,7 @@ Policy rules can inspect:
 Rules use CEL expressions plus case-insensitive `contains()` and `matches()`.
 Deny rules are evaluated before allow rules. The policy engine fails closed: a
 missing or empty policy permits nothing, a broken deny rule denies, and a broken
-allow rule does not permit. OpenBot's shipped startup default is explicit:
+allow rule does not permit. The shipped startup default is explicit:
 `deny: []` and `allow: ["true"]`, unless `AGENT_COMPUTER_POLICY` or a saved
 administrator policy replaces it. A malformed configured policy stops server
 startup.
@@ -102,7 +120,7 @@ A coworker is a durable Bot profile:
 - `agent_profiles` stores name, title, role, owner, visibility, and deletion state.
 - `agent_preferences` stores per-user roster state.
 
-A channel is a conversation with one coworker and a CopilotKit Intelligence thread mapping. Starting a new channel creates a new thread.
+A channel is a conversation with one or more coworkers (up to eight) and a CopilotKit Intelligence thread mapping. Starting a new channel creates a new thread. Home still starts a 1:1; `/channel/new` can name a room.
 
 Who may reach one is decided by membership: every channel route resolves the caller in
 `channel_memberships` and refuses without a row. `channels.allowed_groups` is declared in the
@@ -172,14 +190,14 @@ Connector credentials are stored through the credential vault and referenced by 
 ## Security boundaries
 
 - Server routes enforce auth and roles; admin pages are backed by server-side administrator checks.
-- Sign-in is Google, Microsoft or Okta from the environment, plus SAML and OpenID Connect providers registered at runtime and routed by email domain. One resolver answers both questions a run asks about a person, whose threads these are and which Bots they may run, so the two can never disagree.
+- Sign-in is Google, Microsoft or Okta from the environment, email and password when `OPENBOT_EMAIL_AUTH=true`, plus SAML and OpenID Connect providers registered at runtime and routed by email domain. Those providers are deployment-wide, not per organization. One resolver answers both questions a run asks about a person, whose threads these are and which Bots they may run, so the two can never disagree.
 - `INITIAL_ADMIN_EMAILS` is a floor: an address it names is made an administrator at every sign-in and cannot be demoted from the People screen. Everybody else's role is decided there, and every change writes an audit row.
 - Registering, changing or removing an identity provider is administrator-only. Better Auth's SSO plugin guards those routes with a session alone, which would let any signed-in person register a provider for a domain.
-- A registered identity provider belongs to the deployment, not to whoever registered it. Better Auth scopes its own listing and removal to the registering user and cascades the row from that user, so two administrators saw two different deployments and deleting the one who set sign-in up would have deleted the company's sign-in. Reads and removals go through OpenBot's own administrator-only routes against the whole table.
+- A registered identity provider belongs to the deployment, not to whoever registered it. Better Auth scopes its own listing and removal to the registering user and cascades the row from that user, so two administrators saw two different deployments and deleting the one who set sign-in up would have deleted the company's sign-in. Reads and removals go through this product's own administrator-only routes against the whole table.
 - A provider's client secret and SAML signing material are encrypted at rest with `KEY_ENCRYPTION_KEY`, through a wrapper on the Better Auth storage adapter, since the plugin stores them as plaintext JSON. OAuth access and refresh tokens use Better Auth's own encryption, keyed on `BETTER_AUTH_SECRET`.
 - Signing in, being refused, and being granted the administrator role by configuration each write an audit row. Without them nothing recorded that somebody who could edit `INITIAL_ADMIN_EMAILS` had promoted themselves, and revoking a person deleted the sessions that were the only evidence they had been here.
 - Removing somebody deletes their sessions and denies their address, because deleting the user row alone is not removal: the next sign-in through the provider recreates it.
-- With no identity provider configured, the deployment refuses to start unless `OPENBOT_SINGLE_USER=true` says every request may be one fixed administrator. That flag is the only thing that permits it; `NODE_ENV` does not.
+- With no identity provider configured, the deployment refuses to start unless `OPENBOT_EMAIL_AUTH=true` or `OPENBOT_SINGLE_USER=true`. That is the only thing that permits an open deployment; `NODE_ENV` does not.
 - `KEY_ENCRYPTION_KEY` must be a base64-encoded 32-byte value. The example key is refused with `NODE_ENV=production`.
 - Credential plaintext is encrypted at rest, never returned by APIs, and redacted from audit events.
 - Browser navigation allows `http` and `https`; cloud metadata addresses are refused under every configuration.

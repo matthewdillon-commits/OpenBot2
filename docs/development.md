@@ -1,5 +1,9 @@
 # Development
 
+Local setup for LimitlessAI. What the product is for, what this tree actually
+runs today, and what is not built, is the contract in [product.md](product.md).
+Implementation phases are [roadmap.md](roadmap.md).
+
 ## Setup
 
 Install Docker, [Bun](https://bun.sh) 1.3+, `lsof`, `python3`, and `curl`.

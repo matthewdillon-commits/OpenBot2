@@ -27,7 +27,7 @@ Then, in order:
 
 - the version in the tree is checked against the branch that is publishing it, and the changelog is
   checked for a section with that number
-- one image is built and pushed to `ghcr.io/copilotkit/openbot`, tagged with the version, the commit
+- one image is built and pushed to `ghcr.io/matthewdillon-commits/openbot2`, tagged with the version, the commit
   and `latest`
 - a build provenance attestation is signed with the workflow's OIDC identity and pushed alongside it
 - the commit is tagged and a GitHub Release is created, carrying the changelog section as its notes
@@ -49,7 +49,7 @@ tested is the one that runs, and rolling back is the same command with an earlie
 Before deploying, you can check the image is the one this repository built:
 
 ```sh
-gh attestation verify oci://ghcr.io/copilotkit/openbot:v0.1.0 -R CopilotKit/OpenBot
+gh attestation verify oci://ghcr.io/matthewdillon-commits/openbot2:v0.1.0 -R matthewdillon-commits/OpenBot2
 ```
 
 ## What has to be green
@@ -83,7 +83,7 @@ the server reaches the supervisor, the supervisor builds a computer, the gateway
 browser acts, and the trail records it. It cannot run in CI, and this is not a gap to be closed
 later.
 
-OpenBot only runs in Intelligence mode. `loadConfig` refuses to start without a licence, and a
+LimitlessAI only runs in Intelligence mode. `loadConfig` refuses to start without a licence, and a
 licence is cryptographically signed for the machine it was issued for, so a hosted runner cannot hold
 one. The `image` check gets around this with placeholder values, because nothing is contacted at
 start-up, but the journey asserts `licenseStatus` is `valid` and no placeholder can make that true.
