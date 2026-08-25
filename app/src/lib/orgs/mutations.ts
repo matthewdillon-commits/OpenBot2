@@ -1,6 +1,6 @@
 import { mutationOptions, type QueryClient } from "@tanstack/react-query";
 import { authKeys } from "@/lib/auth/queries";
-import { client } from "@/lib/client";
+import { client, tryClient } from "@/lib/client";
 import { orgKeys } from "./queries";
 
 const FALLBACK = "Could not update the organization";
@@ -26,7 +26,7 @@ export function activateOrganizationMutationOptions(queryClient: QueryClient) {
 
 export function createOwnOrganizationMutationOptions(queryClient: QueryClient) {
   return mutationOptions({
-    mutationFn: (input: {
+    mutationFn: async (input: {
       name: string;
       slug?: string;
     }): Promise<{
@@ -34,12 +34,33 @@ export function createOwnOrganizationMutationOptions(queryClient: QueryClient) {
       slug: string;
       name: string;
       role: "owner" | "admin" | "member";
-    }> =>
-      client("/api/orgs", "organization", {
+    }> => {
+      const response = await tryClient("/api/orgs", {
         method: "POST",
         body: input,
-        fallback: FALLBACK,
-      }),
+      });
+      const body = (await response.json().catch(() => null)) as {
+        error?: string;
+        checkoutUrl?: string;
+        organization?: {
+          id: string;
+          slug: string;
+          name: string;
+          role: "owner" | "admin" | "member";
+        };
+      } | null;
+      if (response.status === 402 && typeof body?.checkoutUrl === "string") {
+        window.location.assign(body.checkoutUrl);
+        return new Promise(() => undefined);
+      }
+      if (!response.ok) {
+        throw new Error(body?.error ?? FALLBACK);
+      }
+      if (!body?.organization) {
+        throw new Error(FALLBACK);
+      }
+      return body.organization;
+    },
     onSuccess: () => invalidateOrgs(queryClient),
   });
 }
@@ -107,12 +128,42 @@ export function inviteOrgMemberMutationOptions(queryClient: QueryClient) {
     mutationFn: (input: {
       email: string;
       role: "owner" | "admin" | "member";
-    }): Promise<{ token: string }> =>
+    }): Promise<void> =>
       client("/api/orgs/invites", {
         method: "POST",
         body: input,
         fallback: FALLBACK,
-      }).then((response) => response.json() as Promise<{ token: string }>),
+      }).then(() => undefined),
+    onSuccess: () => invalidateOrgs(queryClient),
+  });
+}
+
+export function setOrganizationSsoMutationOptions(queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: (input: {
+      googleEnabled?: boolean;
+      microsoftEnabled?: boolean;
+      oktaEnabled?: boolean;
+      emailEnabled?: boolean;
+      domains?: string[];
+    }): Promise<void> =>
+      client("/api/orgs/current/sso", {
+        method: "POST",
+        body: input,
+        fallback: FALLBACK,
+      }).then(() => undefined),
+    onSuccess: () => invalidateOrgs(queryClient),
+  });
+}
+
+export function setSpendCapMutationOptions(queryClient: QueryClient) {
+  return mutationOptions({
+    mutationFn: (spendCapCents: number | null): Promise<void> =>
+      client("/api/orgs/current/spend-cap", {
+        method: "POST",
+        body: { spendCapCents },
+        fallback: FALLBACK,
+      }).then(() => undefined),
     onSuccess: () => invalidateOrgs(queryClient),
   });
 }

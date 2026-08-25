@@ -180,19 +180,15 @@ as a new owner nav.
 
 ## Phase 6 — SaaS
 
-What Part B of `product.md` lists as missing:
+Landed. Part B cites RLS, Stripe checkout and seats, invite email, per-org
+SSO, spend caps, OpenTelemetry, and multi-replica (Postgres / Stripe / OTel,
+no in-process Map). `/platform` remains for superadmins; checkout is the
+owner path. Home is still Composer + Goals. Rooms stay behind See the work.
+Approval cards stay on the goal.
 
-- Postgres RLS (query-scoped `org_id` is not enough)
-- Stripe and seats
-- Invite email (today the token is JSON only)
-- Per-org SSO
-- Spend caps
-- OpenTelemetry
-- Multi-replica as a stated property of every new surface, not an accident of
-  using Postgres
-
-Until this phase, the honest offer is still a sales-led or single-company
-deployment. `/platform` stays provisioning, not checkout.
+Honest leftovers, still in Part C: persist onto the Intelligence thread
+fails closed; one `TENANT_PACKAGE_DIR` for the process; a shared Chromium
+refuses a second org until `COMPUTER_SUPERVISOR_URL`.
 
 ---
 

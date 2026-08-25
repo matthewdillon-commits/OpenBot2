@@ -113,6 +113,13 @@ The page snapshot a Bot resolves element references against lives in Postgres, s
 can answer a click the first one snapshotted. Run more than one if the platform wants it. The
 supervisor is still not in this image, so every replica shares the one browser inside it.
 
+Phase 6 SaaS surfaces are the same: billing, seats, SSO, and spend live in Postgres (and Stripe
+for checkout sessions). Replica B applies the same webhook, sums the same spend ledger, and
+reads the same `organization_sso` row. OpenTelemetry traces leave each process over OTLP; there
+is no in-process Map to fan to a browser. RLS is `SET LOCAL` on the connection that runs the
+query (and `SET LOCAL ROLE openbot_rls` so a superuser login cannot bypass), so a pool hop on
+replica B cannot leak another org. The migration grants `openbot_rls` to the user that ran it.
+
 ## Platform notes
 
 **Google Cloud Run.** Set memory to at least 2 GB and max instances to 1. Cloud Run runs every

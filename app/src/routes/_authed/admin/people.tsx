@@ -106,11 +106,11 @@ function PeoplePage() {
           onSubmit={async (event) => {
             event.preventDefault();
             if (!inviteEmail.trim()) return;
-            const result = await invite.mutateAsync({
+            await invite.mutateAsync({
               email: inviteEmail.trim(),
               role: "member",
             });
-            setInviteToken(result.token);
+            setInviteToken("sent");
             setInviteEmail("");
           }}
         >
@@ -142,11 +142,7 @@ function PeoplePage() {
             {invite.error.message}
           </p>
         ) : null}
-        {inviteToken ? (
-          <p className="mt-3 text-sm">
-            Invite link: <code>/invite/{inviteToken}</code>
-          </p>
-        ) : null}
+        {inviteToken ? <p className="mt-3 text-sm">Invite emailed.</p> : null}
       </PageSection>
       <PageSection
         description="An address named in INITIAL_ADMIN_EMAILS is an administrator whatever this screen says, so it cannot be changed here."

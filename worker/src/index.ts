@@ -6,9 +6,11 @@
  */
 import { loadConfig } from "../../server/src/config";
 import { runUnattendedClaimLoop } from "../../server/src/jobs/bootstrap";
+import { startTracing } from "../../server/src/telemetry";
 import { workerStatus } from "./status";
 
 const config = loadConfig();
+startTracing("openbot-worker");
 
 console.info(
   JSON.stringify({

@@ -48,12 +48,15 @@ Closing the tab does not stop a claimed job. A missing Intelligence mapping is a
 ## Organizations
 
 A person signs in once and works in one organization at a time (`organization_memberships`, `/o`,
-`/platform`). Tenant-owned tables carry `org_id` and queries filter on it. Intelligence user ids
-are `org:user`. Composio connections use the organization id as Composio's `user_id`.
+`/platform`). Tenant-owned tables carry `org_id` and queries filter on it. Postgres RLS is the
+second fence (`FORCE ROW LEVEL SECURITY` on org-owned tables; empty `app.current_org_id` is the
+boot/claim path). Intelligence user ids are `org:user`. Composio connections use the organization
+id as Composio's `user_id`. Stripe Checkout and webhooks write plan and seats. Invite email uses
+the existing token. Per-org SSO is `organization_sso`. Spend is `organization_spend_events`.
+Traces are OpenTelemetry on the API and worker.
 
-That is application isolation, not Postgres RLS. One tenant package is loaded per process. Without
-the supervisor, computers are not a tenant boundary. Billing, seats, and per-org SSO are not in
-this code. See [product.md](product.md).
+One tenant package is loaded per process. Without the supervisor, computers are not a tenant
+boundary. Persist onto the Intelligence thread still fails closed. See [product.md](product.md).
 
 ## Browser action governance
 

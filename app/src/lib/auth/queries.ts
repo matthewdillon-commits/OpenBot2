@@ -42,6 +42,14 @@ export type SignInOptions = {
   emailPassword: boolean;
 };
 
+export type SsoForEmail = {
+  orgId: string | null;
+  google: boolean;
+  microsoft: boolean;
+  okta: boolean;
+  email: boolean;
+};
+
 async function signInOptions(): Promise<SignInOptions> {
   // The whole body, so both fields arrive together. Reading a field off the Response `client`
   // returns without a key quietly yields undefined: the screen would say no provider is configured
@@ -98,5 +106,27 @@ export function currentUserQueryOptions() {
     queryKey: authKeys.currentUser(),
     queryFn: currentUser,
     staleTime: 60_000,
+  });
+}
+
+export function ssoForEmailQueryOptions(email: string) {
+  return queryOptions({
+    queryKey: [...authKeys.all, "sso-for-email", email] as const,
+    enabled: email.includes("@"),
+    queryFn: async (): Promise<SsoForEmail> => {
+      const response = await tryClient(
+        `/api/auth/sso-for-email?email=${encodeURIComponent(email)}`,
+      );
+      if (!response.ok) {
+        return {
+          orgId: null,
+          google: true,
+          microsoft: true,
+          okta: true,
+          email: true,
+        };
+      }
+      return (await response.json()) as SsoForEmail;
+    },
   });
 }

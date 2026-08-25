@@ -1,5 +1,5 @@
 import { queryOptions } from "@tanstack/react-query";
-import { client } from "@/lib/client";
+import { client, tryClient } from "@/lib/client";
 
 export type OrganizationSummary = {
   id: string;
@@ -14,6 +14,7 @@ export type OrganizationList = {
   organizations: OrganizationSummary[];
   current: OrganizationSummary | null;
   platformSuperadmin: boolean;
+  checkout: boolean;
 };
 
 export type CurrentOrganization = {
@@ -22,9 +23,24 @@ export type CurrentOrganization = {
   name: string;
   role: "owner" | "admin" | "member";
   status: string;
+  plan: string;
   displayName: string;
   logoUrl: string | null;
   defaultModel: string | null;
+  seatLimit: number;
+  seatsUsed: number;
+  seatMembers: number;
+  pendingInvites: number;
+  spendCapCents: number | null;
+  spendUsedCents: number;
+  checkout: boolean;
+  sso: {
+    googleEnabled: boolean;
+    microsoftEnabled: boolean;
+    oktaEnabled: boolean;
+    emailEnabled: boolean;
+    domains: string[];
+  } | null;
 };
 
 export const orgKeys = {
@@ -48,11 +64,18 @@ export function currentOrganizationQueryOptions() {
   return queryOptions({
     queryKey: orgKeys.current(),
     queryFn: async (): Promise<CurrentOrganization | null> => {
-      const body = (await (
-        await client("/api/orgs/current", {
-          fallback: "Could not load the organization",
-        })
-      ).json()) as { organization?: CurrentOrganization };
+      const response = await tryClient("/api/orgs/current");
+      if (response.status === 404) return null;
+      if (!response.ok) {
+        const message = await response
+          .json()
+          .then((body: { error?: string }) => body.error)
+          .catch(() => undefined);
+        throw new Error(message ?? "Could not load the organization");
+      }
+      const body = (await response.json()) as {
+        organization?: CurrentOrganization;
+      };
       return body.organization ?? null;
     },
   });

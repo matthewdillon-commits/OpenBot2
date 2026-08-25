@@ -6,7 +6,7 @@ import { genericOAuth, okta } from "better-auth/plugins";
 import { eq } from "drizzle-orm";
 import type { AuditEventInput, AuditStore } from "../audit";
 import { recordAuditEvent } from "../audit";
-import type { DeploymentConfig } from "../config";
+import type { AuthConfig, AuthProviderId, DeploymentConfig } from "../config";
 import type { Database } from "../db/client";
 import {
   accounts,
@@ -15,6 +15,8 @@ import {
   users,
   verifications,
 } from "../db/schema";
+import type { OrganizationSsoStore } from "../orgs/sso";
+import { providerAllowed } from "../orgs/sso";
 import { encryptSsoConfig } from "./encrypt-sso-config";
 import { applyConfiguredAdmin, seedRole } from "./roles";
 
@@ -85,6 +87,21 @@ export function mapEntraProfile(profile: Record<string, unknown>) {
   return { email };
 }
 
+async function assertOrgAllowsProvider(
+  sso: OrganizationSsoStore | undefined,
+  auth: AuthConfig,
+  email: string | undefined,
+  provider: AuthProviderId | "email",
+): Promise<void> {
+  if (!sso || !email) return;
+  const resolved = await sso.resolveForEmail(email, auth);
+  if (resolved.orgId && !providerAllowed(resolved, provider)) {
+    throw new APIError("FORBIDDEN", {
+      message: `This organization does not allow ${provider} sign-in.`,
+    });
+  }
+}
+
 export function createAuth(
   config: DeploymentConfig,
   database: Database,
@@ -108,6 +125,11 @@ export function createAuth(
    * write below is guarded and its failure is logged rather than raised.
    */
   auditStore?: AuditStore,
+  /**
+   * Per-org overlay on Google / Microsoft / Okta / email. Absent means only
+   * the deployment-wide providers apply. Org A's flags never apply to org B.
+   */
+  organizationSso?: OrganizationSsoStore,
 ) {
   const authConfig = config.auth;
   if (!authConfig) {
@@ -219,14 +241,38 @@ export function createAuth(
       enabled: authConfig.emailPassword,
     },
     socialProviders: {
-      ...(authConfig.google ? { google: authConfig.google } : {}),
+      ...(authConfig.google
+        ? {
+            google: {
+              ...authConfig.google,
+              mapProfileToUser: async (profile: { email?: string }) => {
+                await assertOrgAllowsProvider(
+                  organizationSso,
+                  authConfig,
+                  profile.email,
+                  "google",
+                );
+                return profile;
+              },
+            },
+          }
+        : {}),
       ...(authConfig.microsoft
         ? {
             microsoft: {
               clientId: authConfig.microsoft.clientId,
               clientSecret: authConfig.microsoft.clientSecret,
               tenantId: authConfig.microsoft.tenantId,
-              mapProfileToUser: mapEntraProfile,
+              mapProfileToUser: async (profile: Record<string, unknown>) => {
+                const mapped = mapEntraProfile(profile);
+                await assertOrgAllowsProvider(
+                  organizationSso,
+                  authConfig,
+                  mapped.email,
+                  "microsoft",
+                );
+                return mapped;
+              },
             },
           }
         : {}),

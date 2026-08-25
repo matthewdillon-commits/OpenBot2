@@ -19,6 +19,34 @@ const requireUser: MiddlewareHandler<{ Variables: AppVariables }> = async (
   await next();
 };
 
+function org(
+  overrides: Partial<{
+    id: string;
+    slug: string;
+    name: string;
+    status: "active" | "suspended";
+    plan: string;
+    seatLimit: number;
+    spendCapCents: number | null;
+    stripeCustomerId: string | null;
+    stripeSubscriptionId: string | null;
+    role: "owner" | "admin" | "member";
+  }> = {},
+) {
+  return {
+    id: "org_new",
+    slug: "acme",
+    name: "Acme",
+    status: "active" as const,
+    plan: "free",
+    seatLimit: 1,
+    spendCapCents: null,
+    stripeCustomerId: null,
+    stripeSubscriptionId: null,
+    ...overrides,
+  };
+}
+
 function store(overrides: Partial<OrganizationStore> = {}): OrganizationStore {
   return {
     get: async () => null,
@@ -34,29 +62,33 @@ function store(overrides: Partial<OrganizationStore> = {}): OrganizationStore {
     },
     ensureMembership: async () => undefined,
     joinIfSoleOrganization: async () => null,
-    create: async (input) => ({
-      id: "org_new",
-      slug: "acme",
-      name: input.name,
-      status: "active",
-      plan: "enterprise",
-    }),
-    setStatus: async (orgId, status) => ({
-      id: orgId,
-      slug: "acme",
-      name: "Acme",
-      status,
-      plan: "enterprise",
-    }),
+    create: async (input) =>
+      org({
+        name: input.name,
+        plan: input.plan ?? "free",
+        seatLimit: input.seatLimit ?? 1,
+      }),
+    setStatus: async (orgId, status) =>
+      org({ id: orgId, status, plan: "enterprise", seatLimit: 100 }),
     listAll: async () => [
-      {
+      org({
         id: "org_local",
         slug: "local",
         name: "Local",
-        status: "active",
         plan: "enterprise",
-      },
+        seatLimit: 100,
+      }),
     ],
+    countOwnedBy: async () => 0,
+    seatUsage: async () => ({
+      members: 0,
+      pendingInvites: 0,
+      used: 0,
+      limit: 1,
+    }),
+    applyBilling: async () => org(),
+    getByStripeSubscription: async () => null,
+    setSpendCap: async () => org(),
     invite: async (input) => ({
       token: "invite-token",
       invite: {
@@ -105,6 +137,10 @@ describe("platform organization routes", () => {
         name: "Acme",
         status: "active",
         plan: "enterprise",
+        seatLimit: 100,
+        spendCapCents: null,
+        stripeCustomerId: null,
+        stripeSubscriptionId: null,
       },
     });
   });
@@ -136,7 +172,11 @@ describe("platform organization routes", () => {
             slug: "acme",
             name: "Acme",
             status: "active",
-            plan: "enterprise",
+            plan: "free",
+            seatLimit: 1,
+            spendCapCents: null,
+            stripeCustomerId: null,
+            stripeSubscriptionId: null,
             role: "owner",
           };
         },
@@ -162,7 +202,11 @@ describe("platform organization routes", () => {
         slug: "acme",
         name: "Acme",
         status: "active",
-        plan: "enterprise",
+        plan: "free",
+        seatLimit: 1,
+        spendCapCents: null,
+        stripeCustomerId: null,
+        stripeSubscriptionId: null,
         role: "owner",
       },
     });

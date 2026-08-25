@@ -10,6 +10,12 @@ import type { AgentActor } from "../agents/profile-types";
 import type { OpenBotRole } from "../auth/roles";
 import type { AgentChannel, ChannelStore } from "../channels/routes";
 import { orgIdOf } from "../orgs/constants";
+import {
+  SpendCapError,
+  assertSpend,
+  type SpendKind,
+  type SpendStore,
+} from "../orgs/spend";
 import type { JobStore, UnattendedJob } from "./store";
 
 export const JOB_TRIGGERS = ["manual", "cron", "webhook", "email"] as const;
@@ -46,11 +52,16 @@ export type EnqueueUnattendedInput = {
   expectedThreadId?: string;
   lookupChannel: ChannelStore["get"];
   jobStore: Pick<JobStore, "enqueue">;
+  /**
+   * Spend cap. Crossing it refuses this enqueue. Absent in tests that are not
+   * about billing; production always passes the Postgres ledger.
+   */
+  spend?: SpendStore;
 };
 
 export type EnqueueUnattendedResult =
   | { ok: true; job: UnattendedJob; channel: AgentChannel }
-  | { ok: false; error: string; status: 400 | 404 | 409 };
+  | { ok: false; error: string; status: 400 | 404 | 409 | 402 };
 
 function actorForLookup(input: EnqueueUnattendedInput): AgentActor {
   return {
@@ -102,6 +113,15 @@ export async function enqueueUnattendedJob(
       error: ENQUEUE_REFUSALS.COWORKER_NOT_IN_CHANNEL,
       status: 400,
     };
+  }
+
+  try {
+    await assertSpend(input.spend, orgId, "unattended" satisfies SpendKind);
+  } catch (error) {
+    if (error instanceof SpendCapError) {
+      return { ok: false, error: error.message, status: 402 };
+    }
+    throw error;
   }
 
   const job = await input.jobStore.enqueue({

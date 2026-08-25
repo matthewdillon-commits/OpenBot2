@@ -4,6 +4,8 @@ import { mintRunAssertion } from "./agents/callback-token";
 import { createAgentProfileStore } from "./agents/profile-store";
 import { createRuntimeAgentLoader } from "./agents/runtime-agents";
 import { createApp } from "./app";
+import { createBillingService } from "./billing/stripe";
+import { bindRequestRls } from "./db/rls";
 import { createAuditReader, createAuditStore, recordAuditEvent } from "./audit";
 import { startAuditRetention } from "./audit-retention";
 import { createAuth } from "./auth";
@@ -71,8 +73,12 @@ import {
   orgIdOf,
 } from "./orgs/constants";
 import { copyPackageOwnedAgents } from "./orgs/provision";
+import { createInviteMailer } from "./orgs/invite-mail";
+import { createOrganizationSsoStore } from "./orgs/sso";
+import { createSpendStore, SpendCapError } from "./orgs/spend";
 import { createOrganizationStore } from "./orgs/store";
 import { createPeopleStore } from "./people/store";
+import { startTracing } from "./telemetry";
 import { createPluginStore } from "./plugins/store";
 import {
   createPackageStatusReader,
@@ -154,9 +160,17 @@ const identifyActor: IdentifyActor = async (request) => {
 };
 
 const config = loadConfig();
+startTracing("openbot-api");
 const port = Number.parseInt(process.env.PORT ?? "3001", 10);
 const database = createDatabase(config.databaseUrl);
 const organizationStore = createOrganizationStore(database);
+const spendStore = createSpendStore(database);
+const organizationSsoStore = createOrganizationSsoStore(database);
+const inviteMailer = createInviteMailer(
+  process.env,
+  config.auth?.trustedOrigins[0] ?? "http://localhost:3010",
+);
+const billing = config.stripe ? createBillingService(config.stripe) : undefined;
 await initializeDevActorUser(database, config.singleUser);
 await bootstrapOrganizations(database, organizationStore, {
   singleUser: config.singleUser,
@@ -231,6 +245,7 @@ const auth = config.auth
       database,
       (email) => peopleStore.isRevoked(email),
       signInAuditStore,
+      organizationSsoStore,
     )
   : undefined;
 const computerProvider = config.computer
@@ -311,6 +326,14 @@ const computerGateway = computerProvider
         ? { sharedClaim: createSharedComputerClaimStore(database) }
         : {}),
       highRiskWait,
+      assertSpend: async (orgId) => {
+        try {
+          await spendStore.consume({ orgId, kind: "computer" });
+        } catch (error) {
+          if (error instanceof SpendCapError) throw error;
+          throw error;
+        }
+      },
     })
   : undefined;
 
@@ -460,6 +483,7 @@ const loadToolsForActor = createLoadToolsForActor({
       listAgents: (actor) => agentProfileStore.list(actor),
       skillBySlug: (slug, orgId) => pluginStore.skillBySlug(slug, orgId),
       jobStore,
+      spend: spendStore,
     }),
   ...(webSearch ? { webSearch } : {}),
   ...(computerGateway ? { computerGateway } : {}),
@@ -549,6 +573,9 @@ const app = createApp(
       const loop = await loopStore.get(orgIdOf(actor), runContext.goalId);
       return orchestratorContextFromLoop(loop) || undefined;
     },
+    async (orgId) => {
+      await spendStore.consume({ orgId, kind: "model" });
+    },
   ),
   // The only path to an acting call.
   computerGateway,
@@ -619,6 +646,14 @@ const app = createApp(
       }
       return tool.execute(input.args);
     },
+  },
+  {
+    bindRls: (input) => bindRequestRls(database, input),
+    ...(billing ? { billing } : {}),
+    ...(config.stripe ? { stripe: config.stripe } : {}),
+    mail: inviteMailer,
+    sso: organizationSsoStore,
+    spend: spendStore,
   },
 );
 

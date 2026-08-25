@@ -14,6 +14,7 @@ import { COMPUTER_GUIDANCE } from "../../shared/bot-prompt";
 import type { AgentActor } from "./agents/profile-types";
 import type { StallGuard } from "./channels/stall-guard";
 import type { DeploymentConfig } from "./config";
+import { orgIdOf } from "./orgs/constants";
 import {
   jsonSchemaForLlmTool,
   standardSchemaForLlmTool,
@@ -571,6 +572,11 @@ export function createRequestAgents(
     actor: AgentActor,
     runContext?: ToolRunContext,
   ) => Promise<string | undefined>,
+  /**
+   * Model spend. Crossing the org cap refuses the turn. Absent in tests that
+   * are not about billing.
+   */
+  assertSpend?: (orgId: string) => Promise<void>,
 ) {
   return async ({ request }: { request: Request }) => {
     const actor = await identifyActor(request);
@@ -580,10 +586,16 @@ export function createRequestAgents(
     const extraGuidance = goalLoopGuidance
       ? await goalLoopGuidance(actor, runContext)
       : undefined;
+    const resolveKey = async () => {
+      if (assertSpend) {
+        await assertSpend(orgIdOf({ orgId: actor.orgId }));
+      }
+      return resolveModelApiKey();
+    };
     return resolveRuntimeAgents(
       () => loadAgents(actor),
       model,
-      resolveModelApiKey,
+      resolveKey,
       stallGuard,
       loadToolsForActor?.(actor.id, actor.orgId, runContext),
       signRunForActor?.(actor.id, actor.orgId),
@@ -637,6 +649,7 @@ export function mountCopilotRuntime(
     actor: AgentActor,
     runContext?: ToolRunContext,
   ) => Promise<string | undefined>,
+  assertSpend?: (orgId: string) => Promise<void>,
   basePath = "/api/copilotkit",
 ) {
   const { intelligence } = config.runtime;
@@ -680,6 +693,7 @@ export function mountCopilotRuntime(
       computerGuidance ?? (config.computer ? COMPUTER_GUIDANCE : undefined),
       resolveRunContext,
       goalLoopGuidance,
+      assertSpend,
     ) as never,
   });
 

@@ -537,6 +537,31 @@ describe("deployment configuration", () => {
     ).toBe("ac_gmail");
   });
 
+  test("Stripe keys must be set together", () => {
+    expect(loadConfig(baseEnvironment).stripe).toBeUndefined();
+    expect(() =>
+      loadConfig({
+        ...baseEnvironment,
+        STRIPE_SECRET_KEY: "sk_test",
+      }),
+    ).toThrow(/STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, and STRIPE_PRICE_ID/);
+    expect(
+      loadConfig({
+        ...baseEnvironment,
+        STRIPE_SECRET_KEY: "sk_test",
+        STRIPE_WEBHOOK_SECRET: "whsec_test",
+        STRIPE_PRICE_ID: "price_test",
+        TRUSTED_ORIGINS: "http://localhost:3010",
+      }).stripe,
+    ).toEqual({
+      secretKey: "sk_test",
+      webhookSecret: "whsec_test",
+      priceId: "price_test",
+      successUrl: "http://localhost:3010/o?checkout=success",
+      cancelUrl: "http://localhost:3010/o?checkout=cancel",
+    });
+  });
+
   test.each([
     ["Docker", "COMPUTER_SUPERVISOR_URL"],
     ["shared", "AGENT_COMPUTER_URL"],

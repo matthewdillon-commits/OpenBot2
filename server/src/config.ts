@@ -208,6 +208,19 @@ export type DeploymentConfig = {
    * How long the worker waits between empty claims. A default so the loop runs without env.
    */
   unattendedJobPollMs: number;
+  /**
+   * Stripe Checkout for self-serve workspaces. Absent means the first owned org is
+   * free and a second POST /api/orgs is refused until these are set.
+   */
+  stripe?: StripeConfig;
+};
+
+export type StripeConfig = {
+  secretKey: string;
+  webhookSecret: string;
+  priceId: string;
+  successUrl: string;
+  cancelUrl: string;
 };
 
 type Environment = Record<string, string | undefined>;
@@ -676,6 +689,7 @@ export function loadConfig(
   const google = oauthClient(environment, "GOOGLE");
   const auth = authConfig(environment, google);
   const managedAgent = managedAgentConfig(environment);
+  const stripe = stripeConfig(environment);
 
   return {
     databaseUrl: required(environment, "DATABASE_URL"),
@@ -723,5 +737,33 @@ export function loadConfig(
           ) as string,
         }
       : {}),
+    ...(stripe ? { stripe } : {}),
+  };
+}
+
+function stripeConfig(environment: Environment): StripeConfig | undefined {
+  const secretKey = optional(environment, "STRIPE_SECRET_KEY");
+  const webhookSecret = optional(environment, "STRIPE_WEBHOOK_SECRET");
+  const priceId = optional(environment, "STRIPE_PRICE_ID");
+  if (!secretKey && !webhookSecret && !priceId) return undefined;
+  if (!secretKey || !webhookSecret || !priceId) {
+    throw new Error(
+      "STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, and STRIPE_PRICE_ID must be set together",
+    );
+  }
+  const origin =
+    commaSeparated(environment, "TRUSTED_ORIGINS")[0] ??
+    url(environment, "BETTER_AUTH_URL") ??
+    "http://localhost:3010";
+  const base = origin.replace(/\/$/, "");
+  return {
+    secretKey,
+    webhookSecret,
+    priceId,
+    successUrl:
+      optional(environment, "STRIPE_SUCCESS_URL") ??
+      `${base}/o?checkout=success`,
+    cancelUrl:
+      optional(environment, "STRIPE_CANCEL_URL") ?? `${base}/o?checkout=cancel`,
   };
 }
