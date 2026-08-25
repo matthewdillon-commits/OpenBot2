@@ -147,15 +147,18 @@ export function createThreadPersister(options: {
       }
       const apiUrl = options.apiUrl?.replace(/\/$/, "");
       if (!apiUrl || !options.apiKey) return false;
-      const response = await fetchImpl(`${apiUrl}/threads/${threadId}/messages`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${options.apiKey}`,
-          "x-user-id": userId,
+      const response = await fetchImpl(
+        `${apiUrl}/threads/${threadId}/messages`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${options.apiKey}`,
+            "x-user-id": userId,
+          },
+          body: JSON.stringify({ userId, messages }),
         },
-        body: JSON.stringify({ userId, messages }),
-      });
+      );
       return response.ok;
     },
   };

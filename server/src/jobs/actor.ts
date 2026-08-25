@@ -10,8 +10,8 @@ import type { AgentActor } from "../agents/profile-types";
 import type { OpenBotRole } from "../auth/roles";
 import {
   intelligenceUserId,
-  openBotRoleFor,
   type OrganizationRole,
+  openBotRoleFor,
 } from "../orgs/constants";
 
 /** The person a job runs as: session actor, reloaded from the job row. */

@@ -7,6 +7,7 @@
  */
 import type { AbstractAgent } from "@ag-ui/client";
 import type { AgentActor } from "../agents/profile-types";
+import type { ChannelActivity } from "../channels/routes";
 import {
   buildAgents,
   type LoadToolsForBot,
@@ -15,18 +16,12 @@ import {
   type SignRun,
   TOOL_STEPS,
 } from "../copilot";
-import type { ChannelActivity } from "../channels/routes";
 import { orgIdOf } from "../orgs/constants";
 import {
   type ActorContext,
   identifyActorFromContext,
   identifyUserFromContext,
 } from "./actor";
-import {
-  gateUserOAuthTools,
-  serverSideToolsOnly,
-  type UserOAuthLookup,
-} from "./tools";
 import type {
   ThreadIdleChecker,
   ThreadLookup,
@@ -35,6 +30,11 @@ import type {
   UnattendedMessage,
 } from "./thread";
 import { waitForThreadIdle } from "./thread";
+import {
+  gateUserOAuthTools,
+  serverSideToolsOnly,
+  type UserOAuthLookup,
+} from "./tools";
 
 export { TOOL_STEPS };
 
@@ -50,9 +50,10 @@ export type UnattendedRunResult = {
 
 export type UnattendedRunDeps = {
   lookupMapping: ThreadLookup["mappingFor"];
-  waitForThread?: (
-    input: { threadId: string; userId: string },
-  ) => Promise<ThreadRunState>;
+  waitForThread?: (input: {
+    threadId: string;
+    userId: string;
+  }) => Promise<ThreadRunState>;
   threadIdle?: ThreadIdleChecker;
   persistThread?: ThreadPersister["append"];
   recordActivity: (input: {
@@ -103,7 +104,9 @@ function assistantText(messages: UnattendedMessage[]): string {
 
 function messagesFromAgent(agent: AbstractAgent): UnattendedMessage[] {
   const raw = (
-    agent as { messages?: Array<{ id?: string; role?: string; content?: unknown }> }
+    agent as {
+      messages?: Array<{ id?: string; role?: string; content?: unknown }>;
+    }
   ).messages;
   if (!Array.isArray(raw)) return [];
   return raw.flatMap((message) => {
@@ -115,7 +118,10 @@ function messagesFromAgent(agent: AbstractAgent): UnattendedMessage[] {
     ) {
       return [
         {
-          id: typeof message.id === "string" ? message.id : newMessageId(message.role),
+          id:
+            typeof message.id === "string"
+              ? message.id
+              : newMessageId(message.role),
           role: message.role,
           content: message.content,
         },
@@ -209,7 +215,9 @@ export async function startUnattendedRun(input: {
     (await buildAgents(
       [coworker],
       input.deps.model,
-      coworker.type === "built_in" ? await input.deps.resolveModelApiKey() : null,
+      coworker.type === "built_in"
+        ? await input.deps.resolveModelApiKey()
+        : null,
       undefined,
       loadTools,
       input.deps.signRun?.(actor.id, orgId),

@@ -16,14 +16,6 @@ import {
   connectorCursors,
   connectorInstances,
   credentials,
-  documentAcls,
-  documents,
-  intelligenceChannelMappings,
-  sessions,
-  syncRuns,
-  userRoles,
-  users,
-  verifications,
   crmCampaignListMembers,
   crmCampaignLists,
   crmCampaigns,
@@ -33,8 +25,16 @@ import {
   crmPeople,
   crmSendEvents,
   crmSends,
+  documentAcls,
+  documents,
+  intelligenceChannelMappings,
   jobStatus,
   jobs,
+  sessions,
+  syncRuns,
+  userRoles,
+  users,
+  verifications,
 } from "../src/db/schema";
 
 describe("OpenBot database schema", () => {
@@ -412,7 +412,9 @@ describe("OpenBot database schema", () => {
     expect(migration).toContain(`CREATE TABLE "crm_campaign_lists"`);
     expect(migration).toContain(`CREATE TABLE "crm_campaign_list_members"`);
     expect(migration).toContain(`"linkedin_url"`);
-    expect(migration).toContain(`ALTER TABLE "crm_companies" ADD COLUMN "location"`);
+    expect(migration).toContain(
+      `ALTER TABLE "crm_companies" ADD COLUMN "location"`,
+    );
   });
 
   test("defines unattended jobs isolated by org_id", () => {

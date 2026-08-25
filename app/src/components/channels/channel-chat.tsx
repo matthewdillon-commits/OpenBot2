@@ -21,15 +21,15 @@ import {
 import { agentListQueryOptions } from "@/lib/agents/queries";
 import { recordChannelActivityMutationOptions } from "@/lib/channels/mutations";
 import type { AgentChannel } from "@/lib/channels/queries";
-import { enqueueJobMutationOptions } from "@/lib/jobs/mutations";
-import { jobQueryOptions } from "@/lib/jobs/queries";
-import { queryClient } from "@/query-client";
 import { useActiveBot } from "@/lib/copilot/active-bot";
 import { ConversationProvider } from "@/lib/copilot/conversation";
 import { repairUnansweredToolCalls } from "@/lib/copilot/repair-history";
 import { stoppedReason } from "@/lib/copilot/stopped-turn";
 import { readThreadMessages } from "@/lib/copilot/thread-messages";
+import { enqueueJobMutationOptions } from "@/lib/jobs/mutations";
+import { jobQueryOptions } from "@/lib/jobs/queries";
 import { useSkillCommands } from "@/lib/plugins/skill-commands";
+import { queryClient } from "@/query-client";
 import { newId } from "../../lib/new-id";
 
 /**

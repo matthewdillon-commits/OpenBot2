@@ -2,18 +2,15 @@ import { describe, expect, test } from "bun:test";
 import { HttpAgent } from "@ag-ui/client";
 import { z } from "zod";
 import { standingRoleMessage } from "../src/copilot";
+import { crmTools } from "../src/crm/tools";
 import {
   identifyActorFromContext,
   identifyUserFromContext,
 } from "../src/jobs/actor";
-import {
-  startUnattendedRun,
-  UNATTENDED_REFUSALS,
-} from "../src/jobs/run";
+import { startUnattendedRun, UNATTENDED_REFUSALS } from "../src/jobs/run";
 import { gateUserOAuthTools, serverSideToolsOnly } from "../src/jobs/tools";
-import { crmTools } from "../src/crm/tools";
-import type { GrantedTool } from "../src/plugins/tools";
 import { REFUSAL_MARKER } from "../src/plugins/refusal";
+import type { GrantedTool } from "../src/plugins/tools";
 
 const actor = {
   id: "user-1",

@@ -128,11 +128,19 @@ export function createLoadToolsForActor(deps: LoadToolsForActorDeps) {
       ...crmTools({
         crm: deps.crmGateway,
         botId,
-        actor: { id: actorId, role: "user", orgId: scoped } satisfies AgentActor,
+        actor: {
+          id: actorId,
+          role: "user",
+          orgId: scoped,
+        } satisfies AgentActor,
         publicOrigin: deps.publicOrigin,
       }),
     );
     const combined = extra.length === 0 ? granted : [...granted, ...extra];
-    return gateUserOAuthTools(combined, { id: actorId, orgId: scoped }, deps.userOAuth);
+    return gateUserOAuthTools(
+      combined,
+      { id: actorId, orgId: scoped },
+      deps.userOAuth,
+    );
   };
 }

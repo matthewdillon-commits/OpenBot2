@@ -3,7 +3,7 @@ import type { MiddlewareHandler } from "hono";
 import { Hono } from "hono";
 import type { AppVariables } from "../src/auth/guards";
 import type { ChannelStore } from "../src/channels/routes";
-import { createJobRoutes, publicJob } from "../src/jobs/routes";
+import { createJobRoutes, type publicJob } from "../src/jobs/routes";
 import type { JobStore, UnattendedJob } from "../src/jobs/store";
 
 const actor = {
@@ -45,7 +45,10 @@ function job(overrides: Partial<UnattendedJob> = {}): UnattendedJob {
 
 function mount(jobStore: JobStore, channelStore: ChannelStore) {
   const app = new Hono();
-  app.route("/api/jobs", createJobRoutes({ requireUser, jobStore, channelStore }));
+  app.route(
+    "/api/jobs",
+    createJobRoutes({ requireUser, jobStore, channelStore }),
+  );
   return app;
 }
 
@@ -102,7 +105,9 @@ describe("job routes", () => {
       }),
     });
     expect(created.status).toBe(201);
-    const body = (await created.json()) as { job: ReturnType<typeof publicJob> };
+    const body = (await created.json()) as {
+      job: ReturnType<typeof publicJob>;
+    };
     expect(body.job.threadId).toBe("thread-existing");
     expect(enqueued[0]?.threadId).toBe("thread-existing");
   });

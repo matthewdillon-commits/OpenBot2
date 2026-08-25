@@ -1,6 +1,6 @@
 import { mutationOptions, type QueryClient } from "@tanstack/react-query";
-import { client } from "@/lib/client";
 import { channelKeys } from "@/lib/channels/queries";
+import { client } from "@/lib/client";
 import { jobKeys, type UnattendedJobRecord } from "./queries";
 
 export type EnqueueJobInput = {

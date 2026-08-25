@@ -663,7 +663,9 @@ function wholeMilliseconds(
   if (!raw) return fallback;
   const milliseconds = Number(raw);
   if (!Number.isInteger(milliseconds) || milliseconds < 1) {
-    throw new Error(`${name} must be a whole number of milliseconds, at least 1`);
+    throw new Error(
+      `${name} must be a whole number of milliseconds, at least 1`,
+    );
   }
   return milliseconds;
 }

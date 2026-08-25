@@ -40,9 +40,6 @@ import {
   type IdentifyUser,
   mountCopilotRuntime,
 } from "./copilot";
-import { identifyActorFromContext, identifyUserFromContext } from "./jobs/actor";
-import { createJobStore } from "./jobs/store";
-import { createLoadToolsForActor } from "./jobs/tools";
 import {
   createCredentialAdminService,
   createCredentialStore,
@@ -51,6 +48,12 @@ import {
 import { createCrmGateway } from "./crm/gateway";
 import { createCrmStore } from "./crm/store";
 import { createDatabase } from "./db/client";
+import {
+  identifyActorFromContext,
+  identifyUserFromContext,
+} from "./jobs/actor";
+import { createJobStore } from "./jobs/store";
+import { createLoadToolsForActor } from "./jobs/tools";
 import { createKnowledgeSearch } from "./knowledge/search";
 import { bootstrapOrganizations } from "./orgs/bootstrap";
 import {

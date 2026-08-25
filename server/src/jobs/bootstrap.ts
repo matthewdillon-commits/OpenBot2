@@ -5,28 +5,29 @@
  * `signRun`, and the standing-role path cannot drift. The worker still has no HTTP server: it
  * claims a row and calls `startUnattendedRun`.
  */
+
+import { eq } from "drizzle-orm";
 import { mintRunAssertion } from "../agents/callback-token";
 import { createAgentProfileStore } from "../agents/profile-store";
 import { createRuntimeAgentLoader } from "../agents/runtime-agents";
 import { createAuditStore, recordAuditEvent } from "../audit";
 import { createChannelStore } from "../channels/routes";
 import { createThreadIdentity } from "../channels/thread-identity";
+import {
+  createPolicyStore,
+  DEFAULT_ACTION_POLICY,
+} from "../computer/policy-store";
 import type { DeploymentConfig } from "../config";
 import { createCredentialStore, resolveModelApiKey } from "../credentials";
 import { createCrmGateway } from "../crm/gateway";
 import { createCrmStore } from "../crm/store";
 import { createDatabase, type Database } from "../db/client";
 import { users } from "../db/schema";
-import { eq } from "drizzle-orm";
 import { createIntelligenceClient } from "../intelligence-client";
 import { createKnowledgeSearch } from "../knowledge/search";
 import { orgIdOf } from "../orgs/constants";
 import { createOrganizationStore } from "../orgs/store";
 import { createPluginStore } from "../plugins/store";
-import {
-  createPolicyStore,
-  DEFAULT_ACTION_POLICY,
-} from "../computer/policy-store";
 import { loadTenantPackage } from "../tenant-package";
 import { tavilySearch } from "../web-search/tavily";
 import {
@@ -122,7 +123,9 @@ export async function createUnattendedWorkerRuntime(
     apiKey: config.runtime.intelligence.apiKey,
   });
 
-  async function actorFromJob(job: UnattendedJob): Promise<ActorContext | null> {
+  async function actorFromJob(
+    job: UnattendedJob,
+  ): Promise<ActorContext | null> {
     const membership = await organizationStore.membership(
       job.actingUserId,
       job.orgId,
@@ -205,7 +208,11 @@ export async function createUnattendedWorkerRuntime(
         },
         threadIdle,
         persistThread: persistThread.append,
-        recordActivity: async ({ actor: activityActor, channelId, activity }) => {
+        recordActivity: async ({
+          actor: activityActor,
+          channelId,
+          activity,
+        }) => {
           await channelStore.recordActivity(activityActor, channelId, activity);
         },
         loadAgents,

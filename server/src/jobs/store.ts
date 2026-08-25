@@ -105,14 +105,15 @@ export type JobStore = {
 
 function asPayload(value: Record<string, unknown> | JobPayload): JobPayload {
   const prompt =
-    typeof value.prompt === "string" ? value.prompt : String(value.prompt ?? "");
+    typeof value.prompt === "string"
+      ? value.prompt
+      : String(value.prompt ?? "");
   const skillInstructions = Array.isArray(value.skillInstructions)
     ? value.skillInstructions.filter(
         (item): item is string => typeof item === "string",
       )
     : undefined;
-  const agentId =
-    typeof value.agentId === "string" ? value.agentId : undefined;
+  const agentId = typeof value.agentId === "string" ? value.agentId : undefined;
   const rawResult = value.result;
   const result =
     rawResult && typeof rawResult === "object" && !Array.isArray(rawResult)

@@ -5,6 +5,8 @@
  * with `FOR UPDATE SKIP LOCKED` and runs it. Holding the run in an in-process Map on the replica
  * that accepted the click would mean a second replica never sees the job, and a restart drops it.
  */
+
+import { sql } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -14,7 +16,6 @@ import {
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
-import { sql } from "drizzle-orm";
 import { agents, channels, organizationIdColumn, users } from "./core";
 import { jsonb } from "./json";
 
