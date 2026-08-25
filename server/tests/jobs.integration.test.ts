@@ -93,6 +93,8 @@ describe.skipIf(!postgresReachable)(
         title: "Research",
         roleDescription: "Research people.",
         visibility: "public",
+        // create() is remote AG-UI unless a managed Bot is configured. CI has none.
+        endpoint: "http://127.0.0.1:9/ag-ui",
       });
       createdAgentIds.push(agent.id);
       const channel = await channelStore.create(actor, [agent.id]);
