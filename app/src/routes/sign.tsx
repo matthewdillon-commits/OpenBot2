@@ -237,6 +237,7 @@ function SignScreen() {
                             <UserMark />
                             <input
                               autoComplete="name"
+                              // biome-ignore lint/a11y/noAutofocus: sign-up lands on the empty name field
                               autoFocus
                               className={fieldInput}
                               id="sign-name"
@@ -255,6 +256,7 @@ function SignScreen() {
                         aria-describedby={error ? errorId : undefined}
                         aria-invalid={error ? true : undefined}
                         autoComplete="email"
+                        // biome-ignore lint/a11y/noAutofocus: sign-in lands on the email field
                         autoFocus={mode === "in"}
                         className={fieldInput}
                         data-testid="input-login-email"
