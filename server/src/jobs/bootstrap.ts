@@ -379,29 +379,3 @@ export async function createUnattendedWorkerRuntime(
       }),
   };
 }
-
-export async function runUnattendedClaimLoop(
-  config: DeploymentConfig,
-  options: { signal?: AbortSignal } = {},
-) {
-  const runtime = await createUnattendedWorkerRuntime(config);
-  const pollMs = config.unattendedJobPollMs;
-  while (!options.signal?.aborted) {
-    try {
-      await runtime.tickDueCrons();
-      const job = await runtime.jobStore.claim();
-      if (job) {
-        await runtime.processJob(job);
-        continue;
-      }
-    } catch (error) {
-      console.error(
-        JSON.stringify({
-          type: "unattended-job-loop-error",
-          error: error instanceof Error ? error.message : String(error),
-        }),
-      );
-    }
-    await new Promise((resolve) => setTimeout(resolve, pollMs));
-  }
-}
