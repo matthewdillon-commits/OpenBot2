@@ -50,11 +50,15 @@ export async function deliverSend(options: {
     environment,
     token,
   );
-  const updated = await options.store.updateSend(options.orgId, options.send.id, {
-    status: result.status,
-    provider: result.provider,
-    sentAt: result.status === "sent" ? new Date().toISOString() : null,
-  });
+  const updated = await options.store.updateSend(
+    options.orgId,
+    options.send.id,
+    {
+      status: result.status,
+      provider: result.provider,
+      sentAt: result.status === "sent" ? new Date().toISOString() : null,
+    },
+  );
   if (result.status === "sent") {
     await options.store.recordSendEvent({
       sendId: options.send.id,
@@ -202,9 +206,7 @@ async function smtpSend(input: {
     const transport = nodemailer.createTransport({
       host: input.host,
       port: input.port,
-      ...(input.user
-        ? { auth: { user: input.user, pass: input.pass } }
-        : {}),
+      ...(input.user ? { auth: { user: input.user, pass: input.pass } } : {}),
     });
     await transport.sendMail({
       from: input.from,

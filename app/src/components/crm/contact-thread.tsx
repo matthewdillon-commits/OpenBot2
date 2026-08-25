@@ -29,7 +29,10 @@ export function ContactThread({ personId }: { personId: string }) {
   return (
     <ol className="m-0 flex list-none flex-col gap-3 p-0">
       {rows.map((send) => (
-        <li key={send.id} className="rounded-lg border border-border px-3.5 py-3">
+        <li
+          key={send.id}
+          className="rounded-lg border border-border px-3.5 py-3"
+        >
           <p className="capitalize text-muted-foreground text-xs">
             {send.kind} · {send.status} ·{" "}
             <span className="tabular-nums">

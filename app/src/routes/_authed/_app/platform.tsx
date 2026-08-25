@@ -112,7 +112,9 @@ function PlatformPage() {
           }}
         >
           <Input
-            aria-describedby={invite.error ? "platform-invite-error" : undefined}
+            aria-describedby={
+              invite.error ? "platform-invite-error" : undefined
+            }
             aria-invalid={invite.error ? true : undefined}
             aria-label="Organization id"
             onChange={(event) => setInviteOrgId(event.target.value)}
@@ -120,7 +122,9 @@ function PlatformPage() {
             value={inviteOrgId}
           />
           <Input
-            aria-describedby={invite.error ? "platform-invite-error" : undefined}
+            aria-describedby={
+              invite.error ? "platform-invite-error" : undefined
+            }
             aria-invalid={invite.error ? true : undefined}
             aria-label="Owner email"
             onChange={(event) => setEmail(event.target.value)}

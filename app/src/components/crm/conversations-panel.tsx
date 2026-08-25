@@ -81,11 +81,7 @@ export function ConversationsPanel({
     );
   }
   if (rows.length === 0) {
-    return (
-      <CrmEmpty
-        title={search ? "No matches" : "No conversations yet"}
-      />
-    );
+    return <CrmEmpty title={search ? "No matches" : "No conversations yet"} />;
   }
 
   return (
@@ -123,9 +119,7 @@ export function ConversationsPanel({
                 <td className="text-muted-foreground">
                   {thread.latestSend?.subject || "—"}
                 </td>
-                <td className="text-muted-foreground">
-                  {STATUS_COPY[status]}
-                </td>
+                <td className="text-muted-foreground">{STATUS_COPY[status]}</td>
                 <td className="whitespace-nowrap text-muted-foreground tabular-nums">
                   {formatSent(
                     thread.latestSend?.sentAt ||

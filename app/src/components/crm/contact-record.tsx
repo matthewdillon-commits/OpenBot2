@@ -33,9 +33,19 @@ export function ContactRecord({ personId }: { personId: string }) {
 
   const extras = [
     { key: "title", label: "Title", value: record.jobTitle },
-    { key: "phone", label: "Phone", value: record.phones[0] ?? null, inputType: "tel" as const },
+    {
+      key: "phone",
+      label: "Phone",
+      value: record.phones[0] ?? null,
+      inputType: "tel" as const,
+    },
     { key: "location", label: "Location", value: record.location },
-    { key: "linkedinUrl", label: "LinkedIn", value: record.linkedinUrl, inputType: "url" as const },
+    {
+      key: "linkedinUrl",
+      label: "LinkedIn",
+      value: record.linkedinUrl,
+      inputType: "url" as const,
+    },
   ].filter((field) => field.value);
 
   const details = [

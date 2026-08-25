@@ -90,10 +90,7 @@ export function AgentFields({
                   value={field.state.value}
                 />
                 {isInvalid ? (
-                  <FieldError
-                    errors={field.state.meta.errors}
-                    id={errorId}
-                  />
+                  <FieldError errors={field.state.meta.errors} id={errorId} />
                 ) : null}
               </Field>
             );
@@ -118,10 +115,7 @@ export function AgentFields({
                   value={field.state.value}
                 />
                 {isInvalid ? (
-                  <FieldError
-                    errors={field.state.meta.errors}
-                    id={errorId}
-                  />
+                  <FieldError errors={field.state.meta.errors} id={errorId} />
                 ) : null}
               </Field>
             );
@@ -147,10 +141,7 @@ export function AgentFields({
                   value={field.state.value}
                 />
                 {isInvalid ? (
-                  <FieldError
-                    errors={field.state.meta.errors}
-                    id={errorId}
-                  />
+                  <FieldError errors={field.state.meta.errors} id={errorId} />
                 ) : null}
               </Field>
             );
@@ -222,10 +213,7 @@ export function AgentFields({
                   </Button>
                 </div>
                 {isInvalid ? (
-                  <FieldError
-                    errors={field.state.meta.errors}
-                    id={errorId}
-                  />
+                  <FieldError errors={field.state.meta.errors} id={errorId} />
                 ) : null}
                 {connection ? (
                   <p

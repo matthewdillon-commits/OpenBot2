@@ -49,8 +49,7 @@ export const CONTACT_STAGE_DEFS: ContactStageDefinition[] = [
     key: "replied",
     label: "Replied",
     position: 3,
-    playbook:
-      "Continue the conversation — qualify interest, answer questions.",
+    playbook: "Continue the conversation — qualify interest, answer questions.",
   },
   {
     key: "interested",

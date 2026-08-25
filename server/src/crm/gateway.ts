@@ -104,7 +104,12 @@ export function createCrmGateway(options: {
     targetId?: string;
   }): Promise<
     | { ok: false; refused: string }
-    | { ok: true; verdict: PolicyDecision; createdBy: CrmCreatedBy; orgId: string }
+    | {
+        ok: true;
+        verdict: PolicyDecision;
+        createdBy: CrmCreatedBy;
+        orgId: string;
+      }
   > => {
     const orgId = orgIdOf(input.actor);
     const verdict = evaluateActionPolicy(
@@ -528,7 +533,9 @@ async function existingPerson(
   if (named.length === 0) return undefined;
 
   if (companyId) {
-    const sameCompany = named.filter((person) => person.companyId === companyId);
+    const sameCompany = named.filter(
+      (person) => person.companyId === companyId,
+    );
     if (sameCompany[0]) return sameCompany[0];
   }
   const unlinked = named.filter((person) => !person.companyId);

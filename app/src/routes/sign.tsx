@@ -44,10 +44,8 @@ const fieldInput =
   "w-full bg-transparent text-[15px] text-[#111] outline-none placeholder:text-[#b0b0b0]";
 const focusRing =
   "outline-none focus-visible:ring-2 focus-visible:ring-[#111] focus-visible:ring-offset-2";
-const socialButton =
-  `relative z-10 flex h-12 min-h-12 w-full touch-manipulation items-center justify-center gap-2.5 rounded-[12px] border border-[#e6e6e6] bg-white text-[14px] font-medium text-[#222] transition-[color,background-color,transform] duration-200 ease-out hover:bg-[#fafafa] motion-safe:active:scale-[0.97] disabled:opacity-50 ${focusRing}`;
-const primaryButton =
-  `mt-2 flex h-[52px] w-full items-center justify-center gap-2 rounded-[12px] bg-[#111] text-[15px] font-medium text-white transition-[opacity,transform] duration-200 ease-out enabled:hover:opacity-90 motion-safe:enabled:active:scale-[0.97] disabled:bg-[#d4d4d4] disabled:text-white ${focusRing}`;
+const socialButton = `relative z-10 flex h-12 min-h-12 w-full touch-manipulation items-center justify-center gap-2.5 rounded-[12px] border border-[#e6e6e6] bg-white text-[14px] font-medium text-[#222] transition-[color,background-color,transform] duration-200 ease-out hover:bg-[#fafafa] motion-safe:active:scale-[0.97] disabled:opacity-50 ${focusRing}`;
+const primaryButton = `mt-2 flex h-[52px] w-full items-center justify-center gap-2 rounded-[12px] bg-[#111] text-[15px] font-medium text-white transition-[opacity,transform] duration-200 ease-out enabled:hover:opacity-90 motion-safe:enabled:active:scale-[0.97] disabled:bg-[#d4d4d4] disabled:text-white ${focusRing}`;
 
 /**
  * Copied from os.limitlessai.ca/login: split form and aerial hero, Inter Tight,
@@ -367,11 +365,7 @@ function SignScreen() {
                         ? "Sign up with Google"
                         : "Continue with Google"}
                   </button>
-                  <button
-                    className={socialButton}
-                    disabled
-                    type="button"
-                  >
+                  <button className={socialButton} disabled type="button">
                     <span className="inline-flex h-[18px] w-[18px] items-center justify-center text-[#111]">
                       <AppleMark />
                     </span>
