@@ -28,7 +28,7 @@ import { createCredentialStore, resolveModelApiKey } from "../credentials";
 import { createCrmGateway } from "../crm/gateway";
 import { createCrmStore } from "../crm/store";
 import { createDatabase, type Database } from "../db/client";
-import { bindRequestRls } from "../db/rls";
+import { runWithRequestRls } from "../db/rls";
 import { users } from "../db/schema";
 import { createIntelligenceClient } from "../intelligence-client";
 import { createKnowledgeSearch } from "../knowledge/search";
@@ -215,12 +215,11 @@ export async function createUnattendedWorkerRuntime(
   }
 
   async function processJob(job: UnattendedJob): Promise<void> {
-    await bindRequestRls(database, { orgId: job.orgId, bypass: false });
-    try {
-      await withSpan("unattended.job", () => executeJob(job));
-    } finally {
-      await bindRequestRls(database, { orgId: null, bypass: false });
-    }
+    // Scoped to this job only. A sticky bind left the first org on the
+    // process-wide store, so a later queued row in another org was invisible.
+    await runWithRequestRls(database, { orgId: job.orgId, bypass: false }, () =>
+      withSpan("unattended.job", () => executeJob(job)),
+    );
   }
 
   async function executeJob(job: UnattendedJob): Promise<void> {

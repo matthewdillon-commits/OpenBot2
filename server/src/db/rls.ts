@@ -10,8 +10,10 @@
  * a superuser login cannot bypass). Replica B uses the same Postgres; a pool
  * hop cannot leak another org. Nothing is held in a Map.
  *
- * Empty `app.current_org_id` with bypass off is the boot / test / worker-claim
- * path: every row is visible. Authenticated tenant requests set the org id.
+ * Empty `app.current_org_id` with bypass off is the boot / test path: every
+ * row is visible. Authenticated tenant requests set the org id. The worker
+ * claim loop must not inherit a leftover org from `processJob` — use
+ * `runWithRequestRls` (or `bypass: true` on claim) rather than `enterWith`.
  */
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { SQL } from "bun";
@@ -167,12 +169,40 @@ export function wrapClientWithRls(client: SQL): SQL {
   }) as SQL;
 }
 
+function storedBinding(input: RlsBinding = {}): StoredBinding {
+  return {
+    orgId: input.orgId?.trim() ?? "",
+    bypass: input.bypass === true,
+  };
+}
+
+/**
+ * Bind RLS for a request-shaped lifetime. `enterWith` sticks to the current
+ * async resource until something else replaces it — fine for one HTTP
+ * request, fatal in the worker's long-lived claim loop.
+ *
+ * A leftover `orgId` here is applied by `wrapClientWithRls` on every Bun SQL
+ * client in the process, including the one-connection claim pool that never
+ * called `bindRequestRls` itself. The next `claim()` then runs as
+ * `openbot_rls` scoped to the previous job's org, so a queued row in another
+ * org stays queued. Prefer `runWithRequestRls` whenever the bind has an end.
+ */
 export async function bindRequestRls(
   _database: unknown,
   input: RlsBinding = {},
 ): Promise<void> {
-  rlsStore.enterWith({
-    orgId: input.orgId?.trim() ?? "",
-    bypass: input.bypass === true,
-  });
+  rlsStore.enterWith(storedBinding(input));
+}
+
+/**
+ * Bind RLS only for `work`. The parent async context is restored when the
+ * callback returns, so a worker `processJob` cannot leave `app.current_org_id`
+ * set for the next `claim()`.
+ */
+export function runWithRequestRls<T>(
+  _database: unknown,
+  input: RlsBinding,
+  work: () => T,
+): T {
+  return rlsStore.run(storedBinding(input), work);
 }
