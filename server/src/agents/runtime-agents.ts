@@ -1,3 +1,4 @@
+import "../compat/eventsource";
 import { and, eq, isNotNull, isNull, or } from "drizzle-orm";
 import { type RegisteredAgent, registeredAgentFromRow } from "../copilot";
 import type { CredentialSecretReader } from "../credentials";

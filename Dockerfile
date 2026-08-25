@@ -40,6 +40,9 @@ WORKDIR /src
 # Manifests first, so editing a source file does not reinstall the world.
 COPY package.json bun.lock ./
 COPY tsconfig.base.json bunfig.toml ./
+# Patched eventsource exports: bun install applies these. Without this copy, the
+# image would `require()` the ESM build and the worker would never claim a job.
+COPY patches patches
 COPY app/package.json app/package.json
 COPY server/package.json server/package.json
 COPY worker/package.json worker/package.json
@@ -52,6 +55,7 @@ RUN cd agent-computer && bun install
 # biome and the test tooling are a gigabyte that nothing in a running container imports.
 # drizzle-kit stays: migrate.sh runs it against DATABASE_URL before the API starts.
 RUN mkdir -p /prod && cp package.json bun.lock /prod/ \
+  && cp -r patches /prod/patches \
   && cp -r app/package.json /prod/app-package.json \
   && cd /prod && mkdir -p app server worker \
   && cp /src/app/package.json app/package.json \

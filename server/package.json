@@ -8,7 +8,7 @@
     "build": "tsc --noEmit",
     "db:generate": "bun --env-file=../.env drizzle-kit generate --config=drizzle.config.ts",
     "db:migrate": "bun --env-file=../.env drizzle-kit migrate --config=drizzle.config.ts",
-    "dev": "bun --env-file=../.env --watch src/index.ts",
+    "dev": "bun --env-file=../.env --watch --preload src/compat/eventsource.ts src/index.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -28,6 +28,7 @@
     "cel-js": "^0.8.2",
     "drizzle-kit": "^0.31.10",
     "drizzle-orm": "^0.45.2",
+    "eventsource": "3.0.7",
     "hono": "^4.10.0",
     "nodemailer": "^9.0.5",
     "postgres": "^3.4.9",
@@ -35,7 +36,6 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@copilotkit/aimock": "1.39.0",
-    "eventsource": "3.0.7"
+    "@copilotkit/aimock": "1.39.0"
   }
 }

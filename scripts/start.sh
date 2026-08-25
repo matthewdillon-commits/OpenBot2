@@ -157,16 +157,16 @@ if ! curl -fsS --max-time 3 "http://localhost:$SERVER_PORT/api/capabilities" >/d
       COMPUTER_SUPERVISOR_URL="http://localhost:$SUPERVISOR_PORT" \
       SUPERVISOR_TOKEN="$SUPERVISOR_TOKEN" \
       COMPUTER_TOKEN="$COMPUTER_TOKEN" \
-      bun --env-file=../.env src/index.ts >"$LOGS/server.log" 2>&1 &)
+      bun --env-file=../.env --preload src/compat/eventsource.ts src/index.ts >"$LOGS/server.log" 2>&1 &)
   else
-    (cd server && PORT="$SERVER_PORT" bun --env-file=../.env src/index.ts >"$LOGS/server.log" 2>&1 &)
+    (cd server && PORT="$SERVER_PORT" bun --env-file=../.env --preload src/compat/eventsource.ts src/index.ts >"$LOGS/server.log" 2>&1 &)
   fi
 fi
 wait_for "http://localhost:$SERVER_PORT/api/capabilities" "server"
 
 info "3/5  Worker"
 if ! pgrep -f "worker/src/index.ts" >/dev/null 2>&1; then
-  (cd worker && bun --env-file=../.env src/index.ts >"$LOGS/worker.log" 2>&1 &)
+  (cd worker && bun --env-file=../.env --preload ../server/src/compat/eventsource.ts src/index.ts >"$LOGS/worker.log" 2>&1 &)
 fi
 info "  worker claiming unattended jobs"
 

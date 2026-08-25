@@ -5,7 +5,7 @@
  * `signRun`, and the standing-role path cannot drift. The worker still has no HTTP server: it
  * claims a row and calls `startUnattendedRun`.
  */
-
+import "../compat/eventsource";
 import { eq } from "drizzle-orm";
 import { COMPUTER_GUIDANCE } from "../../../shared/bot-prompt";
 import { mintRunAssertion } from "../agents/callback-token";

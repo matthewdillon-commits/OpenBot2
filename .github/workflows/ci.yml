@@ -151,6 +151,14 @@ jobs:
           # it would leave that command fetching from the network, or failing offline.
           docker run --rm --entrypoint /bin/sh openbot:ci -c \
             'test -e /app/server/node_modules/drizzle-kit/package.json && cd /app/server && bun x drizzle-kit --version'
+      - name: Production image has patched eventsource
+        run: |
+          set -euo pipefail
+          # The worker CommonJS-requires eventsource via @ag-ui/mcp-apps-middleware.
+          # If bun install did not apply patches/, require() hits the ESM build and
+          # queued jobs stay queued.
+          docker run --rm --entrypoint /bin/sh openbot:ci -c \
+            'cd /app/server && bun -e "const p = await Bun.file(\"node_modules/eventsource/package.json\").json(); if (p.exports[\".\"].bun) throw new Error(\"eventsource still has a bun export condition\"); if (!String(p.exports[\".\"].require).endsWith(\".cjs\")) throw new Error(\"eventsource require is not cjs\"); console.log(\"eventsource require is cjs\");"'
       # Building it says the layers resolve. Running it says the supervision tree comes up and stays
       # up, which is a different claim and the one that has broken before.
       - name: The image boots and serves
@@ -199,6 +207,16 @@ jobs:
           # A supervised service that exits is restarted forever. That looks healthy from outside for
           # as long as something else is answering, so the log is where it shows.
           sleep 15
+          if docker logs openbot-ci 2>&1 | grep -F 'require() async module'; then
+            echo "::error::A bun process crashed requiring ESM eventsource."
+            docker logs openbot-ci
+            exit 1
+          fi
+          if ! docker logs openbot-ci 2>&1 | grep -F '"type":"worker-start"'; then
+            echo "::error::The worker never logged worker-start; unattended jobs would stay queued."
+            docker logs openbot-ci
+            exit 1
+          fi
           if docker logs openbot-ci 2>&1 | grep -Eic 'restarting|respawn' | grep -qv '^0$'; then
             echo "::error::A supervised service is restarting."
             docker logs openbot-ci 2>&1 | grep -Ei 'restarting|respawn' | head -20

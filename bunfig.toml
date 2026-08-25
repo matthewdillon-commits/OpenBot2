@@ -1,4 +1,5 @@
 [test]
-# See server/scripts/test-preload.ts: makes the module graph deterministic so a test file cannot fail to
-# import depending on the order the suite happened to be walked.
+# See server/scripts/test-preload.ts: evaluates eventsource as ESM before any CommonJS MCP
+# client `require()`s it. bunfig [test] preload does not apply to `bun src/index.ts`;
+# production uses --preload and a patched eventsource (see server/src/compat/eventsource.ts).
 preload = ["./server/scripts/test-preload.ts"]

@@ -4,6 +4,7 @@
  * The API only inserts a `queued` row. This process is the one that `FOR UPDATE SKIP LOCKED`
  * claims and executes — not an in-process Map on the replica that accepted Send-and-go.
  */
+import "../../server/src/compat/eventsource";
 import { loadConfig } from "../../server/src/config";
 import { runUnattendedClaimLoop } from "../../server/src/jobs/bootstrap";
 import { startTracing } from "../../server/src/telemetry";

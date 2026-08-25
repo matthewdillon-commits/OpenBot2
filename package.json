@@ -32,5 +32,8 @@
     "typescript": "^5.9.3",
     "yaml": "^2.9.0"
   },
-  "dependencies": {}
+  "dependencies": {},
+  "patchedDependencies": {
+    "eventsource@3.0.7": "patches/eventsource@3.0.7.patch"
+  }
 }
