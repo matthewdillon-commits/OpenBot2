@@ -121,6 +121,12 @@ export type JobStore = {
     actingUserId: string;
     lastAction: string;
   }) => Promise<UnattendedJob[]>;
+  /**
+   * Cron skips a fire when this thread already has a queued or running job.
+   * One running job per thread still holds at claim time; this keeps a fast
+   * schedule from piling the same standing prompt.
+   */
+  hasUnfinishedOnThread: (orgId: string, threadId: string) => Promise<boolean>;
 };
 
 function collectPayloadTexts(payload: JobPayload): string[] {
@@ -385,6 +391,21 @@ export function createJobStore(database: Database): JobStore {
         if (next) updated.push(toJob(next));
       }
       return updated;
+    },
+
+    async hasUnfinishedOnThread(orgId, threadId) {
+      const [row] = await database
+        .select({ id: jobs.id })
+        .from(jobs)
+        .where(
+          and(
+            eq(jobs.orgId, orgIdOf({ orgId })),
+            eq(jobs.threadId, threadId),
+            sql`${jobs.status} in ('queued', 'running')`,
+          ),
+        )
+        .limit(1);
+      return Boolean(row);
     },
   };
 }

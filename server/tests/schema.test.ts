@@ -30,6 +30,8 @@ import {
   intelligenceChannelMappings,
   jobStatus,
   jobs,
+  jobTriggerKind,
+  jobTriggers,
   sessions,
   sharedComputerClaim,
   syncRuns,
@@ -456,6 +458,39 @@ describe("OpenBot database schema", () => {
     expect(migration).toContain(`"needs_you"`);
     expect(migration).toContain(`"goal_id"`);
     expect(migration).toContain(`"outcome" jsonb`);
+  });
+
+  test("defines standing job triggers isolated by org_id", () => {
+    expect(getTableName(jobTriggers)).toBe("job_triggers");
+    expect(jobTriggerKind.enumValues).toEqual(["cron", "webhook", "email"]);
+    expect(Object.keys(jobTriggers)).toEqual(
+      expect.arrayContaining([
+        "orgId",
+        "kind",
+        "channelId",
+        "goalId",
+        "threadId",
+        "coworkerId",
+        "actingUserId",
+        "prompt",
+        "everySeconds",
+        "nextRunAt",
+        "secretHash",
+        "mailbox",
+      ]),
+    );
+  });
+
+  test("adds standing job triggers in their own migration", async () => {
+    const migration = await readFile(
+      new URL("../drizzle/0016_job_triggers.sql", import.meta.url),
+      "utf8",
+    );
+    expect(migration).toContain(`CREATE TABLE "job_triggers"`);
+    expect(migration).toContain(`"org_id" text DEFAULT 'org_local' NOT NULL`);
+    expect(migration).toContain(`job_triggers_mailbox_unique`);
+    expect(migration).toContain(`"every_seconds"`);
+    expect(migration).toContain(`"secret_hash"`);
   });
 
   test("defines the shared Chromium claim isolated by org_id", () => {

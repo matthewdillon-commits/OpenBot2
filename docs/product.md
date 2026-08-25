@@ -196,9 +196,11 @@ channel. A second transcript is not minted. The API inserts a `jobs` row; the
 `worker` claims it with `FOR UPDATE SKIP LOCKED` and runs the coworker with
 the same server tools an open-tab turn uses: CRM, `search_web`, knowledge,
 granted MCP, and computer tools when the gateway is configured and the
-browser is on. A missing mapping or missing thread is a refuse. Persist must
-write that same mapped thread. The client this tree already uses for thread
-reads is `CopilotKitIntelligence.getThread`
+browser is on. **Cron**, **webhook**, and **inbound email** enqueue that same
+row from a standing org-scoped config (actor, goal/channel, thread, coworker,
+prompt). Missing mapping or missing thread is a refuse — they do not mint a
+thread. Persist must write that same mapped thread. The client this tree
+already uses for thread reads is `CopilotKitIntelligence.getThread`
 (`server/src/intelligence-client.ts`,
 `server/src/channels/thread-status.ts`). That class has no method that appends
 chat messages — tab turns persist through the CopilotRuntime runner, which
@@ -212,10 +214,13 @@ already returned. That is not an approval card. There is no Goals home UI.
 ### How a coworker actually runs
 
 A turn usually starts because someone sent a message in the open app. Channel
-chat uses the CopilotKit browser client. **Send-and-go** is the other start: an
-explicit “continue this channel after I leave” from the composer. There is no
-scheduler, no inbound-email-to-Bot, and no webhook that starts a run on its own.
-A standing role is a system prompt on the next user turn.
+chat uses the CopilotKit browser client. **Send-and-go** is the other start
+from the composer: an explicit “continue this channel after I leave.” **Cron**,
+**webhook**, and **inbound email** are the same start without the tab: each
+resolves a stored actor / org / goal / thread / coworker and inserts the same
+`jobs` row (`enqueueUnattendedJob` → `jobStore.enqueue`). The worker claims
+it with `FOR UPDATE SKIP LOCKED` and calls `startUnattendedRun`. There is no
+second runner. A standing role is a system prompt on the next user turn.
 
 Once a turn has started — in the tab or from a claimed job:
 
@@ -241,10 +246,12 @@ Once a turn has started — in the tab or from a claimed job:
 
 So: a person can send “research these two people, open their sites, and write
 the CRM” with Send-and-go, close the tab, and the worker still runs those
-server tools — including the computer. A login or secret pauses as Needs you;
-the ask stays on the computer if the tab is closed. The turn is not written
-onto the Intelligence thread, so coming back does not yet show that result on
-the same mapped thread.
+server tools — including the computer. A standing cron, a signed webhook POST,
+or an inbound email to a mapped mailbox starts the same job after the tab is
+closed. A login or secret pauses as Needs you; the ask stays on the computer
+if the tab is closed. The turn is not written onto the Intelligence thread, so
+coming back does not yet show that result on the same mapped thread. Reopen
+the channel: the job is honestly failed if persist is still fail-closed.
 
 ### Organizations
 
@@ -284,9 +291,12 @@ running beside it.
 **Not a self-serve multi-tenant SaaS** until RLS, billing, seats, per-org SSO,
 per-tenant computers, and a spend cap exist.
 
-**Not cron, webhook, or inbound email.** Send-and-go runs CRM / research /
-MCP / computer after the tab closes. Scheduled and inbound starts are later
-phases.
+**Not a durable unattended transcript, and not Goals home.** Send-and-go, cron,
+webhook, and inbound email all enqueue the same job and the worker runs it after
+the tab closes, including computer tools when the gateway is on. Persist onto
+the Intelligence thread still fails closed — close-tab / come-back on the same
+mapped thread is not true yet unless persist is later given a write. There is
+no Goals home UI.
 
 **Not the self-improving loop.** There are no outcome events tied to actions,
 no approval cards with expected impact, and no keep / revise / revert that
@@ -300,7 +310,7 @@ It does not measure whether the work moved the business.
 | Product name | `examples/fintech/brand.yaml`, `server/src/index.ts` listen line, sign-in copy |
 | Org tables and plan-until-billing | `server/src/db/schema/core.ts` |
 | Isolation is query-scoped | `server/tests/organization-isolation.integration.test.ts` |
-| Turns start in the app | `app/src/components/channels/channel-chat.tsx` (`useAgent`) |
+| Turns start in the app or from a standing trigger | `app/src/components/channels/channel-chat.tsx` (`useAgent`); `server/src/jobs/enqueue.ts` |
 | Computer tools execute on the server | `server/src/computer/computer-tools.ts`, `server/src/jobs/tools.ts` `loadToolsForActor` |
 | Watch pane is render-only | `app/src/lib/copilot/computer-tools.tsx` (`useRenderTool`) |
 | HITL is `needs_you`, not a tab wait | `server/src/jobs/store.ts` `markNeedsYou`, `jobs.needs_you` |
@@ -308,6 +318,9 @@ It does not measure whether the work moved the business.
 | Server CRM / search tools | `server/src/index.ts` `loadToolsForActor` |
 | Twenty tool steps | `server/src/copilot.ts` `TOOL_STEPS` |
 | Send-and-go / unattended jobs | `server/src/jobs/`, `worker/src/index.ts` |
+| One enqueue path for every start | `server/src/jobs/enqueue.ts` `enqueueUnattendedJob` |
+| Cron standing row and due claim | `server/src/jobs/triggers.ts` `CLAIM_DUE_CRON_SQL`, `tickDueCrons`; `job_triggers` |
+| Webhook and inbound email | `server/src/jobs/inbound.ts` `POST /api/inbound/webhook/:id`, `POST /api/inbound/email` |
 | Unattended persist fails closed | `server/src/jobs/thread.ts` `createThreadPersister` (`getThread` only) |
 | Shared computer without supervisor | `docs/deployment.md`, `COMPUTER_SUPERVISOR_URL` |
 | Composio keyed by org | `server/src/composio/client.ts` |
@@ -316,14 +329,13 @@ It does not measure whether the work moved the business.
 
 ## C. What it is not yet
 
-Three things people will assume from Part A. The first has started; the
-other two have not:
+Three things people will assume from Part A. Scheduled and inbound starts
+have landed; persist and the customer home have not:
 
-1. **Scheduled and inbound starts, and a durable unattended transcript.**
-   Send-and-go exists (Part B), including computer tools on the server and a
+1. **A durable unattended transcript.** Send-and-go, cron, webhook, and
+   inbound email exist (Part B), including computer tools on the server and a
    `needs_you` pause. Persist onto the Intelligence thread still fails
    closed — close-tab / come-back on the same mapped thread is not true yet.
-   There is still no cron, no webhook, and no inbound email that opens a run.
 2. **Self-serve SaaS.** No RLS, no Stripe, no seat quota, no invite email, no
    per-org SSO, no spend cap, no multi-replica story beyond “Postgres is the
    shared state.” `/platform` is sales-led provisioning, not a checkout.
@@ -333,7 +345,8 @@ other two have not:
    its thread; the job row can hold Active | Needs you | Done and last
    action. There is no Goals home, no “See the work,” and no approval cards.
    Observe / understand / prioritize / act can be *performed by a person
-   talking to a Bot*. Measure and improve are not product surfaces.
+   talking to a Bot*, or by a standing trigger that enqueues the same job.
+   Measure and improve are not product surfaces.
 
 When a pull request claims one of those, it is done only when Part B of this
 file can say so with a file citation. Until then the honest sentence is the

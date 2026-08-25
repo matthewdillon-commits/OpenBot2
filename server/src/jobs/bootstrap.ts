@@ -49,11 +49,18 @@ import {
   intelligenceUserForActor,
 } from "./thread";
 import { createLoadToolsForActor } from "./tools";
+import {
+  createJobTriggerStore,
+  tickDueCrons,
+  type JobTriggerStore,
+} from "./triggers";
 
 export type UnattendedWorkerRuntime = {
   database: Database;
   jobStore: JobStore;
+  triggerStore: JobTriggerStore;
   processJob: (job: UnattendedJob) => Promise<void>;
+  tickDueCrons: () => Promise<number>;
 };
 
 export async function createUnattendedWorkerRuntime(
@@ -82,6 +89,7 @@ export async function createUnattendedWorkerRuntime(
     threadIdentity,
   );
   const jobStore = createJobStore(database);
+  const triggerStore = createJobTriggerStore(database);
   const auditStore = createAuditStore(database);
   const policyStore = createPolicyStore(
     config.computer?.policy ?? DEFAULT_ACTION_POLICY,
@@ -302,7 +310,19 @@ export async function createUnattendedWorkerRuntime(
     }).catch(() => undefined);
   }
 
-  return { database, jobStore, processJob };
+  return {
+    database,
+    jobStore,
+    triggerStore,
+    processJob,
+    tickDueCrons: () =>
+      tickDueCrons({
+        triggerStore,
+        jobStore,
+        lookupChannel: (actor, channelId) => channelStore.get(actor, channelId),
+        auditStore,
+      }),
+  };
 }
 
 export async function runUnattendedClaimLoop(
@@ -313,6 +333,7 @@ export async function runUnattendedClaimLoop(
   const pollMs = config.unattendedJobPollMs;
   while (!options.signal?.aborted) {
     try {
+      await runtime.tickDueCrons();
       const job = await runtime.jobStore.claim();
       if (job) {
         await runtime.processJob(job);

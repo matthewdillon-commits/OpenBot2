@@ -32,16 +32,18 @@ The compose file also defines optional SPIRE services. `start.sh` does not start
 
 ## Runtime flow
 
-A turn starts in the open app. There is no scheduler in this tree.
+A turn starts in the open app, from Send-and-go, or from a standing trigger
+(cron, webhook, inbound email). Those last three insert the same `jobs` row
+the worker already claims.
 
-1. A signed-in person opens a channel or `/bot` and sends a message (CopilotKit's browser client).
-2. The server resolves the actor, including the selected organization, and the coworker that is speaking.
-3. Built-in Bots run their tool loop on the API: CRM, `search_web`, company knowledge, and granted MCP, up to twenty steps. Remote AG-UI Bots call that same list back through `/api/agent-tools/call`.
-4. Computer tools, gallery components, and sandboxed components are frontend tools. The run ends, the open tab executes them, then the client starts another run with the result.
+1. A signed-in person opens a channel or `/bot` and sends a message (CopilotKit's browser client), or a standing trigger enqueues `jobs` through `enqueueUnattendedJob`.
+2. The server resolves the actor, including the selected organization, and the coworker that is speaking. Cron / webhook / email resolve the actor from the standing row — not from a cookie.
+3. Built-in Bots run their tool loop on the API: CRM, `search_web`, company knowledge, granted MCP, and computer tools when the gateway is on, up to twenty steps. Remote AG-UI Bots call that same list back through `/api/agent-tools/call`.
+4. The watch tab renders computer tools; it does not execute them. Gallery and sandboxed components still execute in the browser.
 5. Every acting call still goes through the gateway: resolve, decide, audit, then act or refuse.
-6. Events reach the Intelligence gateway. The thread survives a restart; the Activity tab does not.
+6. Events reach the Intelligence gateway. Unattended persist still fails closed (`getThread` only); the Activity tab does not survive a reload.
 
-Closing the tab stops frontend tools. Server-side steps of an already-started turn continue on the API process until they finish or stall. Nothing new starts after that.
+Closing the tab does not stop a claimed job. A missing Intelligence mapping is a refuse; nothing mints a thread.
 
 ## Organizations
 
