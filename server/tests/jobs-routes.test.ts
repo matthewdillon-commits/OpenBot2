@@ -35,6 +35,7 @@ function job(overrides: Partial<UnattendedJob> = {}): UnattendedJob {
     threadId: "thread-1",
     needsYou: false,
     error: null,
+    outcome: null,
     startedAt: null,
     finishedAt: null,
     createdAt: now,

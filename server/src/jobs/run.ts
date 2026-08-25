@@ -17,6 +17,8 @@ import {
   TOOL_STEPS,
 } from "../copilot";
 import { orgIdOf } from "../orgs/constants";
+import { REFUSAL_MARKER } from "../plugins/refusal";
+import type { GrantedTool } from "../plugins/tools";
 import {
   type ActorContext,
   identifyActorFromContext,
@@ -30,6 +32,7 @@ import type {
   UnattendedMessage,
 } from "./thread";
 import { waitForThreadIdle } from "./thread";
+import { extractCrmRecordIds } from "./outcome";
 import {
   gateUserOAuthTools,
   serverSideToolsOnly,
@@ -46,6 +49,8 @@ export type UnattendedRunResult = {
   error?: string;
   persisted?: boolean;
   messages: UnattendedMessage[];
+  toolSuccessCount: number;
+  crmRecordIds: string[];
 };
 
 export type UnattendedRunDeps = {
@@ -90,6 +95,42 @@ const THREAD_MISMATCH =
 
 function newMessageId(prefix: string) {
   return `${prefix}_${crypto.randomUUID()}`;
+}
+
+function emptyResult(
+  outcome: UnattendedRunOutcome,
+  error?: string,
+): UnattendedRunResult {
+  return {
+    outcome,
+    ...(error ? { error } : {}),
+    messages: [],
+    toolSuccessCount: 0,
+    crmRecordIds: [],
+  };
+}
+
+function observeServerTools(tools: GrantedTool[]): {
+  tools: GrantedTool[];
+  snapshot: () => { toolSuccessCount: number; texts: string[] };
+} {
+  const texts: string[] = [];
+  let toolSuccessCount = 0;
+  return {
+    tools: tools.map((tool) => ({
+      ...tool,
+      execute: async (args) => {
+        const result = await tool.execute(args);
+        const text = typeof result === "string" ? result : "";
+        if (text) texts.push(text);
+        if (text && !text.includes(REFUSAL_MARKER)) {
+          toolSuccessCount += 1;
+        }
+        return result;
+      },
+    })),
+    snapshot: () => ({ toolSuccessCount, texts }),
+  };
 }
 
 function assistantText(messages: UnattendedMessage[]): string {
@@ -168,10 +209,10 @@ export async function startUnattendedRun(input: {
     orgId,
   });
   if (!mapping) {
-    return { outcome: "refused", error: MISSING_MAPPING, messages: [] };
+    return emptyResult("refused", MISSING_MAPPING);
   }
   if (mapping.threadId !== input.threadId) {
-    return { outcome: "refused", error: THREAD_MISMATCH, messages: [] };
+    return emptyResult("refused", THREAD_MISMATCH);
   }
 
   const wait =
@@ -188,27 +229,27 @@ export async function startUnattendedRun(input: {
     userId: intelligenceUser.id,
   });
   if (threadState === "busy") {
-    return { outcome: "refused", error: THREAD_BUSY, messages: [] };
+    return emptyResult("refused", THREAD_BUSY);
   }
 
   const registered = await input.deps.loadAgents(actor);
   const coworker = registered.find((agent) => agent.id === input.coworkerId);
   if (!coworker) {
-    return {
-      outcome: "refused",
-      error: "That coworker is not available to the acting user.",
-      messages: [],
-    };
+    return emptyResult(
+      "refused",
+      "That coworker is not available to the acting user.",
+    );
   }
 
   const rawTools = await input.deps.loadTools(actor.id, orgId)(coworker.id);
-  const tools = await gateUserOAuthTools(
+  const gated = await gateUserOAuthTools(
     serverSideToolsOnly(rawTools),
     { id: actor.id, orgId },
     input.deps.userOAuth,
   );
+  const observed = observeServerTools(gated);
   const loadTools: LoadToolsForBot = async (botId) =>
-    botId === coworker.id ? tools : [];
+    botId === coworker.id ? observed.tools : [];
 
   const agents =
     input.deps.prebuiltAgents ??
@@ -226,11 +267,10 @@ export async function startUnattendedRun(input: {
     ));
   const agent = agents[coworker.id];
   if (!agent) {
-    return {
-      outcome: "failed",
-      error: "The coworker could not be built for this run.",
-      messages: [],
-    };
+    return emptyResult(
+      "failed",
+      "The coworker could not be built for this run.",
+    );
   }
 
   const runMessages: UnattendedMessage[] = [
@@ -278,6 +318,12 @@ export async function startUnattendedRun(input: {
           },
         ];
     const text = finished.text.trim() || assistantText(transcript);
+    const observedTools = observed.snapshot();
+    const crmRecordIds = extractCrmRecordIds(
+      text,
+      ...transcript.map((message) => message.content),
+      ...observedTools.texts,
+    );
     let persisted = false;
     if (input.deps.persistThread) {
       try {
@@ -301,10 +347,18 @@ export async function startUnattendedRun(input: {
         },
       });
     }
-    return { outcome: "succeeded", text, persisted, messages: transcript };
+    return {
+      outcome: "succeeded",
+      text,
+      persisted,
+      messages: transcript,
+      toolSuccessCount: observedTools.toolSuccessCount,
+      crmRecordIds,
+    };
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "The unattended run failed.";
+    const observedTools = observed.snapshot();
     try {
       await input.deps.recordActivity({
         actor,
@@ -318,7 +372,13 @@ export async function startUnattendedRun(input: {
     } catch {
       // Roster update is best-effort; the job row still records the failure.
     }
-    return { outcome: "failed", error: message, messages: runMessages };
+    return {
+      outcome: "failed",
+      error: message,
+      messages: runMessages,
+      toolSuccessCount: observedTools.toolSuccessCount,
+      crmRecordIds: extractCrmRecordIds(...observedTools.texts),
+    };
   }
 }
 

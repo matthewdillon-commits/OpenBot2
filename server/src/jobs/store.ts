@@ -10,6 +10,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { jobs } from "../db/schema/jobs";
 import { orgIdOf } from "../orgs/constants";
+import { asJobOutcome, buildJobOutcome, type JobOutcome } from "./outcome";
 
 export const JOB_STATUSES = [
   "queued",
@@ -32,6 +33,8 @@ export type JobPayload = {
   };
 };
 
+export type { JobOutcome } from "./outcome";
+
 export type UnattendedJob = {
   id: string;
   orgId: string;
@@ -44,6 +47,7 @@ export type UnattendedJob = {
   threadId: string;
   needsYou: boolean;
   error: string | null;
+  outcome: JobOutcome | null;
   startedAt: Date | null;
   finishedAt: Date | null;
   createdAt: Date;
@@ -93,7 +97,12 @@ export type JobStore = {
   finish: (
     id: string,
     status: "succeeded" | "failed" | "cancelled",
-    update?: { error?: string; payload?: JobPayload },
+    update?: {
+      error?: string;
+      payload?: JobPayload;
+      crmRecordIds?: string[];
+      toolSuccessCount?: number;
+    },
   ) => Promise<UnattendedJob | null>;
   get: (orgId: string, id: string) => Promise<UnattendedJob | null>;
   listForChannel: (
@@ -102,6 +111,17 @@ export type JobStore = {
     limit?: number,
   ) => Promise<UnattendedJob[]>;
 };
+
+function collectPayloadTexts(payload: JobPayload): string[] {
+  const texts: string[] = [];
+  if (payload.result?.text) texts.push(payload.result.text);
+  for (const message of payload.result?.messages ?? []) {
+    if (!message || typeof message !== "object") continue;
+    const content = (message as { content?: unknown }).content;
+    if (typeof content === "string") texts.push(content);
+  }
+  return texts;
+}
 
 function asPayload(value: Record<string, unknown> | JobPayload): JobPayload {
   const prompt =
@@ -142,6 +162,7 @@ function toJob(row: typeof jobs.$inferSelect): UnattendedJob {
     threadId: row.threadId,
     needsYou: row.needsYou,
     error: row.error,
+    outcome: asJobOutcome(row.outcome),
     startedAt: row.startedAt,
     finishedAt: row.finishedAt,
     createdAt: row.createdAt,
@@ -233,14 +254,30 @@ export function createJobStore(database: Database): JobStore {
       const payload = update.payload
         ? { ...asPayload(existing.payload), ...update.payload }
         : asPayload(existing.payload);
+      const finishedAt = new Date();
+      const sourceTexts = collectPayloadTexts(payload);
+      const outcome = buildJobOutcome({
+        status,
+        finishedAt,
+        channelId: existing.channelId,
+        agentId: existing.coworkerId,
+        orgId: existing.orgId,
+        actingUserId: existing.actingUserId,
+        assistantText: payload.result?.text,
+        error: update.error ?? existing.error,
+        toolSuccessCount: update.toolSuccessCount,
+        crmRecordIds: update.crmRecordIds,
+        sourceTexts,
+      });
       const [row] = await database
         .update(jobs)
         .set({
           status,
           error: update.error ?? null,
           payload,
-          finishedAt: new Date(),
-          updatedAt: new Date(),
+          outcome,
+          finishedAt,
+          updatedAt: finishedAt,
         })
         .where(eq(jobs.id, id))
         .returning();

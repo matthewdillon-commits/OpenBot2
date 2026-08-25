@@ -147,6 +147,53 @@ describe("startUnattendedRun", () => {
     expect(result.text).toBe("Found Ada at Acme.");
     expect(calls).toEqual([{ query: "Ada" }]);
     expect(activities).toEqual(["Found Ada at Acme."]);
+    expect(result.crmRecordIds).toEqual([]);
+  });
+
+  test("keeps CRM write ids from assistant text for the job outcome", async () => {
+    const result = await startUnattendedRun({
+      actor,
+      orgId: actor.orgId,
+      channelId: "channel_1",
+      threadId: "thread-1",
+      prompt: "Add Ada.",
+      coworkerId: "researcher",
+      deps: {
+        lookupMapping: async () => ({
+          threadId: "thread-1",
+          channelId: "channel_1",
+          userId: actor.id,
+        }),
+        waitForThread: async () => "idle",
+        persistThread: async () => true,
+        recordActivity: async () => undefined,
+        loadAgents: async () => [
+          {
+            id: "researcher",
+            name: "Researcher",
+            type: "built_in",
+            systemPrompt: "Research people.",
+          },
+        ],
+        loadTools: () => async () => [],
+        resolveModelApiKey: async () => "unused",
+        model: { provider: "openai", defaultModel: "gpt-4.1" },
+        timeoutMs: 5_000,
+        runCoworker: async ({ messages }) => {
+          const text = "Created person p_ada: Ada Lovelace. She is in the CRM.";
+          return {
+            text,
+            messages: [
+              ...messages,
+              { id: "assistant-1", role: "assistant", content: text },
+            ],
+          };
+        },
+      },
+    });
+
+    expect(result.outcome).toBe("succeeded");
+    expect(result.crmRecordIds).toEqual(["p_ada"]);
   });
 
   test("runs a remote_ag_ui coworker against an AG-UI endpoint", async () => {

@@ -191,8 +191,19 @@ describe.skipIf(!postgresReachable)(
           ...queued.payload,
           result: { text: result.text, persisted: result.persisted },
         },
+        crmRecordIds: result.crmRecordIds,
+        toolSuccessCount: result.toolSuccessCount,
       });
       expect(finished?.status).toBe("succeeded");
+      expect(finished?.outcome).toEqual({
+        status: "succeeded",
+        finishedAt: finished?.finishedAt?.toISOString(),
+        channelId: channel.id,
+        agentId: agent.id,
+        orgId: "org_local",
+        actingUserId: actor.id,
+        summary: "Ada is at Acme.",
+      });
 
       const [row] = await database
         .select({ lastMessage: channels.lastMessage })

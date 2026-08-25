@@ -12,7 +12,7 @@ import { recordAuditEvent } from "../audit";
 import type { AppVariables } from "../auth/guards";
 import type { ChannelStore } from "../channels/routes";
 import { orgIdOf } from "../orgs/constants";
-import type { JobStore, UnattendedJob } from "./store";
+import type { JobOutcome, JobStore, UnattendedJob } from "./store";
 
 export type JobRoutesOptions = {
   requireUser: MiddlewareHandler<{ Variables: AppVariables }>;
@@ -31,6 +31,7 @@ export type PublicJob = {
   prompt: string;
   error: string | null;
   resultText: string | null;
+  outcome: JobOutcome | null;
   createdAt: string;
   startedAt: string | null;
   finishedAt: string | null;
@@ -46,10 +47,12 @@ export function publicJob(job: UnattendedJob): PublicJob {
     trigger: job.trigger,
     prompt: job.payload.prompt,
     error: job.error,
-    resultText: job.payload.result?.text ?? null,
+    resultText: job.payload.result?.text ?? job.outcome?.summary ?? null,
+    outcome: job.outcome,
     createdAt: job.createdAt.toISOString(),
     startedAt: job.startedAt?.toISOString() ?? null,
-    finishedAt: job.finishedAt?.toISOString() ?? null,
+    finishedAt:
+      job.finishedAt?.toISOString() ?? job.outcome?.finishedAt ?? null,
   };
 }
 

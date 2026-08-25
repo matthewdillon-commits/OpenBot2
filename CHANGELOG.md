@@ -10,7 +10,7 @@ Newest first. `Unreleased` is what is on `main` and not yet tagged.
 
 ### Features
 
-- **Send-and-go continues a channel after the tab closes.** The composer’s Send-and-go control queues a `jobs` row. The worker claims it with `FOR UPDATE SKIP LOCKED` and runs the same built-in or remote AG-UI coworker, with CRM, web search, knowledge, and granted MCP only — not computer tools. The existing Intelligence thread is reused. The roster `lastMessage` updates when the job finishes. Computer still needs the tab. Cron, webhook, and inbound email are not in this release.
+- **Send-and-go continues a channel after the tab closes.** The composer’s Send-and-go control queues a `jobs` row. The worker claims it with `FOR UPDATE SKIP LOCKED` and runs the same built-in or remote AG-UI coworker, with CRM, web search, knowledge, and granted MCP only — not computer tools. The existing Intelligence thread is reused. The roster `lastMessage` updates when the job finishes. A finished job also stores a skinny outcome on the row (status, who ran, a one-sentence summary, CRM record ids if a write already returned them) — not an approval card. Computer still needs the tab. Cron, webhook, and inbound email are not in this release.
 
 ### Docs
 

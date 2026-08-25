@@ -64,6 +64,12 @@ export const jobs = pgTable(
      */
     needsYou: boolean("needs_you").notNull().default(false),
     error: text("error"),
+    /**
+     * Skinny measure written when the job finishes. Status is not enough: a later read needs
+     * who ran, which channel, a one-sentence summary, and any CRM ids the write already
+     * returned. Not an approval card.
+     */
+    outcome: jsonb("outcome"),
     startedAt: timestamp("started_at", { withTimezone: true }),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
     createdAt: createdAt(),

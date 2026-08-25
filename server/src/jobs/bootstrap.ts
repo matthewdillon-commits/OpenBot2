@@ -255,6 +255,8 @@ export async function createUnattendedWorkerRuntime(
             messages: result.messages,
           },
         },
+        crmRecordIds: result.crmRecordIds,
+        toolSuccessCount: result.toolSuccessCount,
       },
     );
     await recordAuditEvent(auditStore, {

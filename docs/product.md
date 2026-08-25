@@ -193,7 +193,10 @@ a channel shows what was said, including after a process restart.
 `jobs` row; the `worker` claims it with `FOR UPDATE SKIP LOCKED` and runs the
 coworker with server tools only (CRM, `search_web`, knowledge, granted MCP). The
 mapped Intelligence thread is reused — a second thread is not minted. Computer
-tools still need the tab.
+tools still need the tab. When the job finishes, the row stores a skinny
+outcome: status, finished time, channel, coworker, org, acting user, a
+one-sentence summary, and any CRM record ids the write already returned. That
+is not an approval card.
 
 ### How a coworker actually runs
 

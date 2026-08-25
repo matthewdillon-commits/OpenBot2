@@ -11,6 +11,7 @@ CREATE TABLE "jobs" (
 	"thread_id" text NOT NULL,
 	"needs_you" boolean DEFAULT false NOT NULL,
 	"error" text,
+	"outcome" jsonb,
 	"started_at" timestamp with time zone,
 	"finished_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,

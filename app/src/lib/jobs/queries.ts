@@ -5,8 +5,20 @@ import { client } from "@/lib/client";
  * An unattended coworker job as the browser sees it.
  *
  * Status is the server's verdict. The prompt is what the person sent; `resultText` is what the
- * worker wrote back onto the channel when the job finished.
+ * worker wrote back onto the channel when the job finished. `outcome` is the skinny durable
+ * measure on the job row — not an approval card.
  */
+export type UnattendedJobOutcome = {
+  status: "succeeded" | "failed" | "cancelled";
+  finishedAt: string;
+  channelId: string;
+  agentId: string;
+  orgId: string;
+  actingUserId: string;
+  summary: string;
+  crmRecordIds?: string[];
+};
+
 export type UnattendedJobRecord = {
   id: string;
   channelId: string;
@@ -17,6 +29,7 @@ export type UnattendedJobRecord = {
   prompt: string;
   error: string | null;
   resultText: string | null;
+  outcome: UnattendedJobOutcome | null;
   createdAt: string;
   startedAt: string | null;
   finishedAt: string | null;
