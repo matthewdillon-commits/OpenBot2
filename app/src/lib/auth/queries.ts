@@ -12,6 +12,11 @@ export type AuthenticatedUser = {
   orgName?: string;
   orgRole?: "owner" | "admin" | "member";
   platformSuperadmin?: boolean;
+  /**
+   * Operator door. Server-decided: org owner/admin or deployment admin.
+   * The browser renders this flag; it does not recompute it.
+   */
+  canSeeTheWork?: boolean;
 };
 
 export const authKeys = {

@@ -557,6 +557,22 @@ export function createPluginStore(options: PluginStoreOptions) {
       return row ? row.ownerUserId : undefined;
     },
 
+    async skillBySlug(
+      slug: string,
+      orgId?: string,
+    ): Promise<{ slug: string; title: string; instructions: string } | null> {
+      const [row] = await database
+        .select({
+          slug: skills.slug,
+          title: skills.title,
+          instructions: skills.instructions,
+        })
+        .from(skills)
+        .where(and(eq(skills.slug, slug), eq(skills.orgId, scope(orgId))))
+        .limit(1);
+      return row ?? null;
+    },
+
     /**
      * Whose a Bot is, or `undefined` if there is no such Bot.
      *

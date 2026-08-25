@@ -88,6 +88,10 @@ const presentChannel: ChannelStore = {
     if (actor.orgId !== "org_local" || channelId !== "channel_1") return null;
     return mappedChannel;
   },
+  getByThread: async () => null,
+  addAgents: async () => {
+    throw new Error("must not add");
+  },
   create: async () => {
     throw new Error("must not mint a channel");
   },

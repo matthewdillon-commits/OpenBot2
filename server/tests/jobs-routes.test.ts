@@ -90,6 +90,10 @@ const presentChannel: ChannelStore = {
     threadId: "thread-existing",
     active: true,
   }),
+  getByThread: async () => null,
+  addAgents: async () => {
+    throw new Error("must not add");
+  },
   create: async () => {
     throw new Error("must not mint a channel");
   },

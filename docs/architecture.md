@@ -17,7 +17,7 @@ Regenerate it with `bun run diagram` after changing anything it shows.
 
 | Component                | Port                       | Responsibility                                                                                                                              |
 | ------------------------ | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `app`                    | 3010                       | React/Vite interface for channels, CRM, plugins, Bot chat, live screen, settings, organizations, and admin pages. |
+| `app`                    | 3010                       | React/Vite interface: Composer to LimitlessAI, Goals, CRM, plugins, the operator room behind See the work, settings, organizations, and admin pages. |
 | `server`                 | 3001                       | API, CopilotKit runtime, auth, organizations, tenant package, coworkers, channels, CRM, policy, audit, credentials, plugins, components, and connectors. |
 | `agent-computer`         | 4100                       | Chromium, `/workspace`, browser profile, screenshots, snapshots, and file tools.                                                            |
 | `agent-bot`              | 4200                       | Proof-of-concept AG-UI Bot.                                                                                                                     |
@@ -36,7 +36,7 @@ A turn starts in the open app, from Send-and-go, or from a standing trigger
 (cron, webhook, inbound email). Those last three insert the same `jobs` row
 the worker already claims.
 
-1. A signed-in person opens a channel or `/bot` and sends a message (CopilotKit's browser client), or a standing trigger enqueues `jobs` through `enqueueUnattendedJob`.
+1. A signed-in person opens a goal (channel) and talks to LimitlessAI (CopilotKit's browser client), or a standing trigger or specialist spawn enqueues `jobs` through `enqueueUnattendedJob`.
 2. The server resolves the actor, including the selected organization, and the coworker that is speaking. Cron / webhook / email resolve the actor from the standing row — not from a cookie.
 3. Built-in Bots run their tool loop on the API: CRM, `search_web`, company knowledge, granted MCP, and computer tools when the gateway is on, up to twenty steps. Remote AG-UI Bots call that same list back through `/api/agent-tools/call`.
 4. The watch tab renders computer tools; it does not execute them. Gallery and sandboxed components still execute in the browser.

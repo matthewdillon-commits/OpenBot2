@@ -28,6 +28,11 @@ export type AgentProfile = {
    * it. A surface only needs to know whether to offer "generate" or "rotate".
    */
   hasCallbackToken: boolean;
+  /**
+   * Standing role from the tenant package. `orchestrator` is LimitlessAI — the
+   * coworker the owner addresses. Absent on leftover specialists.
+   */
+  standingRole: "orchestrator" | null;
 };
 
 export type CreateAgentInput = Pick<

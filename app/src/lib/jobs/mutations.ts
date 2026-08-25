@@ -1,6 +1,7 @@
 import { mutationOptions, type QueryClient } from "@tanstack/react-query";
 import { channelKeys } from "@/lib/channels/queries";
 import { client } from "@/lib/client";
+import { roomKeys } from "@/lib/rooms/queries";
 import { jobKeys, type UnattendedJobRecord } from "./queries";
 
 export type EnqueueJobInput = {
@@ -16,6 +17,7 @@ function invalidateJobs(queryClient: QueryClient) {
   return Promise.all([
     queryClient.invalidateQueries({ queryKey: jobKeys.all }),
     queryClient.invalidateQueries({ queryKey: channelKeys.all }),
+    queryClient.invalidateQueries({ queryKey: roomKeys.all }),
   ]);
 }
 

@@ -2,18 +2,27 @@ import { mutationOptions, type QueryClient } from "@tanstack/react-query";
 import { client, tryClient } from "@/lib/client";
 import { type AgentChannel, channelKeys } from "./queries";
 
+export type CreateChannelInput = {
+  agentIds: string[];
+  /** Owner-facing goal name. Plain language, not a coworker name. */
+  name?: string;
+};
+
 /**
- * Start a new channel with one or more coworkers.
+ * Start a new goal (channel + Intelligence thread) with the orchestrator as lead.
  *
  * Deliberately not idempotent: every call creates a channel with its own thread.
  */
 export function createChannelMutationOptions(queryClient: QueryClient) {
   return mutationOptions({
-    mutationFn: async (agentIds: string[]): Promise<AgentChannel> => {
+    mutationFn: async (input: CreateChannelInput): Promise<AgentChannel> => {
       const response = await client("/api/channels", {
         method: "POST",
-        body: { agentIds },
-        fallback: "Could not start a channel",
+        body: {
+          agentIds: input.agentIds,
+          ...(input.name ? { name: input.name } : {}),
+        },
+        fallback: "Could not start a goal",
       });
       return ((await response.json()) as { channel: AgentChannel }).channel;
     },

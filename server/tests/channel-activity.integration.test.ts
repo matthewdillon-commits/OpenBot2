@@ -227,6 +227,9 @@ describe("channel activity", () => {
         lastMessageAgentId: agentId,
         lastMessageAt: at,
         createdAt: expect.any(Date),
+        goalStatus: "Active",
+        lastAction: "Categorized three expenses.",
+        lastActionAt: at,
       },
     ]);
   });

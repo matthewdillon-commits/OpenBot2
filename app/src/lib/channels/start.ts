@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { stashFirstMessage } from "@/components/channels/transcript-messages";
+import { goalNameFromPrompt } from "../../../../shared/goal-name";
 import { createChannelMutationOptions } from "./mutations";
 import { channelKeys } from "./queries";
 
@@ -22,7 +23,10 @@ export function useStartChannel() {
       text: string,
       speakerId: string | null = null,
     ) => {
-      const channel = await createChannel.mutateAsync(agentIds);
+      const channel = await createChannel.mutateAsync({
+        agentIds,
+        name: goalNameFromPrompt(text),
+      });
       queryClient.setQueryData(channelKeys.detail(channel.id), channel);
       stashFirstMessage(channel.id, text, speakerId);
       await navigate({

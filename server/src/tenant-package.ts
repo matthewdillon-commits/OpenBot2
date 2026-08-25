@@ -267,6 +267,8 @@ export function validateTenantPackage(files: PackageFiles): TenantPackage {
           return [];
         }
       }
+      const standingRole =
+        agent.standing_role === "orchestrator" ? "orchestrator" : undefined;
       return [
         {
           id,
@@ -288,9 +290,11 @@ export function validateTenantPackage(files: PackageFiles): TenantPackage {
                     agent.system_prompt,
                     "agent.system_prompt",
                   ),
+                  ...(standingRole ? { standingRole } : {}),
                 }
               : {
                   endpoint: requiredString(agent.endpoint, "agent.endpoint"),
+                  ...(standingRole ? { standingRole } : {}),
                 },
         },
       ];

@@ -24,6 +24,10 @@ export type ChannelSummary = AgentChannel & {
   lastMessageAgentId: string | null;
   /** ISO-8601. Ordering falls back to this, so a channel just created sorts to the top. */
   createdAt: string;
+  /** Phase 1 skinny goal status. Not an approval card. */
+  goalStatus: "Active" | "Needs you" | "Done";
+  lastAction: string | null;
+  lastActionAt: string | null;
 };
 
 export const channelKeys = {

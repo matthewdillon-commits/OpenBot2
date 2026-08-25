@@ -56,6 +56,8 @@ import {
 import { createJobStore } from "./jobs/store";
 import { createJobTriggerStore } from "./jobs/triggers";
 import { createLoadToolsForActor } from "./jobs/tools";
+import { threadIdFromCopilotRequest } from "./jobs/run-context";
+import { startSpecialist } from "./jobs/specialist";
 import { createKnowledgeSearch } from "./knowledge/search";
 import { bootstrapOrganizations } from "./orgs/bootstrap";
 import {
@@ -435,6 +437,16 @@ const loadToolsForActor = createLoadToolsForActor({
   recordActivity: async ({ actor, channelId, activity }) => {
     await channelStore.recordActivity(actor, channelId, activity);
   },
+  startSpecialist: (input) =>
+    startSpecialist(input, {
+      lookupChannel: (actor, channelId) => channelStore.get(actor, channelId),
+      addAgents: (actor, channelId, agentIds) =>
+        channelStore.addAgents(actor, channelId, agentIds),
+      getAgent: (actor, id) => agentProfileStore.get(actor, id),
+      listAgents: (actor) => agentProfileStore.list(actor),
+      skillBySlug: (slug, orgId) => pluginStore.skillBySlug(slug, orgId),
+      jobStore,
+    }),
   ...(webSearch ? { webSearch } : {}),
   ...(computerGateway ? { computerGateway } : {}),
 });
@@ -501,6 +513,23 @@ const app = createApp(
             ? COMPUTER_GUIDANCE
             : undefined
       : undefined,
+    async (actor, request) => {
+      let body: unknown = null;
+      try {
+        body = await request.clone().json();
+      } catch {
+        body = null;
+      }
+      const threadId = threadIdFromCopilotRequest(body, request.url);
+      if (!threadId) return undefined;
+      const channel = await channelStore.getByThread(actor, threadId);
+      if (!channel?.threadId) return undefined;
+      return {
+        channelId: channel.id,
+        threadId: channel.threadId,
+        goalId: channel.id,
+      };
+    },
   ),
   // The only path to an acting call.
   computerGateway,

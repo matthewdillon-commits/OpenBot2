@@ -195,6 +195,42 @@ describe("tenant YAML validation", () => {
     expect(tenantPackage.agents[1]?.avatarSeed).toBeUndefined();
   });
 
+  test("stores standing_role: orchestrator on the packaged coworker", () => {
+    const tenantPackage = validateTenantPackage({
+      brand: "tenant: { id: fintech, product_name: Ledgerline }",
+      agents: `agents:
+  - id: general-assistant
+    name: General Assistant
+    title: Everyday Work
+    standing_role: orchestrator
+    role_description: You are LimitlessAI.
+    type: built-in
+    system_prompt: Prioritize and delegate.
+  - id: knowledge
+    name: Knowledge
+    title: Company Knowledge
+    role_description: Answer company questions.
+    type: built-in
+    system_prompt: Answer from knowledge.`,
+      channels: "channels: []",
+      model:
+        "model: { provider: openai, credential_secret_ref: openai-key, default_model: gpt-4.1 }",
+      knowledge: "sources: []",
+      themeCss: "",
+    });
+
+    expect(tenantPackage.agents[0]?.configuration).toMatchObject({
+      standingRole: "orchestrator",
+    });
+    expect(
+      (
+        tenantPackage.agents[1]?.configuration as
+          | { standingRole?: string }
+          | undefined
+      )?.standingRole,
+    ).toBeUndefined();
+  });
+
   test("rejects an empty optional avatar seed", () => {
     expect(() =>
       validateTenantPackage({
@@ -248,12 +284,13 @@ describe("tenant YAML validation", () => {
       name: "General Assistant",
       title: "Everyday Work",
       roleDescription:
-        "Help with everyday work using clear, concise, and accurate answers.",
+        "You are LimitlessAI — the one brain the owner addresses. Prioritize and delegate. When a chunk of work needs a specialist, a skill or playbook, or a coworker with a computer, call start_specialist. Specialists share this organization's CRM. Do not ask the owner to pick a worker from a roster.",
       avatarSeed: "general-assistant",
       type: "built_in",
       configuration: {
+        standingRole: "orchestrator",
         systemPrompt:
-          "You are a helpful general assistant. Give clear, concise, and accurate answers.",
+          "You are LimitlessAI, the operating system for this business. You are the one coworker the owner talks to. Prioritize work and delegate finite chunks. When you need a specialist — company knowledge, risk, a skill or playbook, or a coworker who should use a computer — call start_specialist. They join this goal's room, share the organization's CRM (the same customer fact every agent can see), continue after the tab closes, and report back here. Do not ask the owner to pick Sales, Website, Marketing, Customer, Ops, Knowledge, Risk Analyst, or General Assistant from a roster. You are who they address.",
       },
     });
     expect(tenantPackage.channels).toContainEqual({

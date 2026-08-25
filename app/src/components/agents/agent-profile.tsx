@@ -165,10 +165,7 @@ export function AgentProfile({ agentId }: { agentId: string }) {
           <Button
             className="w-full text-sm!"
             onClick={async () => {
-              await navigate({
-                search: { agent: agentId },
-                to: "/channel/new",
-              });
+              await navigate({ to: "/" });
             }}
           >
             Start channel
