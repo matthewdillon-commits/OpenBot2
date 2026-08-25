@@ -50,6 +50,11 @@ describe("audit payload redaction", () => {
         "crm.record_read",
         "crm.record_written",
         "crm.record_refused",
+        "job.enqueued",
+        "job.claimed",
+        "job.succeeded",
+        "job.failed",
+        "job.refused",
       ]),
     );
   });

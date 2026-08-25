@@ -36,6 +36,13 @@ export type GrantedTool = {
   description: string;
   parameters: z.ZodType;
   execute: (args: unknown) => Promise<string>;
+  /**
+   * A tool that must call out as the acting person, not as the organization.
+   *
+   * Ordinary MCP and CRM grants are org-scoped and do not set this. When it is set, an unattended
+   * run refuses unless that acting user has a connection — fail closed, never as somebody else.
+   */
+  requiresUserOAuth?: boolean;
 };
 
 /**

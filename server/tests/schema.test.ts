@@ -33,6 +33,8 @@ import {
   crmPeople,
   crmSendEvents,
   crmSends,
+  jobStatus,
+  jobs,
 } from "../src/db/schema";
 
 describe("OpenBot database schema", () => {
@@ -411,6 +413,42 @@ describe("OpenBot database schema", () => {
     expect(migration).toContain(`CREATE TABLE "crm_campaign_list_members"`);
     expect(migration).toContain(`"linkedin_url"`);
     expect(migration).toContain(`ALTER TABLE "crm_companies" ADD COLUMN "location"`);
+  });
+
+  test("defines unattended jobs isolated by org_id", () => {
+    expect(getTableName(jobs)).toBe("jobs");
+    expect(jobStatus.enumValues).toEqual([
+      "queued",
+      "running",
+      "succeeded",
+      "failed",
+      "cancelled",
+    ]);
+    expect(Object.keys(jobs)).toEqual(
+      expect.arrayContaining([
+        "orgId",
+        "channelId",
+        "coworkerId",
+        "actingUserId",
+        "trigger",
+        "payload",
+        "status",
+        "threadId",
+        "needsYou",
+        "error",
+      ]),
+    );
+  });
+
+  test("adds unattended jobs in their own migration", async () => {
+    const migration = await readFile(
+      new URL("../drizzle/0014_unattended_jobs.sql", import.meta.url),
+      "utf8",
+    );
+    expect(migration).toContain(`CREATE TABLE "jobs"`);
+    expect(migration).toContain(`"org_id" text DEFAULT 'org_local' NOT NULL`);
+    expect(migration).toContain(`jobs_one_running_per_thread`);
+    expect(migration).toContain(`"needs_you"`);
   });
 
   test("adds LimitlessAI-2 stages in their own migration", async () => {

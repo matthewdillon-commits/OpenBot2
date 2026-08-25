@@ -32,6 +32,7 @@ export function ConversationView({
   thinkingName,
   onDraftChange,
   onSubmit,
+  onSendAndGo,
   onStop,
 }: {
   messages: readonly Message[];
@@ -80,6 +81,11 @@ export function ConversationView({
   /** Live draft, so `/` can follow who will speak without switching the runtime yet. */
   onDraftChange?: (draft: ComposerDraft) => void;
   onSubmit: (draft: ComposerDraft) => void | Promise<void>;
+  /**
+   * Continue this channel after the tab closes. Channel chat is the only caller;
+   * the compose screen must not get this — it navigates away on send.
+   */
+  onSendAndGo?: (draft: ComposerDraft) => void | Promise<void>;
   /** Stop the Bot mid-answer; forwarded to turn the send button into a stop button. */
   onStop?: () => void;
 }) {
@@ -248,6 +254,7 @@ export function ConversationView({
           }
           onStop={onStop}
           onSubmit={(draft) => submit(draft, false)}
+          {...(onSendAndGo ? { onSendAndGo } : {})}
           /*
            * `inFlight` rather than the `pending` this was given. A drained turn is started from the
            * effect above rather than from the composer, so the composer's own send tracking knows

@@ -40,6 +40,9 @@ import {
   type IdentifyUser,
   mountCopilotRuntime,
 } from "./copilot";
+import { identifyActorFromContext, identifyUserFromContext } from "./jobs/actor";
+import { createJobStore } from "./jobs/store";
+import { createLoadToolsForActor } from "./jobs/tools";
 import {
   createCredentialAdminService,
   createCredentialStore,
@@ -47,14 +50,11 @@ import {
 } from "./credentials";
 import { createCrmGateway } from "./crm/gateway";
 import { createCrmStore } from "./crm/store";
-import { crmTools } from "./crm/tools";
 import { createDatabase } from "./db/client";
-import { askerFor, createKnowledgeSearch } from "./knowledge/search";
-import { knowledgeSearchTool } from "./knowledge/tool";
+import { createKnowledgeSearch } from "./knowledge/search";
 import { bootstrapOrganizations } from "./orgs/bootstrap";
 import {
   computerIdFor,
-  intelligenceUserId,
   LOCAL_ORGANIZATION_ID,
   orgIdOf,
 } from "./orgs/constants";
@@ -62,14 +62,12 @@ import { copyPackageOwnedAgents } from "./orgs/provision";
 import { createOrganizationStore } from "./orgs/store";
 import { createPeopleStore } from "./people/store";
 import { createPluginStore } from "./plugins/store";
-import { type GrantedTool, grantedTools } from "./plugins/tools";
 import {
   createPackageStatusReader,
   loadTenantPackage,
   synchronizeTenantPackage,
 } from "./tenant-package";
 import { tavilySearch } from "./web-search/tavily";
-import { webSearchTool } from "./web-search/tool";
 
 /**
  * Who is asking, for a CopilotKit request.
@@ -119,8 +117,8 @@ async function resolveRequestActor(request: Request): Promise<{
 
 /** The Intelligence projection of {@link resolveRequestActor}: threads are scoped to this membership. */
 const identifyUser: IdentifyUser = async (request) => {
-  const { id, name, orgId } = await resolveRequestActor(request);
-  return { id: intelligenceUserId(orgId, id), name };
+  const actor = await resolveRequestActor(request);
+  return identifyUserFromContext(actor);
 };
 
 /**
@@ -137,8 +135,7 @@ const ANONYMOUS_ACTOR = { id: "", role: "user" } as const;
 
 const identifyActor: IdentifyActor = async (request) => {
   try {
-    const { id, role, orgId } = await resolveRequestActor(request);
-    return { id, role, orgId };
+    return identifyActorFromContext(await resolveRequestActor(request));
   } catch {
     return ANONYMOUS_ACTOR;
   }
@@ -416,50 +413,17 @@ const webSearch = config.tavilyApiKey
  * search or a key to spend, not when an administrator ticked a grant. A framework Bot calls the
  * same list back through `/api/agent-tools/call`.
  */
-const loadToolsForActor =
-  (actorId: string, orgId?: string) => async (botId: string) => {
-    const scoped = orgIdOf({ orgId });
-    const granted = await grantedTools({
-      store: pluginStore,
-      botId,
-      actorId,
-      orgId: scoped,
-    });
-    const extra: GrantedTool[] = [];
-    if (await knowledgeSearch.anyDocuments(scoped)) {
-      extra.push(
-        knowledgeSearchTool({
-          search: knowledgeSearch,
-          auditStore: bootAuditStore,
-          asker: await askerFor(database, actorId),
-          botId,
-          orgId: scoped,
-        }),
-      );
-    }
-    if (webSearch) {
-      extra.push(
-        webSearchTool({
-          search: webSearch,
-          auditStore: bootAuditStore,
-          policy: () => policyStore.get(scoped),
-          botId,
-          actorId,
-          actorUserId: actorId,
-          orgId: scoped,
-        }),
-      );
-    }
-    extra.push(
-      ...crmTools({
-        crm: crmGateway,
-        botId,
-        actor: { id: actorId, role: "user", orgId: scoped },
-        publicOrigin: config.auth?.baseUrl,
-      }),
-    );
-    return extra.length === 0 ? granted : [...granted, ...extra];
-  };
+const loadToolsForActor = createLoadToolsForActor({
+  pluginStore,
+  knowledgeSearch,
+  database,
+  auditStore: bootAuditStore,
+  policyFor: (orgId) => policyStore.get(orgId),
+  crmGateway,
+  publicOrigin: config.auth?.baseUrl,
+  ...(webSearch ? { webSearch } : {}),
+});
+const jobStore = createJobStore(database);
 
 const app = createApp(
   config,
@@ -577,6 +541,7 @@ const app = createApp(
     },
   },
   crmStore,
+  jobStore,
 );
 
 /**

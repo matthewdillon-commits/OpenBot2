@@ -1,4 +1,5 @@
 import {
+  IconArrowBarToRight,
   IconArrowUp,
   IconPlayerStopFilled,
   IconPlus,
@@ -89,6 +90,13 @@ export type ComposerProps = {
    * speaker change. Send is what binds the runtime agent.
    */
   onDraftChange?: (draft: ComposerDraft) => void;
+  /**
+   * Queue this message for the worker and leave. The tab does not run the coworker.
+   *
+   * Channel chat is the only caller: the compose screen creates a channel and navigates, so a
+   * job started there would have nowhere to attach. Absent hides the control.
+   */
+  onSendAndGo?: (draft: ComposerDraft) => void | Promise<void>;
 };
 
 export function Composer({
@@ -103,6 +111,7 @@ export function Composer({
   pending = false,
   stoppable,
   onDraftChange,
+  onSendAndGo,
 }: ComposerProps) {
   const [value, setValue] = useState<Segment[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -197,6 +206,36 @@ export function Composer({
   );
 
   /**
+   * Send-and-go is a different path from send: it must not call `onSubmit` (that starts a tab
+   * run) and it must not park. The worker owns the turn after this returns.
+   */
+  const submitAndGo = useCallback(
+    async (segments: Segment[]) => {
+      const submitted = toDraft(segments);
+      if (submitted.isEmpty || disabled || isBusy || !onSendAndGo) {
+        return;
+      }
+      if (submitInFlight.current) {
+        return;
+      }
+      submitInFlight.current = true;
+      setIsSubmitting(true);
+      setValue([]);
+      try {
+        await onSendAndGo(submitted);
+      } catch (error) {
+        setValue(segments);
+        throw error;
+      } finally {
+        submitInFlight.current = false;
+        setIsSubmitting(false);
+        wantsFocus.current = true;
+      }
+    },
+    [disabled, isBusy, onSendAndGo],
+  );
+
+  /**
    * Put the caret back the moment the composer can accept it again.
    *
    * Keyed off the editor becoming interactive rather than off the send resolving, so it survives
@@ -226,6 +265,8 @@ export function Composer({
   /** Something is typed, mid-turn, with a queue to put it in. */
   const parking = canQueue && !draft.isEmpty;
   const canSend = !disabled && !draft.isEmpty && (!isBusy || canQueue);
+  const canSendAndGo =
+    Boolean(onSendAndGo) && !disabled && !draft.isEmpty && !isBusy;
   /**
    * Stop is available only once there is a run for it to reach, and it gives way to Send the moment
    * there is something typed to park.
@@ -291,6 +332,22 @@ export function Composer({
           value={value}
         />
         {isBusy ? <Working compact /> : null}
+        {onSendAndGo && !canStop ? (
+          <Button
+            aria-label="Send and go"
+            className="size-8 rounded-full p-0"
+            data-testid="composer-send-and-go"
+            disabled={!canSendAndGo}
+            onClick={() => {
+              void submitAndGo(value);
+            }}
+            size="icon"
+            title="Continue this channel after I leave"
+            type="button"
+          >
+            <IconArrowBarToRight className="size-3.5" />
+          </Button>
+        ) : null}
         {canStop ? (
           <Button
             aria-label="Stop the Bot"

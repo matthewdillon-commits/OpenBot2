@@ -6,3 +6,4 @@ export * from "./core";
 export * from "./crm";
 export * from "./plugins";
 export * from "./coworker";
+export * from "./jobs";

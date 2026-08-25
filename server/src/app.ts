@@ -40,6 +40,8 @@ import type { ConnectorAdminService } from "./connectors";
 import type { CredentialAdminService, CredentialInput } from "./credentials";
 import { createCrmRoutes } from "./crm/routes";
 import type { CrmStore } from "./crm/store";
+import { createJobRoutes } from "./jobs/routes";
+import type { JobStore } from "./jobs/store";
 import { LOCAL_ORGANIZATION_ID, orgIdOf } from "./orgs/constants";
 import { createOrganizationRoutes } from "./orgs/routes";
 import type { OrganizationStore } from "./orgs/store";
@@ -181,6 +183,11 @@ export function createApp(
    * "nothing here" and "this deployment cannot tell you" are different answers.
    */
   crmStore?: CrmStore,
+  /**
+   * The unattended job queue. Absent leaves /api/jobs unmounted: enqueue is a write the
+   * worker claims, and a deployment that has not wired the table should not pretend it can.
+   */
+  jobStore?: JobStore,
 ) {
   const app = new Hono<{ Variables: AppVariables }>();
 
@@ -820,6 +827,18 @@ export function createApp(
 
   if (crmStore) {
     app.route("/api/crm", createCrmRoutes(crmStore, requireUser));
+  }
+
+  if (jobStore && channelStore) {
+    app.route(
+      "/api/jobs",
+      createJobRoutes({
+        requireUser,
+        jobStore,
+        channelStore,
+        auditStore,
+      }),
+    );
   }
 
   // Always mounted: without a key the catalogue answers "not configured" rather than 404,
