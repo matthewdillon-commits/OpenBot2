@@ -7,8 +7,8 @@ import {
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  type AwayJobNotice,
   AWAY_IN_FLIGHT,
+  type AwayJobNotice,
   noticeForAwayJob,
 } from "@/components/channels/away-job";
 import {

@@ -385,10 +385,10 @@ async function acquireThreadLock(
     : new Error(THREAD_LOCK_STILL_HELD);
 }
 
-function runIdsOf(request: {
+function runIdsOf(request: { threadId: string; input?: { runId?: string } }): {
   threadId: string;
-  input?: { runId?: string };
-}): { threadId: string; runId: string } {
+  runId: string;
+} {
   const runId =
     typeof request.input?.runId === "string" ? request.input.runId.trim() : "";
   return { threadId: request.threadId, runId };
@@ -409,7 +409,10 @@ export function withLockReleaseOnComplete<T extends UnattendedRuntimeRunner>(
   intelligence: ThreadLockClient | undefined,
 ): T {
   const release = (ids: { threadId: string; runId: string }) => {
-    if (!intelligence || typeof intelligence.ɵcleanupThreadLock !== "function") {
+    if (
+      !intelligence ||
+      typeof intelligence.ɵcleanupThreadLock !== "function"
+    ) {
       return;
     }
     if (!ids.threadId || !ids.runId) return;

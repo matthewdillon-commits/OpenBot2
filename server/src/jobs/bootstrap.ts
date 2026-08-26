@@ -232,7 +232,9 @@ export async function createUnattendedWorkerRuntime(
             error instanceof Error
               ? error.message
               : "The unattended run failed.";
-          const current = await jobStore.get(job.orgId, job.id).catch(() => null);
+          const current = await jobStore
+            .get(job.orgId, job.id)
+            .catch(() => null);
           if (current?.status === "running") {
             await jobStore
               .finish(job.id, "failed", { error: message })

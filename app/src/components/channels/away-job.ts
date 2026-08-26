@@ -17,8 +17,7 @@ export type AwayJobSnapshot = {
 };
 
 export const AWAY_IN_FLIGHT = "This coworker will continue after you leave.";
-export const AWAY_FAILED =
-  "The coworker could not finish after you left.";
+export const AWAY_FAILED = "The coworker could not finish after you left.";
 
 export function noticeForAwayJob(job: AwayJobSnapshot): AwayJobNotice | null {
   if (job.status === "queued" || job.status === "running") {

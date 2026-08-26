@@ -89,30 +89,7 @@ function completingRunner(
   };
 }
 
-function mappedDeps(
-  intelligence: {
-    getOrCreateThread: (params: {
-      threadId: string;
-      userId: string;
-      agentId: string;
-    }) => Promise<unknown>;
-    getThread: (params: {
-      threadId: string;
-      userId: string;
-    }) => Promise<unknown>;
-    ɵacquireThreadLock: (params: {
-      threadId: string;
-      runId: string;
-      userId: string;
-      agentId: string;
-    }) => Promise<{ threadId: string; runId: string }>;
-    ɵcleanupThreadLock?: (params: {
-      threadId: string;
-      runId: string;
-    }) => Promise<void>;
-  },
-  extras: Record<string, unknown> = {},
-) {
+function mappedDeps(extras: Record<string, unknown> = {}) {
   return {
     lookupMapping: async () => ({
       threadId: "thread-1",
@@ -190,7 +167,7 @@ describe("unattended thread lock retry", () => {
       threadId: "thread-1",
       prompt: "Find Ada.",
       coworkerId: "researcher",
-      deps: mappedDeps(intelligence, {
+      deps: mappedDeps({
         prebuiltAgents: { researcher: agent },
         runtime: {
           intelligence,
@@ -234,7 +211,7 @@ describe("unattended thread lock retry", () => {
       threadId: "thread-1",
       prompt: "Find Ada.",
       coworkerId: "researcher",
-      deps: mappedDeps(intelligence, {
+      deps: mappedDeps({
         prebuiltAgents: { researcher: agent },
         runtime: {
           intelligence,
@@ -258,13 +235,7 @@ describe("withLockReleaseOnComplete", () => {
   test("releases the thread lock when the runner completes", async () => {
     const cleaned: Array<{ threadId: string; runId: string }> = [];
     const runner = {
-      run({
-        threadId,
-        input,
-      }: {
-        threadId: string;
-        input: { runId: string };
-      }) {
+      run() {
         return {
           subscribe(observer: { complete?: () => void }) {
             observer.complete?.();

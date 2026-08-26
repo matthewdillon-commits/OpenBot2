@@ -16,8 +16,8 @@ import type { AgentActor } from "./agents/profile-types";
 import type { StallGuard } from "./channels/stall-guard";
 import type { DeploymentConfig } from "./config";
 import { openThreadForFirstContact } from "./jobs/open-thread";
-import { withLockReleaseOnComplete } from "./jobs/runtime-run";
 import type { ToolRunContext } from "./jobs/run-context";
+import { withLockReleaseOnComplete } from "./jobs/runtime-run";
 import { orgIdOf } from "./orgs/constants";
 import {
   jsonSchemaForLlmTool,

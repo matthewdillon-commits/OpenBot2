@@ -1,9 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  AWAY_FAILED,
-  AWAY_IN_FLIGHT,
-  noticeForAwayJob,
-} from "./away-job";
+import { AWAY_FAILED, AWAY_IN_FLIGHT, noticeForAwayJob } from "./away-job";
 
 describe("noticeForAwayJob", () => {
   test("queued and running keep the away sentence", () => {
