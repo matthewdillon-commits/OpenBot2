@@ -7,6 +7,11 @@ import {
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  type AwayJobNotice,
+  AWAY_IN_FLIGHT,
+  noticeForAwayJob,
+} from "@/components/channels/away-job";
+import {
   type ComposerDraft,
   toAgentOptions,
 } from "@/components/channels/composer";
@@ -296,7 +301,7 @@ export function ChannelChat({
   const recordActivity = useMutation(recordChannelActivityMutationOptions());
   const enqueueJob = useMutation(enqueueJobMutationOptions(queryClient));
   const [awayJobId, setAwayJobId] = useState<string | null>(null);
-  const [awayNotice, setAwayNotice] = useState<string | null>(null);
+  const [awayNotice, setAwayNotice] = useState<AwayJobNotice | null>(null);
   const appliedAwayJob = useRef<string | null>(null);
   const awayJob = useQuery({
     ...jobQueryOptions(awayJobId ?? ""),
@@ -428,6 +433,9 @@ export function ChannelChat({
         const wasOurs = awaitingReply.current;
         awaitingReply.current = false;
         if (!wasOurs) return;
+        // The Intelligence lock is released on the server when the runner
+        // completes (see withLockReleaseOnComplete). This tab does not hold
+        // a second lock, and it must not mint another thread id.
 
         const messages = agent.messages;
         let replyIndex = -1;
@@ -459,7 +467,7 @@ export function ChannelChat({
     const job = awayJob.data;
     if (!job || !awayJobId || appliedAwayJob.current === job.id) return;
     if (job.status === "queued" || job.status === "running") {
-      setAwayNotice("This coworker will continue after you leave.");
+      setAwayNotice(noticeForAwayJob(job));
       return;
     }
     appliedAwayJob.current = job.id;
@@ -474,11 +482,7 @@ export function ChannelChat({
       setAwayNotice(null);
       return;
     }
-    if (job.status === "failed" || job.status === "cancelled") {
-      setAwayNotice(
-        job.error ?? "The coworker could not finish after you left.",
-      );
-    }
+    setAwayNotice(noticeForAwayJob(job));
   }, [agent, awayJob.data, awayJobId]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: must also re-run when useAgent returns a new instance for the speaker
@@ -556,8 +560,20 @@ export function ChannelChat({
               stays readable, but it can no longer reply.
             </p>
           ) : awayNotice ? (
-            <p className="pb-2 text-sm text-muted-foreground" role="status">
-              {awayNotice}
+            <p
+              className={
+                awayNotice.tone === "alert"
+                  ? "pb-2 text-sm text-destructive"
+                  : "pb-2 text-sm text-muted-foreground"
+              }
+              data-testid={
+                awayNotice.tone === "alert"
+                  ? "away-job-error"
+                  : "away-job-notice"
+              }
+              role={awayNotice.tone === "alert" ? "alert" : "status"}
+            >
+              {awayNotice.text}
             </p>
           ) : null
         }
@@ -596,7 +612,7 @@ export function ChannelChat({
           setOutgoing(null);
           appliedAwayJob.current = null;
           setAwayJobId(job.id);
-          setAwayNotice("This coworker will continue after you leave.");
+          setAwayNotice({ text: AWAY_IN_FLIGHT, tone: "status" });
         }}
         onSubmit={async (draft) => {
           // Honour a member `@` as the speaker for this send only. A stranger stays in the text;

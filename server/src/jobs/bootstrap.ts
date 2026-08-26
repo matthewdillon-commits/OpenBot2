@@ -222,7 +222,25 @@ export async function createUnattendedWorkerRuntime(
     // Scoped to this job only. A sticky bind left the first org on the
     // process-wide store, so a later queued row in another org was invisible.
     await runWithRequestRls(database, { orgId: job.orgId, bypass: false }, () =>
-      withSpan("unattended.job", () => executeJob(job)),
+      withSpan("unattended.job", async () => {
+        try {
+          await executeJob(job);
+        } catch (error) {
+          // A throw before finish left the row `running` and the goal stuck
+          // on “continue after you leave” with no reply.
+          const message =
+            error instanceof Error
+              ? error.message
+              : "The unattended run failed.";
+          const current = await jobStore.get(job.orgId, job.id).catch(() => null);
+          if (current?.status === "running") {
+            await jobStore
+              .finish(job.id, "failed", { error: message })
+              .catch(() => undefined);
+          }
+          throw error;
+        }
+      }),
     );
   }
 

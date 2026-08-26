@@ -16,6 +16,7 @@ import type { AgentActor } from "./agents/profile-types";
 import type { StallGuard } from "./channels/stall-guard";
 import type { DeploymentConfig } from "./config";
 import { openThreadForFirstContact } from "./jobs/open-thread";
+import { withLockReleaseOnComplete } from "./jobs/runtime-run";
 import type { ToolRunContext } from "./jobs/run-context";
 import { orgIdOf } from "./orgs/constants";
 import {
@@ -730,6 +731,14 @@ export function mountCopilotRuntime(
       assertSpend,
     ) as never,
   });
+  // handleIntelligenceRun acquires the Intelligence thread lock and, on a
+  // successful runner complete, only clears the heartbeat. The lock then
+  // sits until TTL, so a follow-up on the same mapped thread 409s
+  // (THREAD_LOCK_FAILED). Release on that same complete. Same thread id.
+  runtime.runner = withLockReleaseOnComplete(
+    runtime.runner,
+    intelligenceClient,
+  );
 
   const copilot = createCopilotHonoHandler({ runtime, basePath });
   const wrapped = new Hono();
