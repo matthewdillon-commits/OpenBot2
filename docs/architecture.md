@@ -41,9 +41,9 @@ the worker already claims.
 3. Built-in Bots run their tool loop on the API: CRM, `search_web`, company knowledge, granted MCP, and computer tools when the gateway is on, up to twenty steps. Remote AG-UI Bots call that same list back through `/api/agent-tools/call`.
 4. The watch tab renders computer tools; it does not execute them. Gallery and sandboxed components still execute in the browser.
 5. Every acting call still goes through the gateway: resolve, decide, audit, then act or refuse.
-6. Events reach the Intelligence gateway. Unattended persist still fails closed (`getThread` only); the Activity tab does not survive a reload.
+6. Events reach the Intelligence gateway. The first composer turn and the first unattended job open the mapped thread through CopilotRuntime (`getOrCreateThread` + `runner.run`); a second job attaches to that same id.
 
-Closing the tab does not stop a claimed job. A missing Intelligence mapping is a refuse; nothing mints a thread.
+Closing the tab does not stop a claimed job. A missing Intelligence *mapping* is a refuse. A mapped id Intelligence has not seen yet is opened on the first run.
 
 ## Organizations
 
@@ -56,7 +56,7 @@ the existing token. Per-org SSO is `organization_sso`. Spend is `organization_sp
 Traces are OpenTelemetry on the API and worker.
 
 One tenant package is loaded per process. Without the supervisor, computers are not a tenant
-boundary. Persist onto the Intelligence thread still fails closed. See [product.md](product.md).
+boundary. See [product.md](product.md).
 
 ## Browser action governance
 

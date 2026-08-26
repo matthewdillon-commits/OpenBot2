@@ -10,17 +10,19 @@ import {
   CopilotRuntime,
 } from "@copilotkit/runtime/v2";
 import { createCopilotHonoHandler } from "@copilotkit/runtime/v2/hono";
+import { Hono } from "hono";
 import { COMPUTER_GUIDANCE } from "../../shared/bot-prompt";
 import type { AgentActor } from "./agents/profile-types";
 import type { StallGuard } from "./channels/stall-guard";
 import type { DeploymentConfig } from "./config";
+import { openThreadForFirstContact } from "./jobs/open-thread";
+import type { ToolRunContext } from "./jobs/run-context";
 import { orgIdOf } from "./orgs/constants";
 import {
   jsonSchemaForLlmTool,
   standardSchemaForLlmTool,
 } from "./plugins/llm-schema";
 import type { GrantedTool } from "./plugins/tools";
-import type { ToolRunContext } from "./jobs/run-context";
 
 /**
  * The CopilotKit runtime, always in Intelligence mode.
@@ -653,6 +655,11 @@ export function mountCopilotRuntime(
   basePath = "/api/copilotkit",
 ) {
   const { intelligence } = config.runtime;
+  const intelligenceClient = new CopilotKitIntelligence({
+    apiUrl: intelligence.apiUrl,
+    wsUrl: intelligence.gatewayWsUrl,
+    apiKey: intelligence.apiKey,
+  });
 
   const runtime = new CopilotRuntime({
     // `mode` is inferred from the presence of `intelligence`; passing it is a type error.
@@ -661,11 +668,7 @@ export function mountCopilotRuntime(
     // returns, so omitting it puts every person in the deployment in the same thread space and one
     // person's conversations become another's.
     identifyUser,
-    intelligence: new CopilotKitIntelligence({
-      apiUrl: intelligence.apiUrl,
-      wsUrl: intelligence.gatewayWsUrl,
-      apiKey: intelligence.apiKey,
-    }),
+    intelligence: intelligenceClient,
     licenseToken: intelligence.licenseToken,
     // Carried on the events the runtime already sends, so OpenBot's traffic is separable from any
     // other deployment's. Adds no events of its own.
@@ -697,5 +700,51 @@ export function mountCopilotRuntime(
     ) as never,
   });
 
-  return createCopilotHonoHandler({ runtime, basePath });
+  const copilot = createCopilotHonoHandler({ runtime, basePath });
+  const wrapped = new Hono();
+  wrapped.use(`${basePath}/*`, async (context, next) => {
+    const request = context.req.raw;
+    let body: unknown;
+    try {
+      body = await request.clone().json();
+    } catch {
+      body = null;
+    }
+    try {
+      const user = await identifyUser(request);
+      await openThreadForFirstContact({
+        intelligence: intelligenceClient,
+        request,
+        userId: user.id,
+        body,
+      });
+    } catch {
+      // Connect/run still go to CopilotKit. A failed open is the same
+      // THREAD_NOT_FOUND the handler would have returned; the next run
+      // handleIntelligenceRun get-or-creates again.
+    }
+    await next();
+  });
+  wrapped.route("/", copilot);
+  return wrapped;
+}
+
+/**
+ * The same CopilotRuntime Intelligence construction a tab turn uses, without
+ * the Hono handler. The worker calls `getOrCreateThread` + `runtime.runner.run`
+ * on the mapped thread. identifyUser must be the Intelligence `org:user`
+ * already mapped to that thread — a hardcoded "unattended" identity would
+ * write into a different thread space.
+ */
+export function createUnattendedCopilotRuntime(
+  intelligenceClient: CopilotKitIntelligence,
+  licenseToken: string | undefined,
+  identifyUser: () => Promise<{ id: string; name: string }>,
+): CopilotRuntime {
+  return new CopilotRuntime({
+    identifyUser: async () => identifyUser(),
+    intelligence: intelligenceClient,
+    licenseToken,
+    agents: {},
+  });
 }

@@ -1,10 +1,14 @@
 /**
- * Start an unattended coworker run on the existing mapped Intelligence thread.
+ * Start an unattended coworker run on the mapped Intelligence thread.
  *
  * Same `buildAgents` / `loadToolsForActor` / standing role / `signRun` path as an open-tab
  * turn in copilot.ts. Computer tools execute on the server when the gateway is configured;
  * pass `computerGuidance` so the coworker is told about those hands. No cookie Request —
  * the actor is explicit.
+ *
+ * A first job on a mapped id Intelligence has not seen opens that thread through
+ * `CopilotRuntime` (`getOrCreateThread` + `runner.run`) — the same mint a tab
+ * `handleIntelligenceRun` uses. A second job attaches to that same id.
  */
 import type { AbstractAgent } from "@ag-ui/client";
 import type { AgentActor } from "../agents/profile-types";
@@ -17,6 +21,7 @@ import {
   type SignRun,
   TOOL_STEPS,
 } from "../copilot";
+import { APPROVAL_WAIT_MARKER } from "../loop/types";
 import { orgIdOf } from "../orgs/constants";
 import { SpendCapError } from "../orgs/spend";
 import { REFUSAL_MARKER } from "../plugins/refusal";
@@ -26,7 +31,12 @@ import {
   identifyActorFromContext,
   identifyUserFromContext,
 } from "./actor";
+import { extractCrmRecordIds } from "./outcome";
 import type { ToolRunContext } from "./run-context";
+import {
+  runUnattendedThroughRuntime,
+  type UnattendedCopilotRuntime,
+} from "./runtime-run";
 import type {
   ThreadIdleChecker,
   ThreadLookup,
@@ -35,8 +45,6 @@ import type {
   UnattendedMessage,
 } from "./thread";
 import { waitForThreadIdle } from "./thread";
-import { extractCrmRecordIds } from "./outcome";
-import { APPROVAL_WAIT_MARKER } from "../loop/types";
 import {
   gateUserOAuthTools,
   serverSideToolsOnly,
@@ -92,7 +100,15 @@ export type UnattendedRunDeps = {
   /** Model spend for this org. Crossing the cap refuses the run. */
   assertSpend?: (orgId: string) => Promise<void>;
   /**
-   * Test seam. Production builds the coworker through `buildAgents` and calls `runAgent`.
+   * Production: the CopilotRuntime whose `getOrCreateThread` + `runner.run`
+   * is the Intelligence persist path. Tests may inject a recording runner.
+   * `runCoworker` still short-circuits the agent call for fixtures that do
+   * not need the runner.
+   */
+  runtime?: UnattendedCopilotRuntime;
+  /**
+   * Test seam. Production builds the coworker through `buildAgents` and
+   * `CopilotRuntime.runner.run`.
    */
   runCoworker?: (input: {
     agent: AbstractAgent;
@@ -102,7 +118,7 @@ export type UnattendedRunDeps = {
 };
 
 const MISSING_MAPPING =
-  "This channel has no Intelligence thread for the acting user. Unattended runs attach to the existing mapping and do not mint a thread.";
+  "This channel has no Intelligence thread for the acting user. Unattended runs attach to the existing mapping and do not mint a second thread.";
 
 const THREAD_BUSY =
   "This thread already has an active run. The job was not started.";
@@ -111,7 +127,7 @@ const THREAD_MISMATCH =
   "The job named a different Intelligence thread than the one mapped to this channel.";
 
 const THREAD_MISSING =
-  "This channel’s Intelligence thread is gone. Unattended runs attach to the existing mapping and do not mint a thread.";
+  "This channel’s Intelligence thread could not be opened. The first job opens the mapped id through CopilotRuntime.";
 
 const PERSIST_FAILED =
   "The mapped Intelligence thread could not be updated. The job is not treated as finished.";
@@ -260,28 +276,25 @@ export async function startUnattendedRun(input: {
             pollMs: 500,
           })
       : undefined);
-  if (!wait) {
-    return emptyResult("refused", THREAD_MISSING);
-  }
-  let threadState: ThreadRunState;
-  try {
-    threadState = await wait({
-      threadId: mapping.threadId,
-      userId: intelligenceUser.id,
-    });
-  } catch (error) {
-    return emptyResult(
-      "failed",
-      error instanceof Error
-        ? error.message
-        : "The Intelligence thread could not be checked.",
-    );
-  }
-  if (threadState === "busy") {
-    return emptyResult("refused", THREAD_BUSY);
-  }
-  if (threadState === "missing") {
-    return emptyResult("refused", THREAD_MISSING);
+  if (wait) {
+    let threadState: ThreadRunState;
+    try {
+      threadState = await wait({
+        threadId: mapping.threadId,
+        userId: intelligenceUser.id,
+      });
+    } catch (error) {
+      return emptyResult(
+        "failed",
+        error instanceof Error
+          ? error.message
+          : "The Intelligence thread could not be checked.",
+      );
+    }
+    if (threadState === "busy") {
+      return emptyResult("refused", THREAD_BUSY);
+    }
+    // `missing` is the first job: open the mapped id through Runtime below.
   }
 
   const registered = await input.deps.loadAgents(actor);
@@ -361,7 +374,19 @@ export async function startUnattendedRun(input: {
     },
   ];
 
-  const run = input.deps.runCoworker ?? defaultRunCoworker;
+  const run =
+    input.deps.runCoworker ??
+    (input.deps.runtime
+      ? (args: { agent: AbstractAgent; messages: UnattendedMessage[] }) =>
+          runUnattendedThroughRuntime({
+            runtime: input.deps.runtime as UnattendedCopilotRuntime,
+            agent: args.agent,
+            threadId: mapping.threadId,
+            userId: intelligenceUser.id,
+            agentId: input.coworkerId,
+            messages: args.messages,
+          })
+      : defaultRunCoworker);
   let timedOut = false;
   const timeout = new Promise<never>((_, reject) => {
     setTimeout(() => {

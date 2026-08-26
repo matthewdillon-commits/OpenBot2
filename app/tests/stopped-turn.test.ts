@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { stoppedReason } from "../src/lib/copilot/stopped-turn";
+import {
+  isUnknownThreadError,
+  stoppedReason,
+} from "../src/lib/copilot/stopped-turn";
 
 /**
  * What a person is told when a turn ends and no answer came.
@@ -43,6 +46,15 @@ describe("the reason a turn ended", () => {
     expect(stoppedReason("Unprocessable Entity")).toContain("could not finish");
     expect(stoppedReason(new Error("422 Unprocessable Entity"))).toContain(
       "complete sentence",
+    );
+  });
+
+  test("treats Intelligence THREAD_NOT_FOUND as first-contact, not a locked chat", () => {
+    expect(isUnknownThreadError("Not Found")).toBe(true);
+    expect(isUnknownThreadError(new Error("THREAD_NOT_FOUND"))).toBe(true);
+    expect(isUnknownThreadError("Connect request rejected")).toBe(true);
+    expect(isUnknownThreadError("The endpoint refused the connection")).toBe(
+      false,
     );
   });
 });

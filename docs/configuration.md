@@ -391,8 +391,9 @@ X-OpenBot-Trigger-Secret: <secret>
 { "to": "work@example.test", "from": "ada@acme.test", "subject": "…", "text": "…" }
 ```
 
-A missing Intelligence thread is a refuse. The trigger does not mint one. Persist onto that thread
-still fails closed on this tree.
+A missing Intelligence *mapping* is a refuse. The trigger does not invent a
+second thread id. A mapped id Intelligence has not seen is opened on the first
+job through CopilotRuntime.
 
 ## Change workflow
 

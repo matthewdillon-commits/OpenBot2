@@ -2,7 +2,8 @@
  * Which goal a CopilotKit turn is on, so a specialist can join that room.
  *
  * The client already sends the Intelligence thread id on the run. The server
- * looks the mapping up and refuses if there is none — it does not mint a thread.
+ * looks the mapping up and refuses if there is none — it does not mint a
+ * second id. A mapped id Intelligence has not seen is opened on first contact.
  */
 export type ToolRunContext = {
   channelId: string;

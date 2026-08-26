@@ -42,6 +42,21 @@ export function stoppedReason(reported: unknown): string {
 }
 
 /**
+ * CopilotKit connect on a brand-new mapped thread 404s (Intelligence has not
+ * seen the id yet). That is first-contact, not a dead conversation — the first
+ * run opens the thread. Do not lock the composer on this sentence.
+ */
+export function isUnknownThreadError(reported: unknown): boolean {
+  const said =
+    reported instanceof Error
+      ? reported.message
+      : typeof reported === "string"
+        ? reported
+        : "";
+  return /THREAD_NOT_FOUND|not found|Connect request rejected/i.test(said);
+}
+
+/**
  * Watch one Bot's runs and hold on to the reason the last one ended, if it ended badly.
  *
  * Bound by agent id rather than handed an agent, so a caller that only renders the packaged chat
