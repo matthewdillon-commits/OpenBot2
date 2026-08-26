@@ -311,8 +311,17 @@ export function createInboundRoutes(options: InboundRoutesOptions) {
   routes.get("/job-triggers", requireUser, async (context) => {
     const actor = context.var.actor;
     const orgId = orgIdOf(actor);
+    const channelId =
+      context.req.query("channelId")?.trim() ||
+      context.req.query("goalId")?.trim() ||
+      "";
     const listed = await triggerStore.list(orgId);
-    return context.json({ triggers: listed.map(publicJobTrigger) });
+    const filtered = channelId
+      ? listed.filter(
+          (row) => row.channelId === channelId || row.goalId === channelId,
+        )
+      : listed;
+    return context.json({ triggers: filtered.map(publicJobTrigger) });
   });
 
   routes.get("/job-triggers/:triggerId", requireUser, async (context) => {
@@ -326,6 +335,29 @@ export function createInboundRoutes(options: InboundRoutesOptions) {
       return context.json({ error: "There is no such trigger." }, 404);
     }
     return context.json({ trigger: publicJobTrigger(trigger) });
+  });
+
+  routes.patch("/job-triggers/:triggerId", requireUser, async (context) => {
+    const actor = context.var.actor;
+    const orgId = orgIdOf(actor);
+    let body: Record<string, unknown>;
+    try {
+      body = await context.req.json();
+    } catch {
+      return context.json({ error: "Send a JSON body." }, 400);
+    }
+    if (typeof body.enabled !== "boolean") {
+      return context.json({ error: "enabled must be true or false." }, 400);
+    }
+    const updated = await triggerStore.setEnabled(
+      orgId,
+      context.req.param("triggerId"),
+      body.enabled,
+    );
+    if (!updated) {
+      return context.json({ error: "There is no such trigger." }, 404);
+    }
+    return context.json({ trigger: publicJobTrigger(updated) });
   });
 
   routes.delete("/job-triggers/:triggerId", requireUser, async (context) => {

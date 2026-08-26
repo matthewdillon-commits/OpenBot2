@@ -16,6 +16,8 @@ function assertOwnerRail(labels: string[]) {
   expect(labels).not.toContain("Agents");
   expect(labels).not.toContain("Measure");
   expect(labels).not.toContain("Approvals");
+  expect(labels).not.toContain("Wakes");
+  expect(labels).not.toContain("Triggers");
   expect(labels).toEqual(["CRM", "Plugins", "Skills"]);
 }
 
