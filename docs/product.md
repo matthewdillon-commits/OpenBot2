@@ -232,8 +232,11 @@ on the same runner. Specialists share the organization’s CRM. “See the work�
 (deployment admin, or org owner/admin) opens the A2A room for this goal:
 members, jobs, computers, traces. Cmd-K Rooms is the same door for power
 users. A typical owner does not see Sales / Website / Marketing / Customer /
-Ops, leftover coworker names, or Agents in the nav, and does not see rooms
-unless they opened See the work. First-run does not tour the roster.
+Ops, leftover coworker names, or Agents in the nav. Skills and Plugins stay
+in the owner rail. CRM is the org book, not an agent roster. Deployment-wide
+`/admin` is platform superadmin / `INITIAL_ADMIN_EMAILS`, not an org owner.
+Raw tool traces belong behind See the work. A typical owner does not see
+rooms unless they opened See the work. First-run does not tour the roster.
 
 ### How a coworker actually runs
 
@@ -386,8 +389,10 @@ and no second runner.
 | One enqueue path for every start | `server/src/jobs/enqueue.ts` `enqueueUnattendedJob` |
 | Orchestrator standing role | `examples/fintech/agents.yaml` `standing_role: orchestrator`, `server/src/orchestrator.ts` |
 | Composer + Goals home | `app/src/routes/_authed/_app/index.tsx` |
-| Owner nav has no family names | `app/src/lib/nav/owner-nav.ts`, `app/tests/owner-nav.test.ts` |
+| Owner nav has no family names or Agents; Skills and Plugins stay | `app/src/lib/nav/owner-nav.ts`, `app/tests/owner-nav.test.ts` |
 | See the work (role-gated room) | `server/src/jobs/room-routes.ts`, `app/src/components/channels/see-the-work.tsx` |
+| Owner thread hides raw tool traces | `app/src/components/channels/chat-messages.ts`, `app/src/components/channels/chat-transcript.tsx` |
+| `/admin` is platform / INITIAL_ADMIN, not org owner | `server/src/auth/guards.ts` `requireDeploymentAdmin`, `app/src/routes/_authed/admin/route.tsx` |
 | Specialist on demand | `server/src/jobs/specialist.ts` `startSpecialist`, `server/src/jobs/specialist-tool.ts` `start_specialist` |
 | Specialist shares org CRM | `server/src/jobs/specialist.ts` `specialistCrmOrgId`; tools from `loadToolsForActor` |
 | Cmd-K Rooms | `app/src/components/command-palette.tsx` |

@@ -79,6 +79,8 @@ describe("Phase 5 loop on the existing goal", () => {
     expect(loop.approval?.expectedImpact.length).toBeGreaterThan(0);
     expect(loop.approval?.before.length).toBeGreaterThan(0);
     expect(loop.approval?.after.length).toBeGreaterThan(0);
+    expect(loop.approval?.after).not.toMatch(/^\s*[{\[]/);
+    expect(loop.approval?.after).toContain("Casey");
     expect(loop.approval?.rollback.length).toBeGreaterThan(0);
     expect(loop.expectedImpact).toBe(loop.approval?.expectedImpact);
     expect(publicGoalLoop(loop).approval).not.toHaveProperty("pending");

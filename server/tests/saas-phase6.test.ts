@@ -384,6 +384,13 @@ describe("Phase 6 owner nav is unchanged", () => {
     }
     expect(labels).not.toContain("Measure");
     expect(labels).not.toContain("Approvals");
+    expect(labels).not.toContain("Agents");
     expect(labels).toEqual(["CRM", "Plugins", "Skills"]);
+  });
+
+  test("See the work still leaves Skills and Plugins in the owner rail", () => {
+    const labels = visibleOwnerNavLabels({ canSeeTheWork: true });
+    expect(labels).toEqual(["CRM", "Plugins", "Skills"]);
+    expect(labels).not.toContain("Agents");
   });
 });

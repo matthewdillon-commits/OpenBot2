@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   coworkerDisplayName,
+  ownerFacingCoworkerName,
   pickOrchestrator,
   pickOrchestratorId,
 } from "@/lib/orchestrator";
@@ -43,5 +44,17 @@ describe("pickOrchestrator", () => {
         "LimitlessAI",
       ),
     ).toBe("Knowledge");
+    expect(
+      ownerFacingCoworkerName(
+        { id: "knowledge", name: "Knowledge", standingRole: null },
+        "LimitlessAI",
+      ),
+    ).toBe("LimitlessAI");
+    expect(
+      ownerFacingCoworkerName(
+        { id: "risk-analyst", name: "Risk Analyst", standingRole: null },
+        "LimitlessAI",
+      ),
+    ).toBe("LimitlessAI");
   });
 });

@@ -5,6 +5,16 @@
 
 export const DEFAULT_ORCHESTRATOR_UNSCOPED_ID = "general-assistant";
 
+export const LEFTOVER_COWORKER_NAMES = [
+  "General Assistant",
+  "Knowledge",
+  "Risk Analyst",
+] as const;
+
+export function isLeftoverCoworkerName(name: string): boolean {
+  return (LEFTOVER_COWORKER_NAMES as readonly string[]).includes(name);
+}
+
 export function isOrchestratorId(id: string): boolean {
   return (
     id === DEFAULT_ORCHESTRATOR_UNSCOPED_ID ||
@@ -61,4 +71,22 @@ export function coworkerDisplayName(
   productName: string,
 ): string {
   return agentIsOrchestrator(agent) ? productName : agent.name;
+}
+
+/**
+ * What a typical owner may be told in the home/goal thread. Leftover package
+ * names are not first-class coworkers there; See the work may still name them.
+ */
+export function ownerFacingCoworkerName(
+  agent: {
+    id: string;
+    name: string;
+    standingRole?: "orchestrator" | null;
+  },
+  productName: string,
+): string {
+  if (agentIsOrchestrator(agent) || isLeftoverCoworkerName(agent.name)) {
+    return productName;
+  }
+  return agent.name;
 }

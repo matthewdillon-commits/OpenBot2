@@ -19,7 +19,6 @@ import {
   withOutgoingEcho,
 } from "@/components/channels/transcript-messages";
 import { agentListQueryOptions } from "@/lib/agents/queries";
-import { currentUserQueryOptions } from "@/lib/auth/queries";
 import { recordChannelActivityMutationOptions } from "@/lib/channels/mutations";
 import type { AgentChannel } from "@/lib/channels/queries";
 import { useActiveBot } from "@/lib/copilot/active-bot";
@@ -35,7 +34,7 @@ import { enqueueJobMutationOptions } from "@/lib/jobs/mutations";
 import { jobQueryOptions } from "@/lib/jobs/queries";
 import {
   agentIsOrchestrator,
-  coworkerDisplayName,
+  ownerFacingCoworkerName,
   pickOrchestratorId,
 } from "@/lib/orchestrator";
 import { useSkillCommands } from "@/lib/plugins/skill-commands";
@@ -74,7 +73,6 @@ export function ChannelChat({
   // The core attaches the frontend tool registry; direct agent runs do not.
   const { copilotkit } = useCopilotKit();
   const { data: agentProfiles } = useQuery(agentListQueryOptions());
-  const { data: currentUser } = useQuery(currentUserQueryOptions());
   const productName = appConfig.brand.productName;
   /**
    * First-message seed from the compose screen. It is taken once per mount and retained until the
@@ -237,9 +235,12 @@ export function ChannelChat({
     resolveSpeaker(channel.agentIds, composerDraft?.agentId, speaker) ??
     speaker;
   const skillCommands = useSkillCommands(menuSpeaker);
-  const speakerName = agentProfiles?.find(
+  const speakerProfile = agentProfiles?.find(
     (profile) => profile.id === speaker,
-  )?.name;
+  );
+  const speakerName = speakerProfile
+    ? ownerFacingCoworkerName(speakerProfile, productName)
+    : undefined;
   const speakerNameRef = useRef(speakerName);
   speakerNameRef.current = speakerName;
   const speakerRef = useRef(speaker);
@@ -523,20 +524,14 @@ export function ChannelChat({
     // Keep `seed` in state; transcriptMessages hides it as soon as agent messages exist.
   }, [joinGatePromise]);
 
-  const mentionProfiles =
-    currentUser?.canSeeTheWork === true
-      ? agentProfiles?.filter((profile) =>
-          channel.agentIds.includes(profile.id),
-        )
-      : agentProfiles?.filter(
-          (profile) =>
-            channel.agentIds.includes(profile.id) &&
-            agentIsOrchestrator(profile),
-        );
+  const mentionProfiles = agentProfiles?.filter(
+    (profile) =>
+      channel.agentIds.includes(profile.id) && agentIsOrchestrator(profile),
+  );
   const mentionAgents = toAgentOptions(
     mentionProfiles?.map((profile) => ({
       ...profile,
-      name: coworkerDisplayName(profile, productName),
+      name: ownerFacingCoworkerName(profile, productName),
     })),
   );
 

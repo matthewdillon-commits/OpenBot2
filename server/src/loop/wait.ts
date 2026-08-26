@@ -37,12 +37,27 @@ export type HighRiskWait = (input: HighRiskWaitInput) => Promise<string | null>;
 const DECISIONS_KEPT = 8;
 
 function compactArgs(args: Record<string, unknown>): string {
-  try {
-    const text = JSON.stringify(args);
-    return firstSentence(text, 280) || text.slice(0, 280);
-  } catch {
-    return "the proposed write";
+  const parts: string[] = [];
+  for (const [key, value] of Object.entries(args)) {
+    if (value === undefined || value === null || value === "") continue;
+    const label = key.replace(/_/g, " ");
+    if (
+      typeof value === "string" ||
+      typeof value === "number" ||
+      typeof value === "boolean"
+    ) {
+      parts.push(`${label}: ${value}`);
+    } else {
+      try {
+        parts.push(`${label}: ${JSON.stringify(value)}`);
+      } catch {
+        parts.push(label);
+      }
+    }
   }
+  if (parts.length === 0) return "the proposed write";
+  const text = parts.join(" · ");
+  return firstSentence(text, 280) || text.slice(0, 280);
 }
 
 function defaultRationale(toolName: string, args: Record<string, unknown>) {

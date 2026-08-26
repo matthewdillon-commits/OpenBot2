@@ -1,5 +1,8 @@
+import { UseAgentUpdate, useAgent } from "@copilotkit/react-core/v2";
 import { useQuery } from "@tanstack/react-query";
 import { useState, useSyncExternalStore } from "react";
+import { toVisibleChatItems } from "@/components/channels/chat-messages";
+import { ServerToolLine } from "@/components/channels/server-tool-line";
 import { ActivityLog } from "@/components/computer/activity-log";
 import { ComputerView } from "@/components/computer/computer-view";
 import { Button } from "@/components/ui/button";
@@ -10,6 +13,7 @@ import {
 } from "@/lib/computers/activity";
 import { appConfig } from "@/lib/generated/application-config";
 import { coworkerDisplayName } from "@/lib/orchestrator";
+import { toolHintFromArgs } from "@/lib/plugins/tool-name";
 import { roomQueryOptions } from "@/lib/rooms/queries";
 
 /**
@@ -101,6 +105,7 @@ export function SeeTheWorkPanel({
           </ul>
         )}
       </div>
+      <WorkTraces channelId={channelId} threadId={room.data.threadId} />
       {watchAgentId ? (
         <WorkComputer
           agentId={watchAgentId}
@@ -111,6 +116,47 @@ export function SeeTheWorkPanel({
           }
         />
       ) : null}
+    </div>
+  );
+}
+
+function WorkTraces({
+  channelId,
+  threadId,
+}: {
+  channelId: string;
+  threadId: string;
+}) {
+  const { agent } = useAgent({
+    agentId: `channel:${channelId}`,
+    threadId,
+    updates: [UseAgentUpdate.OnMessagesChanged],
+  });
+  const traces = toVisibleChatItems(agent.messages, {
+    toolTraces: true,
+  }).filter((item) => item.kind === "tool");
+
+  return (
+    <div>
+      <h2 className="text-sm font-medium tracking-tight">Traces</h2>
+      {traces.length === 0 ? (
+        <p className="mt-1 text-xs text-muted-foreground">
+          No tool traces on this goal yet.
+        </p>
+      ) : (
+        <div className="mt-2">
+          {traces.map((item) =>
+            item.kind === "tool" ? (
+              <ServerToolLine
+                hint={toolHintFromArgs(item.toolCall.function.arguments)}
+                key={item.id}
+                name={item.toolCall.function.name}
+                result={item.result}
+              />
+            ) : null,
+          )}
+        </div>
+      )}
     </div>
   );
 }

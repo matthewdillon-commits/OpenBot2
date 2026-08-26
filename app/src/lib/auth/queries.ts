@@ -13,10 +13,21 @@ export type AuthenticatedUser = {
   orgRole?: "owner" | "admin" | "member";
   platformSuperadmin?: boolean;
   /**
+   * Deployment-wide `/admin`. Server-decided: PLATFORM_SUPERADMINS,
+   * INITIAL_ADMIN_EMAILS, or a user_roles administrator. Org owner is not enough.
+   * The browser renders this flag; it does not recompute it.
+   */
+  deploymentAdmin?: boolean;
+  /**
    * Operator door. Server-decided: org owner/admin or deployment admin.
    * The browser renders this flag; it does not recompute it.
    */
   canSeeTheWork?: boolean;
+  /**
+   * Whether this session may open `/admin`. Server-decided from
+   * {@link deploymentAdmin} / platform superadmin. Org owner is not enough.
+   */
+  canOpenDeploymentAdmin?: boolean;
 };
 
 export const authKeys = {

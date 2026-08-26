@@ -32,12 +32,14 @@ function isToolResult(
 
 export function toVisibleChatItems(
   messages: ReadonlyArray<Readonly<Message>>,
+  options?: { toolTraces?: boolean },
 ): VisibleChatItem[] {
   // Gather results first so calls render with their current completion state in the same pass.
   const results = new Map<string, string | undefined>();
   for (const message of messages) {
     if (isToolResult(message)) results.set(message.toolCallId, message.content);
   }
+  const toolTraces = options?.toolTraces === true;
 
   return messages.flatMap((message): VisibleChatItem[] => {
     if (message.role === "assistant") {
@@ -52,16 +54,18 @@ export function toVisibleChatItems(
           ...(name ? { name } : {}),
         });
       }
-      for (const toolCall of message.toolCalls ?? []) {
-        items.push({
-          kind: "tool",
-          // One assistant message can carry multiple tool calls.
-          id: toolCall.id,
-          toolCall,
-          ...(results.has(toolCall.id)
-            ? { result: results.get(toolCall.id) }
-            : {}),
-        });
+      if (toolTraces) {
+        for (const toolCall of message.toolCalls ?? []) {
+          items.push({
+            kind: "tool",
+            // One assistant message can carry multiple tool calls.
+            id: toolCall.id,
+            toolCall,
+            ...(results.has(toolCall.id)
+              ? { result: results.get(toolCall.id) }
+              : {}),
+          });
+        }
       }
       return items;
     }

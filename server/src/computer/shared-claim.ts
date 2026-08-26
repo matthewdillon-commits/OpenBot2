@@ -14,7 +14,7 @@ import {
 import { orgIdOf } from "../orgs/constants";
 
 export const SHARED_COMPUTER_SECOND_ORG =
-  "A second organization cannot share this computer. Set COMPUTER_SUPERVISOR_URL so computers are made one per org×bot.";
+  "This computer is not available for your organization yet. Ask your operator to set it up.";
 
 export class SharedComputerIsolationError extends Error {
   constructor(message = SHARED_COMPUTER_SECOND_ORG) {
