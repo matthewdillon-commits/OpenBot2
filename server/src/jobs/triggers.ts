@@ -150,6 +150,11 @@ export type JobTriggerStore = {
   getById: (id: string) => Promise<JobTrigger | null>;
   getByMailbox: (mailbox: string) => Promise<JobTrigger | null>;
   list: (orgId: string) => Promise<JobTrigger[]>;
+  setEnabled: (
+    orgId: string,
+    id: string,
+    enabled: boolean,
+  ) => Promise<JobTrigger | null>;
   remove: (orgId: string, id: string) => Promise<boolean>;
   claimDueCron: () => Promise<JobTrigger | null>;
   recordFire: (
@@ -298,6 +303,20 @@ export function createJobTriggerStore(database: Database): JobTriggerStore {
         .where(eq(jobTriggers.orgId, orgIdOf({ orgId })))
         .orderBy(desc(jobTriggers.createdAt));
       return rows.map(toTrigger);
+    },
+
+    async setEnabled(orgId, id, enabled) {
+      const [row] = await database
+        .update(jobTriggers)
+        .set({ enabled, updatedAt: new Date() })
+        .where(
+          and(
+            eq(jobTriggers.id, id),
+            eq(jobTriggers.orgId, orgIdOf({ orgId })),
+          ),
+        )
+        .returning();
+      return row ? toTrigger(row) : null;
     },
 
     async remove(orgId, id) {

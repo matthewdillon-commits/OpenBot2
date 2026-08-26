@@ -124,6 +124,38 @@ describe("unattended claim loop", () => {
     );
   });
 
+  test("empty claims tick due crons on the existing worker runtime", async () => {
+    let ticks = 0;
+    let claims = 0;
+    const abort = new AbortController();
+
+    const loop = runUnattendedClaimLoop(
+      { unattendedJobPollMs: 10 } as DeploymentConfig,
+      {
+        signal: abort.signal,
+        jobStore: {
+          ...unusedStore(),
+          claim: async () => {
+            claims += 1;
+            if (ticks >= 1) abort.abort();
+            return null;
+          },
+        },
+        loadRuntime: async () => ({
+          processJob: async () => undefined,
+          tickDueCrons: async () => {
+            ticks += 1;
+            return 0;
+          },
+        }),
+      },
+    );
+
+    await loop;
+    expect(claims).toBeGreaterThanOrEqual(1);
+    expect(ticks).toBeGreaterThanOrEqual(1);
+  });
+
   test("keeps polling while the coworker graph is still loading", async () => {
     let claims = 0;
     const abort = new AbortController();

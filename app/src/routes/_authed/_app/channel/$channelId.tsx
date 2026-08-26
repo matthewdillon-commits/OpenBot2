@@ -8,6 +8,7 @@ import { AgentProfile } from "@/components/agents/agent-profile";
 import { ChannelAvatar } from "@/components/channels/avatar";
 import { ChannelChat } from "@/components/channels/channel-chat";
 import { GoalLoopCard } from "@/components/channels/goal-loop-card";
+import { GoalWakesCard } from "@/components/channels/goal-wakes-card";
 import { SeeTheWorkPanel } from "@/components/channels/see-the-work";
 import { ActivityLog } from "@/components/computer/activity-log";
 import { ComputerView } from "@/components/computer/computer-view";
@@ -399,6 +400,7 @@ function ChannelBody({
   return (
     <>
       <GoalLoopCard channel={channel} />
+      <GoalWakesCard channel={channel} />
       <ChannelChat
         channel={channel}
         {...(focusAgentId ? { focusAgentId } : {})}

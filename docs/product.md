@@ -203,8 +203,11 @@ the same server tools an open-tab turn uses: CRM, `search_web`, knowledge,
 granted MCP, and computer tools when the gateway is configured and the
 browser is on. **Cron**, **webhook**, and **inbound email** enqueue that same
 row from a standing org-scoped config (actor, goal/channel, thread, coworker,
-prompt). A missing mapping is a refuse — enqueue does not invent a second
-thread id. A mapped id that Intelligence has not seen yet is opened on the
+prompt). A typical owner adds those wakes on the goal thread: a schedule,
+a webhook URL and secret shown once, or a mapped mailbox. Inbound email is
+the signed `POST /api/inbound/email` (Mailgun/SendGrid-style); this tree
+does not open a live inbox. A missing mapping is a refuse — enqueue does
+not invent a second thread id. A mapped id that Intelligence has not seen yet is opened on the
 first composer turn and the first unattended job through the same
 CopilotRuntime path a tab turn uses (`getOrCreateThread` then
 `runtime.runner.run`). A second job attaches to that same id. Persist is
@@ -397,6 +400,8 @@ and no second runner.
 | Specialist shares org CRM | `server/src/jobs/specialist.ts` `specialistCrmOrgId`; tools from `loadToolsForActor` |
 | Cmd-K Rooms | `app/src/components/command-palette.tsx` |
 | Cron standing row and due claim | `server/src/jobs/triggers.ts` `CLAIM_DUE_CRON_SQL`, `tickDueCrons`; `job_triggers` |
+| Worker ticks due crons | `server/src/jobs/claim-loop.ts` `runtime.tickDueCrons`; `server/src/jobs/bootstrap.ts` |
+| Standing wakes on the goal | `app/src/components/channels/goal-wakes-card.tsx`; `app/src/lib/triggers/` |
 | Webhook and inbound email | `server/src/jobs/inbound.ts` `POST /api/inbound/webhook/:id`, `POST /api/inbound/email` |
 | First turn opens the mapped Intelligence thread | `server/src/jobs/open-thread.ts` `openIntelligenceThread`; `server/src/jobs/runtime-run.ts` `runUnattendedThroughRuntime`; `server/src/copilot.ts` first-contact wrapper |
 | Persist is the runner write, confirmed by getThread | `server/src/jobs/thread.ts` `createThreadPersister`; `server/tests/jobs-thread.test.ts` |

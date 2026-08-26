@@ -183,6 +183,12 @@ function memoryTriggers(rows: JobTrigger[] = []) {
           row.mailbox === mailbox.trim().toLowerCase(),
       ) ?? null,
     list: async (orgId) => stored.filter((row) => row.orgId === orgId),
+    setEnabled: async (orgId, id, enabled) => {
+      const row = stored.find((item) => item.id === id && item.orgId === orgId);
+      if (!row) return null;
+      row.enabled = enabled;
+      return row;
+    },
     remove: async (orgId, id) => {
       const index = stored.findIndex(
         (row) => row.id === id && row.orgId === orgId,
@@ -239,6 +245,188 @@ describe("cron claim SQL", () => {
     expect(CLAIM_DUE_CRON_SQL).toContain("FOR UPDATE SKIP LOCKED");
     expect(CLAIM_DUE_CRON_SQL).toContain("kind = 'cron'");
     expect(CLAIM_DUE_CRON_SQL).toContain("next_run_at <= now()");
+  });
+});
+
+describe("create standing trigger", () => {
+  test("creates a cron on the existing thread, not a second one", async () => {
+    const { store, stored } = memoryTriggers([]);
+    const { jobStore } = recordingJobs();
+    const app = new Hono();
+    app.route(
+      "/api",
+      createInboundRoutes({
+        requireUser,
+        jobStore,
+        channelStore: presentChannel,
+        triggerStore: store,
+      }),
+    );
+    const created = await app.request("http://openbot.test/api/job-triggers", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        kind: "cron",
+        channelId: "channel_1",
+        prompt: "Morning brief.",
+        everySeconds: 3600,
+      }),
+    });
+    expect(created.status).toBe(201);
+    const body = (await created.json()) as {
+      trigger: { kind: string; threadId: string; everySeconds: number };
+      secret?: string;
+    };
+    expect(body.trigger.kind).toBe("cron");
+    expect(body.trigger.threadId).toBe("thread-existing");
+    expect(body.trigger.everySeconds).toBe(3600);
+    expect(body.secret).toBeUndefined();
+    expect(stored[0]?.threadId).toBe("thread-existing");
+  });
+
+  test("creates a webhook and returns the secret once", async () => {
+    const { store } = memoryTriggers([]);
+    const { jobStore } = recordingJobs();
+    const app = new Hono();
+    app.route(
+      "/api",
+      createInboundRoutes({
+        requireUser,
+        jobStore,
+        channelStore: presentChannel,
+        triggerStore: store,
+      }),
+    );
+    const created = await app.request("http://openbot.test/api/job-triggers", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        kind: "webhook",
+        goalId: "channel_1",
+        prompt: "From the CRM.",
+      }),
+    });
+    expect(created.status).toBe(201);
+    const body = (await created.json()) as {
+      trigger: { id: string; kind: string; hasSecret: boolean };
+      secret?: string;
+    };
+    expect(body.trigger.kind).toBe("webhook");
+    expect(body.trigger.hasSecret).toBe(true);
+    expect(body.secret?.startsWith(TRIGGER_SECRET_PREFIX)).toBe(true);
+
+    const listed = await app.request("http://openbot.test/api/job-triggers");
+    const listedBody = (await listed.json()) as {
+      triggers: Array<{ hasSecret: boolean; secret?: string }>;
+    };
+    expect(listedBody.triggers).toHaveLength(1);
+    expect(listedBody.triggers[0]?.hasSecret).toBe(true);
+    expect(listedBody.triggers[0]?.secret).toBeUndefined();
+  });
+
+  test("maps a mailbox for inbound email", async () => {
+    const { store } = memoryTriggers([]);
+    const { jobStore } = recordingJobs();
+    const app = new Hono();
+    app.route(
+      "/api",
+      createInboundRoutes({
+        requireUser,
+        jobStore,
+        channelStore: presentChannel,
+        triggerStore: store,
+      }),
+    );
+    const created = await app.request("http://openbot.test/api/job-triggers", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        kind: "email",
+        channelId: "channel_1",
+        mailbox: "Work@openbot.test",
+      }),
+    });
+    expect(created.status).toBe(201);
+    const body = (await created.json()) as {
+      trigger: { kind: string; mailbox: string };
+      secret?: string;
+    };
+    expect(body.trigger.kind).toBe("email");
+    expect(body.trigger.mailbox).toBe("work@openbot.test");
+    expect(body.secret?.startsWith(TRIGGER_SECRET_PREFIX)).toBe(true);
+  });
+
+  test("lists only this goal when channelId is given", async () => {
+    const ours = standingTrigger({ id: "jtr_ours", channelId: "channel_1" });
+    const other = standingTrigger({
+      id: "jtr_other_goal",
+      channelId: "channel_other",
+      goalId: "channel_other",
+    });
+    const { store } = memoryTriggers([ours, other]);
+    const { jobStore } = recordingJobs();
+    const app = new Hono();
+    app.route(
+      "/api",
+      createInboundRoutes({
+        requireUser,
+        jobStore,
+        channelStore: presentChannel,
+        triggerStore: store,
+      }),
+    );
+    const listed = await app.request(
+      "http://openbot.test/api/job-triggers?channelId=channel_1",
+    );
+    const body = (await listed.json()) as { triggers: Array<{ id: string }> };
+    expect(body.triggers.map((row) => row.id)).toEqual(["jtr_ours"]);
+  });
+
+  test("disable then delete stay on this org's row", async () => {
+    const trigger = standingTrigger({
+      kind: "webhook",
+      secretHash: hashTriggerSecret(mintTriggerSecret()),
+    });
+    const { store } = memoryTriggers([trigger]);
+    const { jobStore } = recordingJobs();
+    const app = new Hono();
+    app.route(
+      "/api",
+      createInboundRoutes({
+        requireUser,
+        jobStore,
+        channelStore: presentChannel,
+        triggerStore: store,
+      }),
+    );
+    const disabled = await app.request(
+      "http://openbot.test/api/job-triggers/jtr_1",
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ enabled: false }),
+      },
+    );
+    expect(disabled.status).toBe(200);
+    const body = (await disabled.json()) as { trigger: { enabled: boolean } };
+    expect(body.trigger.enabled).toBe(false);
+
+    const hidden = await app.request(
+      "http://openbot.test/api/job-triggers/jtr_other",
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ enabled: false }),
+      },
+    );
+    expect(hidden.status).toBe(404);
+
+    const removed = await app.request(
+      "http://openbot.test/api/job-triggers/jtr_1",
+      { method: "DELETE" },
+    );
+    expect(removed.status).toBe(204);
+    expect(await store.get("org_local", "jtr_1")).toBeNull();
   });
 });
 
@@ -376,6 +564,40 @@ describe("enqueue-from-webhook", () => {
     );
     expect(signed.status).toBe(201);
     expect(enqueued[0]?.payload.prompt).toBe("Signed.");
+  });
+
+  test("a disabled webhook refuses and does not enqueue", async () => {
+    const secret = mintTriggerSecret();
+    const trigger = standingTrigger({
+      kind: "webhook",
+      enabled: false,
+      secretHash: hashTriggerSecret(secret),
+    });
+    const { store } = memoryTriggers([trigger]);
+    const { jobStore, enqueued } = recordingJobs();
+    const app = new Hono();
+    app.route(
+      "/api",
+      createInboundRoutes({
+        requireUser,
+        jobStore,
+        channelStore: presentChannel,
+        triggerStore: store,
+      }),
+    );
+    const refused = await app.request(
+      "http://openbot.test/api/inbound/webhook/jtr_1",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${secret}`,
+        },
+        body: JSON.stringify({ prompt: "Nope." }),
+      },
+    );
+    expect(refused.status).toBe(409);
+    expect(enqueued).toHaveLength(0);
   });
 
   test("refuses a bad secret and does not enqueue", async () => {
