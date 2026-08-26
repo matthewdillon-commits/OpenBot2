@@ -41,6 +41,29 @@ export function toDraft(segments: Segment[]): ComposerDraft {
   };
 }
 
+/**
+ * Segments the send button should submit, matching Enter.
+ *
+ * Enter reads PromptArea's live editor. The home arrow used React `value`,
+ * which stays `[]` when a contenteditable keystroke has not committed, so
+ * `canSend` stayed false (disabled, `pointer-events-none`) and a form submit
+ * of that empty `value` was a no-op. Prefer the committed segments when they
+ * have text — chips live there — otherwise take the editor's plain text.
+ */
+export function liveComposerSegments(
+  value: Segment[],
+  livePlainText?: string | null,
+): Segment[] {
+  if (!isSegmentsEmpty(value)) {
+    return value;
+  }
+  const live = livePlainText?.trim();
+  if (!live) {
+    return value;
+  }
+  return [text(live)];
+}
+
 /** Collapse multiple agent mentions to the most recent one while preserving identity on no-op. */
 export function enforceSingleAgent(segments: Segment[]): Segment[] {
   const agentChipCount = getChipsByTrigger(segments, AGENT_TRIGGER).length;

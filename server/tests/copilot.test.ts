@@ -9,6 +9,7 @@ import {
   modelForBuiltInAgent,
   registeredAgentFromRow,
   resolveRuntimeAgents,
+  resolveRuntimeModel,
   standingRoleMessage,
 } from "../src/copilot";
 
@@ -111,7 +112,54 @@ describe("registered Copilot agents", () => {
       "https://api.x.ai/v1",
     );
     expect(typeof model).toBe("object");
-    expect(model).toMatchObject({ provider: "openai.chat" });
+    expect(model).toMatchObject({
+      provider: "openai.chat",
+      modelId: "grok-4.6",
+    });
+  });
+
+  test("BOT_MODEL overrides the tenant package default_model for Intelligence runs", () => {
+    expect(
+      resolveRuntimeModel(
+        { provider: "openai", defaultModel: "gpt-4.1" },
+        { BOT_MODEL: "grok-4.6" },
+      ),
+    ).toEqual({ provider: "openai", defaultModel: "grok-4.6" });
+  });
+
+  test("OPENAI_MODEL is the belt when BOT_MODEL is unset", () => {
+    expect(
+      resolveRuntimeModel(
+        { provider: "openai", defaultModel: "gpt-4.1" },
+        { OPENAI_MODEL: "grok-4.6" },
+      ).defaultModel,
+    ).toBe("grok-4.6");
+  });
+
+  test("BOT_MODEL wins over OPENAI_MODEL and a leftover package gpt-4.1", () => {
+    expect(
+      resolveRuntimeModel(
+        { provider: "openai", defaultModel: "gpt-4.1" },
+        { BOT_MODEL: "grok-4.6", OPENAI_MODEL: "gpt-4.1" },
+      ).defaultModel,
+    ).toBe("grok-4.6");
+  });
+
+  test("the LanguageModel sent to xAI is BOT_MODEL, never gpt-4.1", () => {
+    const resolved = resolveRuntimeModel(
+      { provider: "openai", defaultModel: "gpt-4.1" },
+      { BOT_MODEL: "grok-4.6" },
+    );
+    const model = modelForBuiltInAgent(
+      resolved,
+      "secret",
+      "https://api.x.ai/v1",
+    );
+    expect(model).toMatchObject({
+      provider: "openai.chat",
+      modelId: "grok-4.6",
+    });
+    expect(JSON.stringify(model)).not.toContain("gpt-4.1");
   });
 
   test("keeps CopilotKit's openai/id string on real OpenAI", () => {

@@ -22,6 +22,7 @@ import {
   type CommandOption,
   type ComposerDraft,
   enforceSingleAgent,
+  liveComposerSegments,
   toDraft,
 } from "./draft";
 import { PLACEHOLDER_COMMANDS } from "./sources";
@@ -151,6 +152,15 @@ export function Composer({
   );
 
   /**
+   * Segments Enter already has: PromptArea's live editor, not a lagged React
+   * `value`. Home "Say hello" typed into the box but the arrow still saw `[]`.
+   */
+  const readLiveSegments = useCallback(
+    () => liveComposerSegments(value, promptAreaRef.current?.getPlainText()),
+    [value],
+  );
+
+  /**
    * The single submit path for Enter, the send button, and the form.
    *
    * `submitInFlight` is a ref rather than `isSubmitting` because a second Enter can land before
@@ -239,6 +249,15 @@ export function Composer({
   );
 
   /**
+   * Same path as Enter. The home arrow used to be `type="submit"` on a Base UI
+   * button whose form submit read React `value`; that click left "Say hello"
+   * in the box and never called `onSubmit`.
+   */
+  const sendCurrentDraft = useCallback(() => {
+    void submitDraft(readLiveSegments());
+  }, [readLiveSegments, submitDraft]);
+
+  /**
    * Put the caret back the moment the composer can accept it again.
    *
    * Keyed off the editor becoming interactive rather than off the send resolving, so it survives
@@ -255,7 +274,7 @@ export function Composer({
 
   const handleFormSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    void submitDraft(value);
+    sendCurrentDraft();
   };
 
   /**
@@ -267,7 +286,12 @@ export function Composer({
   const canQueue = Boolean(onQueue) && isBusy && !disabled;
   /** Something is typed, mid-turn, with a queue to put it in. */
   const parking = canQueue && !draft.isEmpty;
-  const canSend = !disabled && !draft.isEmpty && (!isBusy || canQueue);
+  /**
+   * Clickable whenever a send is allowed to start. Emptiness is not a disable:
+   * a stale empty `value` is what made the home arrow ignore "Say hello".
+   * `submitDraft` still no-ops when the live editor is empty.
+   */
+  const canSend = !disabled && (!isBusy || canQueue);
   const canSendAndGo =
     Boolean(onSendAndGo) && !disabled && !draft.isEmpty && !isBusy;
   /**
@@ -342,7 +366,7 @@ export function Composer({
             data-testid="composer-send-and-go"
             disabled={!canSendAndGo}
             onClick={() => {
-              void submitAndGo(value);
+              void submitAndGo(readLiveSegments());
             }}
             size="icon"
             title="Continue this channel after I leave"
@@ -366,9 +390,11 @@ export function Composer({
           <Button
             aria-label={sendLabel}
             className="size-8 rounded-full p-0"
+            data-testid="composer-send"
             disabled={!canSend}
+            onClick={sendCurrentDraft}
             size="icon"
-            type="submit"
+            type="button"
           >
             <IconArrowUp className="size-3.5" />
           </Button>
@@ -420,8 +446,10 @@ export function Composer({
               <Button
                 aria-label={sendLabel}
                 className="size-8 rounded-full bg-primary p-0 disabled:cursor-not-allowed disabled:opacity-50"
+                data-testid="composer-send"
                 disabled={!canSend}
-                type="submit"
+                onClick={sendCurrentDraft}
+                type="button"
               >
                 <IconArrowUp className="size-3.5 fill-primary" />
               </Button>

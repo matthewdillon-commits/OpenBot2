@@ -163,11 +163,16 @@ async function withThreadLock<T>(
   },
   run: (canonical: { threadId: string; runId: string }) => Promise<T>,
 ): Promise<T> {
-  const acquire = intelligence?.ɵacquireThreadLock;
-  if (typeof acquire !== "function") {
+  // Call lock methods with an explicit receiver. Extracting
+  // `ɵacquireThreadLock` and invoking it unbound makes
+  // CopilotKitIntelligence evaluate `this.#request` with `this === undefined`
+  // — the live unattended failure `undefined is not an object (evaluating
+  // 'this.#request')`. There is no incoming HTTP Request here; `#request`
+  // is the client's private fetch helper.
+  if (!intelligence || typeof intelligence.ɵacquireThreadLock !== "function") {
     return run({ threadId: params.threadId, runId: params.runId });
   }
-  const lock = await acquire({
+  const lock = await intelligence.ɵacquireThreadLock.call(intelligence, {
     threadId: params.threadId,
     runId: params.runId,
     userId: params.userId,
@@ -181,24 +186,28 @@ async function withThreadLock<T>(
       "Intelligence opened a different thread than the one mapped to this goal.",
     );
   }
-  const renew = intelligence?.ɵrenewThreadLock;
   const heartbeat =
-    typeof renew === "function"
+    typeof intelligence.ɵrenewThreadLock === "function"
       ? setInterval(() => {
-          void renew({
-            threadId,
-            runId,
-            ttlSeconds: params.ttlSeconds,
-          }).catch(() => undefined);
+          if (typeof intelligence.ɵrenewThreadLock !== "function") return;
+          void intelligence.ɵrenewThreadLock
+            .call(intelligence, {
+              threadId,
+              runId,
+              ttlSeconds: params.ttlSeconds,
+            })
+            .catch(() => undefined);
         }, params.heartbeatMs)
       : undefined;
   try {
     return await run({ threadId, runId });
   } finally {
     if (heartbeat) clearInterval(heartbeat);
-    await intelligence
-      ?.ɵcleanupThreadLock?.({ threadId, runId })
-      .catch(() => undefined);
+    if (typeof intelligence.ɵcleanupThreadLock === "function") {
+      await intelligence.ɵcleanupThreadLock
+        .call(intelligence, { threadId, runId })
+        .catch(() => undefined);
+    }
   }
 }
 

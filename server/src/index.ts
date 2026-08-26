@@ -43,6 +43,7 @@ import {
   type IdentifyActor,
   type IdentifyUser,
   mountCopilotRuntime,
+  resolveRuntimeModel,
 } from "./copilot";
 import {
   createCredentialAdminService,
@@ -514,7 +515,7 @@ const app = createApp(
   // functions are how a run is attributed to a person.
   mountCopilotRuntime(
     config,
-    tenantPackage.model,
+    resolveRuntimeModel(tenantPackage.model),
     loadAgentsForActor,
     () =>
       resolveModelApiKey({
