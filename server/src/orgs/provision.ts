@@ -42,6 +42,8 @@ export async function copyPackageOwnedAgents(
 
   let copied = 0;
   for (const row of rows) {
+    const packageId = row.packageId;
+    if (!packageId) continue;
     const id = scopedResourceId(toOrgId, unscopedResourceId(fromOrgId, row.id));
     const [agent] = await database
       .insert(agents)
@@ -51,19 +53,19 @@ export async function copyPackageOwnedAgents(
         name: row.name,
         type: row.type,
         configuration: row.configuration,
-        packageId: row.packageId,
+        packageId,
       })
       .onConflictDoUpdate({
         target: agents.id,
         setWhere: and(
-          eq(agents.packageId, row.packageId),
+          eq(agents.packageId, packageId),
           isNotNull(agents.packageId),
         ),
         set: {
           name: row.name,
           type: row.type,
           configuration: row.configuration,
-          packageId: row.packageId,
+          packageId,
           updatedAt: new Date(),
         },
       })

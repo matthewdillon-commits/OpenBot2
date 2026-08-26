@@ -301,7 +301,7 @@ describe("tenant YAML validation", () => {
     expect(orchestratorPrompt).toContain("kind=research");
     expect(orchestratorPrompt).toContain("kind=sales");
     expect(orchestratorPrompt).toContain(
-      "Do not ask the owner to pick Sales, Website, Marketing, Customer, Ops",
+      "You do not ask them to pick Sales, Website, Marketing, Customer, Ops",
     );
     expect(tenantPackage.agents.map((agent) => agent.id)).toEqual(
       expect.arrayContaining([

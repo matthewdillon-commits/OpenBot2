@@ -230,6 +230,13 @@ export async function startSpecialist(
   if (!task) {
     return { ok: false, error: SPECIALIST_REFUSALS.TASK_REQUIRED, status: 400 };
   }
+  if (input.kind?.trim() && !kind) {
+    return {
+      ok: false,
+      error: SPECIALIST_REFUSALS.UNKNOWN_WORKER,
+      status: 400,
+    };
+  }
   if (!kind && !input.specialistId?.trim() && !input.skillSlug?.trim()) {
     return { ok: false, error: SPECIALIST_REFUSALS.NO_SPECIALIST, status: 400 };
   }
@@ -259,14 +266,6 @@ export async function startSpecialist(
     skillInstructions = [
       `Follow the skill “${skill.title}” (${skill.slug}):\n${skill.instructions}`,
     ];
-  }
-
-  if (input.kind?.trim() && !kind) {
-    return {
-      ok: false,
-      error: SPECIALIST_REFUSALS.UNKNOWN_WORKER,
-      status: 400,
-    };
   }
 
   const resolved = await resolveSpecialist(input, deps, orgId, kind);
