@@ -25,6 +25,14 @@ export type OpenedThread = {
 
 export type IntelligenceThreadOpener = {
   getOrCreateThread: (params: OpenThreadParams) => Promise<unknown>;
+  /**
+   * Existence read after mint. Persist and `GET /api/threads/:id` use the same
+   * call. Optional so a test stub that only proves id mapping still compiles.
+   */
+  getThread?: (params: {
+    threadId: string;
+    userId: string;
+  }) => Promise<unknown>;
 };
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -81,6 +89,12 @@ export async function openIntelligenceThread(
     throw new Error(
       "Intelligence opened a different thread than the one mapped to this goal.",
     );
+  }
+  // getOrCreateThread returning an id is not enough. Persist and the browser
+  // `known` flag both ask getThread. If Intelligence still 404s, this job must
+  // not continue as though the thread were real.
+  if (typeof intelligence.getThread === "function") {
+    await intelligence.getThread({ threadId: openedId, userId });
   }
   return {
     threadId: openedId,

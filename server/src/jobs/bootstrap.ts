@@ -24,7 +24,10 @@ import { createComputerProvider } from "../computer/provider";
 import { createSharedComputerClaimStore } from "../computer/shared-claim";
 import { createSnapshotStore } from "../computer/snapshot-store";
 import type { DeploymentConfig } from "../config";
-import { createUnattendedCopilotRuntime } from "../copilot";
+import {
+  createUnattendedCopilotRuntime,
+  resolveRuntimeModel,
+} from "../copilot";
 import { createCredentialStore, resolveModelApiKey } from "../credentials";
 import { createCrmGateway } from "../crm/gateway";
 import { createCrmStore } from "../crm/store";
@@ -314,7 +317,7 @@ export async function createUnattendedWorkerRuntime(
             keyId: tenantPackage.model.credentialSecretRef,
             environment: process.env,
           }),
-        model: tenantPackage.model,
+        model: resolveRuntimeModel(tenantPackage.model),
         timeoutMs: config.unattendedJobTimeoutMs,
         threadWaitMs: 15_000,
         computerGuidance:

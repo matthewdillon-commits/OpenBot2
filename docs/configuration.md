@@ -49,7 +49,8 @@ at `agent-langgraph` on a laptop.
 | `ANTHROPIC_BASE_URL` | unset                              | Anthropic-compatible endpoint that key is spent against.            |
 | `GOOGLE_API_KEY`     | unset                              | Google key when `BOT_PROVIDER=google`.                              |
 | `GOOGLE_GENERATIVE_AI_BASE_URL` | unset                   | Google-compatible endpoint that key is spent against.               |
-| `BOT_MODEL`          | provider default from Bot code/env | Model used by the shipped Bots.                                     |
+| `BOT_MODEL`          | provider default from Bot code/env | Model sent to the LLM for Intelligence / tab / unattended BuiltInAgent runs and the shipped Bots. Overrides the tenant package `default_model`. |
+| `OPENAI_MODEL`       | unset                              | Same override as `BOT_MODEL` when `BOT_MODEL` is unset. Ops belt so a host that only sets `OPENAI_*` still does not fall through to `gpt-4.1`. |
 | `BOT_RESPONSES_API`  | `false`                            | Makes `agent-langgraph` use the OpenAI Responses API.               |
 | `AGENT_STALL_TIMEOUT_MS` | unset (off)                    | How long a Bot's stream may produce nothing before the turn is ended for it. |
 | `AGENT_TOOL_TOKEN`   | unset                              | The secret a framework Bot presents when it calls a granted tool back through this server. |
