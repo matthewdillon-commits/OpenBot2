@@ -114,7 +114,10 @@ export function runnerJoinFailure(event: unknown): string | null {
   if (type !== "RUN_ERROR") return null;
   const code = typeof record.code === "string" ? record.code : "";
   const message = typeof record.message === "string" ? record.message : "";
-  if (code === "CHANNEL_JOIN_ERROR" || /Failed to join channel/i.test(message)) {
+  if (
+    code === "CHANNEL_JOIN_ERROR" ||
+    /Failed to join channel/i.test(message)
+  ) {
     return `Intelligence runner join was rejected (${message || code}). Check INTELLIGENCE_GATEWAY_WS_URL and the thread lock.`;
   }
   if (
@@ -254,7 +257,9 @@ async function waitForRunner(
     );
   } catch (error) {
     subscription?.unsubscribe?.();
-    throw joinError ?? (error instanceof Error ? error : new Error(String(error)));
+    throw (
+      joinError ?? (error instanceof Error ? error : new Error(String(error)))
+    );
   }
   await finished;
 }

@@ -1328,7 +1328,7 @@ describe("unattended CopilotKitIntelligence without an HTTP Request", () => {
                     const error = {
                       type: "RUN_ERROR",
                       code: "CHANNEL_JOIN_ERROR",
-                      message: "Failed to join channel: {\"reason\":\"no ws\"}",
+                      message: 'Failed to join channel: {"reason":"no ws"}',
                     };
                     queueMicrotask(() => {
                       observer.next?.(error);
