@@ -8,7 +8,10 @@ import {
   THREAD_NOT_ON_PLATFORM,
 } from "../src/jobs/open-thread";
 import { startUnattendedRun, UNATTENDED_REFUSALS } from "../src/jobs/run";
-import { runUnattendedThroughRuntime } from "../src/jobs/runtime-run";
+import {
+  RUNNER_JOIN_TIMEOUT,
+  runUnattendedThroughRuntime,
+} from "../src/jobs/runtime-run";
 import { asJobPayload } from "../src/jobs/store";
 import {
   createThreadPersister,
@@ -1117,11 +1120,238 @@ describe("unattended CopilotKitIntelligence without an HTTP Request", () => {
     });
     const elapsed = Date.now() - started;
     expect(result.outcome).toBe("failed");
-    expect(result.error).toMatch(/did not join the thread in time/);
+    expect(result.error).toBe(RUNNER_JOIN_TIMEOUT);
     expect(result.text).toBeUndefined();
     expect(
       result.messages.some((message) => message.role === "assistant"),
     ).toBe(false);
+    expect(elapsed).toBeLessThan(1_500);
+  });
+
+  /**
+   * Live after #36: getThread already returned the id, then
+   * runWithStartupBoundary.startup never resolved because events were
+   * not subscribed. IntelligenceAgentRunner is cold — join starts on
+   * subscribe, the same order handleIntelligenceRun uses.
+   */
+  function lazyJoinRunner(
+    intelligence: ReturnType<typeof recordingIntelligence>,
+    reply: string,
+  ) {
+    return {
+      run() {
+        throw new Error("must use runWithStartupBoundary");
+      },
+      runWithStartupBoundary({
+        threadId,
+        agent,
+        input,
+      }: {
+        threadId: string;
+        agent: AbstractAgent;
+        input: { messages: UnattendedMessage[] };
+      }) {
+        let resolveStartup: (() => void) | undefined;
+        const startup = new Promise<void>((resolve) => {
+          resolveStartup = resolve;
+        });
+        return {
+          startup,
+          events: {
+            subscribe(observer: {
+              next?: (value: unknown) => void;
+              error?: (error: unknown) => void;
+              complete?: () => void;
+            }) {
+              resolveStartup?.();
+              const writable = agent as AbstractAgent & {
+                setMessages?: (next: unknown[]) => void;
+                messages?: UnattendedMessage[];
+              };
+              Promise.resolve()
+                .then(() => {
+                  observer.next?.({ type: "RUN_STARTED" });
+                  writable.setMessages?.([
+                    ...input.messages,
+                    { id: "a1", role: "assistant", content: reply },
+                  ]);
+                  intelligence.record(
+                    threadId,
+                    (writable.messages ?? []) as UnattendedMessage[],
+                  );
+                  observer.next?.({ type: "RUN_FINISHED" });
+                  observer.complete?.();
+                })
+                .catch((error) => observer.error?.(error));
+              return { unsubscribe() {} };
+            },
+          },
+        };
+      },
+    };
+  }
+
+  test("a known thread + runner.run emits assistant text, not only the join timeout", async () => {
+    const intelligence = recordingIntelligence();
+    await intelligence.client.getOrCreateThread({
+      threadId: "thread-1",
+      userId: intelligenceUser,
+      agentId: "researcher",
+    });
+    const known = await intelligence.client.getThread({
+      threadId: "thread-1",
+      userId: intelligenceUser,
+    });
+    expect((known as { id?: string }).id).toBe("thread-1");
+
+    const started = Date.now();
+    const result = await startUnattendedRun({
+      actor,
+      orgId: actor.orgId,
+      channelId: "channel_1",
+      threadId: "thread-1",
+      prompt: "Say hello in one short sentence.",
+      coworkerId: "researcher",
+      deps: coworkerDeps(intelligence, {
+        waitForThread: async () => "idle" as const,
+        runtime: {
+          intelligence: intelligence.client,
+          runner: lazyJoinRunner(intelligence, "Hello from the runner."),
+          runnerStartupTimeoutMs: 200,
+        },
+        timeoutMs: 5_000,
+      }),
+    });
+    const elapsed = Date.now() - started;
+    expect(result.outcome).toBe("succeeded");
+    expect(result.persisted).toBe(true);
+    expect(result.text).toBe("Hello from the runner.");
+    expect(result.error).toBeUndefined();
+    expect(result.error).not.toBe(RUNNER_JOIN_TIMEOUT);
+    expect(elapsed).toBeLessThan(1_500);
+
+    const history = await intelligence.client.getThreadMessages({
+      threadId: "thread-1",
+      userId: intelligenceUser,
+    });
+    const blob = JSON.stringify(history);
+    expect(blob).toContain("Say hello in one short sentence.");
+    expect(blob).toContain("Hello from the runner.");
+  });
+
+  test("a second job on a known thread also replies through the same runner join", async () => {
+    const intelligence = recordingIntelligence();
+    await intelligence.client.getOrCreateThread({
+      threadId: "thread-1",
+      userId: intelligenceUser,
+      agentId: "researcher",
+    });
+    const first = await startUnattendedRun({
+      actor,
+      orgId: actor.orgId,
+      channelId: "channel_1",
+      threadId: "thread-1",
+      prompt: "Say hello in one short sentence.",
+      coworkerId: "researcher",
+      deps: coworkerDeps(intelligence, {
+        waitForThread: async () => "idle" as const,
+        runtime: {
+          intelligence: intelligence.client,
+          runner: lazyJoinRunner(intelligence, "Hello from job one."),
+          runnerStartupTimeoutMs: 200,
+        },
+        timeoutMs: 5_000,
+      }),
+    });
+    expect(first.outcome).toBe("succeeded");
+    expect(first.text).toBe("Hello from job one.");
+
+    const second = await startUnattendedRun({
+      actor,
+      orgId: actor.orgId,
+      channelId: "channel_1",
+      threadId: "thread-1",
+      prompt: "Say hello again.",
+      coworkerId: "researcher",
+      deps: coworkerDeps(intelligence, {
+        waitForThread: async () => "idle" as const,
+        runtime: {
+          intelligence: intelligence.client,
+          runner: lazyJoinRunner(intelligence, "Hello from job two."),
+          runnerStartupTimeoutMs: 200,
+        },
+        timeoutMs: 5_000,
+      }),
+    });
+    expect(second.outcome).toBe("succeeded");
+    expect(second.persisted).toBe(true);
+    expect(second.text).toBe("Hello from job two.");
+    expect(second.error).not.toBe(RUNNER_JOIN_TIMEOUT);
+    expect(intelligence.threadIds()).toEqual(["thread-1"]);
+  });
+
+  test("a CHANNEL_JOIN_ERROR after subscribe fails with the join reason, not the 15s timeout", async () => {
+    const intelligence = recordingIntelligence();
+    await intelligence.client.getOrCreateThread({
+      threadId: "thread-1",
+      userId: intelligenceUser,
+      agentId: "researcher",
+    });
+    const started = Date.now();
+    const result = await startUnattendedRun({
+      actor,
+      orgId: actor.orgId,
+      channelId: "channel_1",
+      threadId: "thread-1",
+      prompt: "Say hello in one short sentence.",
+      coworkerId: "researcher",
+      deps: coworkerDeps(intelligence, {
+        waitForThread: async () => "idle" as const,
+        runtime: {
+          intelligence: intelligence.client,
+          runner: {
+            run() {
+              return { subscribe() {} };
+            },
+            runWithStartupBoundary() {
+              let rejectStartup: ((error: Error) => void) | undefined;
+              const startup = new Promise<void>((_, reject) => {
+                rejectStartup = reject;
+              });
+              return {
+                startup,
+                events: {
+                  subscribe(observer: {
+                    next?: (value: unknown) => void;
+                    complete?: () => void;
+                  }) {
+                    const error = {
+                      type: "RUN_ERROR",
+                      code: "CHANNEL_JOIN_ERROR",
+                      message: 'Failed to join channel: {"reason":"no ws"}',
+                    };
+                    queueMicrotask(() => {
+                      observer.next?.(error);
+                      rejectStartup?.(new Error(error.message));
+                      observer.complete?.();
+                    });
+                    return { unsubscribe() {} };
+                  },
+                },
+              };
+            },
+          },
+          runnerStartupTimeoutMs: 2_000,
+        },
+        timeoutMs: 5_000,
+      }),
+    });
+    const elapsed = Date.now() - started;
+    expect(result.outcome).toBe("failed");
+    expect(result.error).toMatch(/join was rejected/);
+    expect(result.error).toMatch(/INTELLIGENCE_GATEWAY_WS_URL/);
+    expect(result.error).not.toBe(RUNNER_JOIN_TIMEOUT);
+    expect(result.text).toBeUndefined();
     expect(elapsed).toBeLessThan(1_500);
   });
 });

@@ -4,11 +4,12 @@
  *
  * Tab turns hit `handleRunAgent` → `handleIntelligenceRun` →
  * `getOrCreateThread` → `ɵacquireThreadLock` → `runtime.runner.run`.
- * That runner (`IntelligenceAgentRunner`) joins the Phoenix ingestion
- * channel and pushes AG-UI events onto the thread. This file is that path
- * without a browser Request: open the mapped id (so a first job is not
- * THREAD_NOT_FOUND), take the same lock the tab takes (so the gateway
- * accepts the join), then run and wait until those events are durable.
+ * That runner (`IntelligenceAgentRunner`) is a cold Observable: subscribe
+ * starts Phoenix `ingestion:${runId}` join, then `startup` resolves, then
+ * `executeAgentRun` pushes AG-UI events. `handleIntelligenceRun`
+ * subscribes first and only then awaits `startup`. This file is that path
+ * without a browser Request: open the mapped id, take the same lock, then
+ * subscribe / join / run and wait until those events are durable.
  *
  * `getThread` is a read. Persist is true only after the run, when Intelligence
  * on that same thread shows the user prompt and the assistant result.
@@ -22,31 +23,35 @@ import {
 } from "./open-thread";
 import type { UnattendedMessage } from "./thread";
 
+type RunnerObserver = {
+  next?: (value: unknown) => void;
+  error?: (error: unknown) => void;
+  complete?: () => void;
+};
+
+type RunnerSubscription = {
+  unsubscribe?: () => void;
+};
+
 export type UnattendedRuntimeRunner = {
   run: (request: {
     threadId: string;
     agent: AbstractAgent;
     input: RunAgentInput;
     persistedInputMessages?: UnattendedMessage[];
+    authToken?: string;
   }) => {
-    subscribe: (observer: {
-      next?: (value: unknown) => void;
-      error?: (error: unknown) => void;
-      complete?: () => void;
-    }) => unknown;
+    subscribe: (observer: RunnerObserver) => unknown;
   };
   runWithStartupBoundary?: (request: {
     threadId: string;
     agent: AbstractAgent;
     input: RunAgentInput;
     persistedInputMessages?: UnattendedMessage[];
+    authToken?: string;
   }) => {
     events: {
-      subscribe: (observer: {
-        next?: (value: unknown) => void;
-        error?: (error: unknown) => void;
-        complete?: () => void;
-      }) => unknown;
+      subscribe: (observer: RunnerObserver) => unknown;
     };
     startup: Promise<void>;
   };
@@ -59,7 +64,7 @@ export type ThreadLockClient = {
     userId: string;
     agentId: string;
     ttlSeconds?: number;
-  }) => Promise<{ threadId?: string; runId?: string }>;
+  }) => Promise<{ threadId?: string; runId?: string; joinToken?: string }>;
   ɵcleanupThreadLock?: (params: {
     threadId: string;
     runId: string;
@@ -77,15 +82,52 @@ export type UnattendedCopilotRuntime = {
   lockTtlSeconds?: number;
   lockHeartbeatIntervalSeconds?: number;
   /**
-   * How long Phoenix join / runner startup may sit with no RUN_STARTED.
-   * Live after #35: mint 404s then silence — `startup` never resolved and
-   * the job stayed `running` for minutes, blocking the next claim.
+   * How long Phoenix join / runner startup may sit with no RUN_STARTED
+   * after events are subscribed. Live after #36: mint was real
+   * (`known:true`) but `waitForRunner` awaited `startup` before
+   * subscribe, so the cold Observable never joined and every job died
+   * on this timeout.
    */
   runnerStartupTimeoutMs?: number;
 };
 
 /** Fail the job in seconds if the Intelligence runner never joins. */
 export const DEFAULT_RUNNER_STARTUP_TIMEOUT_MS = 15_000;
+
+export const RUNNER_JOIN_TIMEOUT =
+  "Intelligence runner did not join the thread in time. The job will not stay running on a missing join.";
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+/**
+ * Phoenix join failures after subscribe. The generic 15s timeout is
+ * what we used to throw without ever starting the socket.
+ */
+export function runnerJoinFailure(event: unknown): string | null {
+  const record = asRecord(event);
+  if (!record) return null;
+  const type = record.type;
+  if (type !== "RUN_ERROR") return null;
+  const code = typeof record.code === "string" ? record.code : "";
+  const message = typeof record.message === "string" ? record.message : "";
+  if (
+    code === "CHANNEL_JOIN_ERROR" ||
+    /Failed to join channel/i.test(message)
+  ) {
+    return `Intelligence runner join was rejected (${message || code}). Check INTELLIGENCE_GATEWAY_WS_URL and the thread lock.`;
+  }
+  if (
+    code === "CHANNEL_JOIN_TIMEOUT" ||
+    /Timed out joining channel/i.test(message)
+  ) {
+    return `Intelligence runner timed out joining the Phoenix channel. Check INTELLIGENCE_GATEWAY_WS_URL.`;
+  }
+  return message || null;
+}
 
 function assistantText(messages: UnattendedMessage[]): string {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
@@ -126,12 +168,16 @@ function messagesFromAgent(agent: AbstractAgent): UnattendedMessage[] {
   });
 }
 
+function asSubscription(value: unknown): RunnerSubscription | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const unsubscribe = (value as { unsubscribe?: unknown }).unsubscribe;
+  return typeof unsubscribe === "function"
+    ? (value as RunnerSubscription)
+    : undefined;
+}
+
 function waitForObservable(observable: {
-  subscribe: (observer: {
-    next?: (value: unknown) => void;
-    error?: (error: unknown) => void;
-    complete?: () => void;
-  }) => unknown;
+  subscribe: (observer: RunnerObserver) => unknown;
 }): Promise<void> {
   return new Promise((resolve, reject) => {
     observable.subscribe({
@@ -168,15 +214,54 @@ async function waitForRunner(
   request: Parameters<UnattendedRuntimeRunner["run"]>[0],
   startupTimeoutMs: number,
 ): Promise<void> {
-  const startupMessage =
-    "Intelligence runner did not join the thread in time. The job will not stay running on a missing join.";
-  if (typeof runner.runWithStartupBoundary === "function") {
-    const started = runner.runWithStartupBoundary(request);
-    await withTimeout(started.startup, startupTimeoutMs, startupMessage);
-    await waitForObservable(started.events);
+  if (typeof runner.runWithStartupBoundary !== "function") {
+    await waitForObservable(runner.run(request));
     return;
   }
-  await waitForObservable(runner.run(request));
+  const started = runner.runWithStartupBoundary(request);
+  // Subscribe first. IntelligenceAgentRunner.createRunObservable is cold:
+  // socket.connect() and channel.join(`ingestion:${runId}`) run only
+  // inside the Observable factory. handleIntelligenceRun does the same
+  // (`events.subscribe` then `await startup`). Awaiting startup first
+  // is the live #36 hang: 15s of silence, no model line, then
+  // RUNNER_JOIN_TIMEOUT on a thread getThread already has.
+  let joinError: Error | undefined;
+  let subscription: RunnerSubscription | undefined;
+  const finished = new Promise<void>((resolve, reject) => {
+    subscription = asSubscription(
+      started.events.subscribe({
+        next: (value) => {
+          const specific = runnerJoinFailure(value);
+          if (specific) joinError = new Error(specific);
+        },
+        error: (error) => {
+          reject(error instanceof Error ? error : new Error(String(error)));
+        },
+        complete: () => {
+          if (joinError) reject(joinError);
+          else resolve();
+        },
+      }),
+    );
+  });
+  // Subscribe can reject `startup` / `finished` synchronously (tests, and
+  // a CHANNEL_JOIN_ERROR that fires before we await). Hold the rejection
+  // until the awaits below so it is not an unhandled rejection.
+  void finished.catch(() => undefined);
+  void started.startup.catch(() => undefined);
+  try {
+    await withTimeout(
+      started.startup,
+      startupTimeoutMs,
+      joinError?.message ?? RUNNER_JOIN_TIMEOUT,
+    );
+  } catch (error) {
+    subscription?.unsubscribe?.();
+    throw (
+      joinError ?? (error instanceof Error ? error : new Error(String(error)))
+    );
+  }
+  await finished;
 }
 
 /**
