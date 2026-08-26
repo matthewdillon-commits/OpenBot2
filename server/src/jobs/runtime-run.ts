@@ -76,7 +76,16 @@ export type UnattendedCopilotRuntime = {
   intelligence?: IntelligenceThreadOpener & ThreadLockClient;
   lockTtlSeconds?: number;
   lockHeartbeatIntervalSeconds?: number;
+  /**
+   * How long Phoenix join / runner startup may sit with no RUN_STARTED.
+   * Live after #35: mint 404s then silence — `startup` never resolved and
+   * the job stayed `running` for minutes, blocking the next claim.
+   */
+  runnerStartupTimeoutMs?: number;
 };
+
+/** Fail the job in seconds if the Intelligence runner never joins. */
+export const DEFAULT_RUNNER_STARTUP_TIMEOUT_MS = 15_000;
 
 function assistantText(messages: UnattendedMessage[]): string {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
@@ -85,8 +94,7 @@ function assistantText(messages: UnattendedMessage[]): string {
       return message.content;
     }
   }
-  const last = messages[messages.length - 1];
-  return last?.role === "assistant" ? last.content : "";
+  return "";
 }
 
 function messagesFromAgent(agent: AbstractAgent): UnattendedMessage[] {
@@ -133,13 +141,38 @@ function waitForObservable(observable: {
   });
 }
 
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string,
+): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(message));
+    }, timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
 async function waitForRunner(
   runner: UnattendedRuntimeRunner,
   request: Parameters<UnattendedRuntimeRunner["run"]>[0],
+  startupTimeoutMs: number,
 ): Promise<void> {
+  const startupMessage =
+    "Intelligence runner did not join the thread in time. The job will not stay running on a missing join.";
   if (typeof runner.runWithStartupBoundary === "function") {
     const started = runner.runWithStartupBoundary(request);
-    await started.startup;
+    await withTimeout(started.startup, startupTimeoutMs, startupMessage);
     await waitForObservable(started.events);
     return;
   }
@@ -240,6 +273,8 @@ export async function runUnattendedThroughRuntime(input: {
   agent.threadId = input.threadId;
   const ttlSeconds = input.runtime.lockTtlSeconds ?? 20;
   const heartbeatMs = (input.runtime.lockHeartbeatIntervalSeconds ?? 15) * 1000;
+  const startupTimeoutMs =
+    input.runtime.runnerStartupTimeoutMs ?? DEFAULT_RUNNER_STARTUP_TIMEOUT_MS;
   await withThreadLock(
     intelligence,
     {
@@ -252,24 +287,30 @@ export async function runUnattendedThroughRuntime(input: {
     },
     async (canonical) => {
       agent.threadId = canonical.threadId;
-      await waitForRunner(input.runtime.runner, {
-        threadId: canonical.threadId,
-        agent: input.agent,
-        input: {
+      await waitForRunner(
+        input.runtime.runner,
+        {
           threadId: canonical.threadId,
-          runId: canonical.runId,
-          messages: input.messages,
-          tools: [],
-          context: [],
+          agent: input.agent,
+          input: {
+            threadId: canonical.threadId,
+            runId: canonical.runId,
+            messages: input.messages,
+            tools: [],
+            context: [],
+          },
+          persistedInputMessages: input.messages,
         },
-        persistedInputMessages: input.messages,
-      });
+        startupTimeoutMs,
+      );
     },
   );
+  // Only assistant tokens count. Falling back to input.messages made
+  // resultText the prompt echo (“Say hello…”) while the runner was still
+  // waiting and no model hello existed.
   const messages = messagesFromAgent(input.agent);
-  const transcript = messages.length ? messages : input.messages;
   return {
-    text: assistantText(transcript),
-    messages: transcript,
+    text: assistantText(messages),
+    messages,
   };
 }
