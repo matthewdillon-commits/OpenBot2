@@ -29,6 +29,7 @@ import {
   intervalLabel,
   wakeKindLabel,
   wakeSummary,
+  webhookSecretAuthCopy,
 } from "@/lib/triggers/copy";
 import {
   cronWakeFormSchema,
@@ -453,7 +454,12 @@ function RevealSecretDialog({
         </DialogHeader>
         <DialogBody className="mt-4">
           {trigger?.kind === "webhook" && webhookUrl ? (
-            <CopyField label="Webhook URL" value={webhookUrl} />
+            <>
+              <CopyField label="Webhook URL" value={webhookUrl} />
+              <p className="text-[12px] leading-4 text-muted-foreground">
+                {webhookSecretAuthCopy()}
+              </p>
+            </>
           ) : null}
           {trigger?.kind === "email" && emailUrl ? (
             <>

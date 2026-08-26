@@ -22,6 +22,7 @@ import { agentListQueryOptions } from "@/lib/agents/queries";
 import { recordChannelActivityMutationOptions } from "@/lib/channels/mutations";
 import type { AgentChannel } from "@/lib/channels/queries";
 import { useActiveBot } from "@/lib/copilot/active-bot";
+import { ownerThreadAgentId } from "@/lib/copilot/channel-agent";
 import { ConversationProvider } from "@/lib/copilot/conversation";
 import { repairUnansweredToolCalls } from "@/lib/copilot/repair-history";
 import {
@@ -120,7 +121,7 @@ export function ChannelChat({
   }, [onSpeakerChange, speaker]);
 
   const { agent, isReady } = useAgent({
-    agentId: `channel:${channel.id}`,
+    agentId: ownerThreadAgentId(channel.id),
     runtimeAgentId: speaker,
     threadId: channel.threadId,
     updates: [

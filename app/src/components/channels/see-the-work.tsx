@@ -1,6 +1,10 @@
-import { UseAgentUpdate, useAgent } from "@copilotkit/react-core/v2";
+import {
+  UseAgentUpdate,
+  useAgent,
+  useCopilotKit,
+} from "@copilotkit/react-core/v2";
 import { useQuery } from "@tanstack/react-query";
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { toVisibleChatItems } from "@/components/channels/chat-messages";
 import { ServerToolLine } from "@/components/channels/server-tool-line";
 import { ActivityLog } from "@/components/computer/activity-log";
@@ -11,6 +15,10 @@ import {
   hasBrowsed,
   subscribeToActivity,
 } from "@/lib/computers/activity";
+import {
+  attachSeeTheWorkAgent,
+  ownerThreadAgentId,
+} from "@/lib/copilot/channel-agent";
 import { appConfig } from "@/lib/generated/application-config";
 import { coworkerDisplayName } from "@/lib/orchestrator";
 import { toolHintFromArgs } from "@/lib/plugins/tool-name";
@@ -109,11 +117,7 @@ export function SeeTheWorkPanel({
         )}
       </div>
       {room.data.threadId && traceAgentId ? (
-        <WorkTraces
-          channelId={channelId}
-          runtimeAgentId={traceAgentId}
-          threadId={room.data.threadId}
-        />
+        <WorkTraces channelId={channelId} />
       ) : null}
       {watchAgentId ? (
         <WorkComputer
@@ -129,19 +133,33 @@ export function SeeTheWorkPanel({
   );
 }
 
-function WorkTraces({
-  channelId,
-  runtimeAgentId,
-  threadId,
-}: {
-  channelId: string;
-  runtimeAgentId: string;
-  threadId: string;
-}) {
+function WorkTraces({ channelId }: { channelId: string }) {
+  const { copilotkit } = useCopilotKit();
+  const agentId = ownerThreadAgentId(channelId);
+  const [ownerPresent, setOwnerPresent] = useState(() =>
+    Boolean(attachSeeTheWorkAgent(copilotkit, channelId)),
+  );
+
+  useEffect(() => {
+    const sync = () =>
+      setOwnerPresent(Boolean(attachSeeTheWorkAgent(copilotkit, channelId)));
+    sync();
+    const subscription = copilotkit.subscribe({
+      onAgentsChanged: sync,
+    });
+    return () => subscription.unsubscribe();
+  }, [copilotkit, channelId]);
+
+  if (!ownerPresent) {
+    return <TracesEmpty />;
+  }
+
+  return <SharedOwnerTraces agentId={agentId} />;
+}
+
+function SharedOwnerTraces({ agentId }: { agentId: string }) {
   const { agent } = useAgent({
-    agentId: `channel:${channelId}`,
-    runtimeAgentId,
-    threadId,
+    agentId,
     updates: [UseAgentUpdate.OnMessagesChanged],
   });
   const traces = toVisibleChatItems(agent.messages, {
@@ -169,6 +187,17 @@ function WorkTraces({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function TracesEmpty() {
+  return (
+    <div>
+      <h2 className="text-sm font-medium tracking-tight">Traces</h2>
+      <p className="mt-1 text-xs text-muted-foreground">
+        No tool traces on this goal yet.
+      </p>
     </div>
   );
 }
