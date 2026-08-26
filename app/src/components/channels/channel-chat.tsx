@@ -25,8 +25,12 @@ import type { AgentChannel } from "@/lib/channels/queries";
 import { useActiveBot } from "@/lib/copilot/active-bot";
 import { ConversationProvider } from "@/lib/copilot/conversation";
 import { repairUnansweredToolCalls } from "@/lib/copilot/repair-history";
-import { stoppedReason } from "@/lib/copilot/stopped-turn";
+import {
+  isUnknownThreadError,
+  stoppedReason,
+} from "@/lib/copilot/stopped-turn";
 import { readThreadMessages } from "@/lib/copilot/thread-messages";
+import { appConfig } from "@/lib/generated/application-config";
 import { enqueueJobMutationOptions } from "@/lib/jobs/mutations";
 import { jobQueryOptions } from "@/lib/jobs/queries";
 import {
@@ -34,7 +38,6 @@ import {
   coworkerDisplayName,
   pickOrchestratorId,
 } from "@/lib/orchestrator";
-import { appConfig } from "@/lib/generated/application-config";
 import { useSkillCommands } from "@/lib/plugins/skill-commands";
 import { queryClient } from "@/query-client";
 import { newId } from "../../lib/new-id";
@@ -186,9 +189,17 @@ export function ChannelChat({
 
     void (async () => {
       try {
-        await copilotkit.connectAgent({ agent });
-      } catch {
-        // Reported by the run-failure subscriber below; history is still worth restoring.
+        // A seeded new goal has no Intelligence thread yet. connect() 404s
+        // (Not Found / THREAD_NOT_FOUND) and locks the composer. The first
+        // runAgent goes through handleIntelligenceRun, which opens the mapped
+        // id. Existing goals still connect so an in-flight run can resume.
+        if (!seed.message) {
+          await copilotkit.connectAgent({ agent });
+        }
+      } catch (error) {
+        if (!seed.message && !isUnknownThreadError(error)) {
+          // Reported by the run-failure subscriber below; history is still worth restoring.
+        }
       }
 
       try {
@@ -397,6 +408,7 @@ export function ChannelChat({
   useEffect(() => {
     const fail = (message: string) => {
       if (!awaitingReply.current) return;
+      if (seed.message && isUnknownThreadError(message)) return;
       awaitingReply.current = false;
       setRunError(message);
     };
@@ -430,7 +442,7 @@ export function ChannelChat({
       },
     });
     return () => subscription?.unsubscribe();
-  }, [agent]);
+  }, [agent, seed.message]);
 
   /** Stable reference for effects and component callbacks. */
   const sayRef = useRef(say);

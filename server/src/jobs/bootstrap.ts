@@ -24,6 +24,7 @@ import { createComputerProvider } from "../computer/provider";
 import { createSharedComputerClaimStore } from "../computer/shared-claim";
 import { createSnapshotStore } from "../computer/snapshot-store";
 import type { DeploymentConfig } from "../config";
+import { createUnattendedCopilotRuntime } from "../copilot";
 import { createCredentialStore, resolveModelApiKey } from "../credentials";
 import { createCrmGateway } from "../crm/gateway";
 import { createCrmStore } from "../crm/store";
@@ -51,18 +52,18 @@ import {
   identifyActorFromContext,
 } from "./actor";
 import { startUnattendedRun } from "./run";
+import { startSpecialist } from "./specialist";
 import { createJobStore, type JobStore, type UnattendedJob } from "./store";
 import {
   createThreadIdleChecker,
   createThreadPersister,
   intelligenceUserForActor,
 } from "./thread";
-import { startSpecialist } from "./specialist";
 import { createLoadToolsForActor } from "./tools";
 import {
   createJobTriggerStore,
-  tickDueCrons,
   type JobTriggerStore,
+  tickDueCrons,
 } from "./triggers";
 
 export type UnattendedWorkerRuntime = {
@@ -282,6 +283,14 @@ export async function createUnattendedWorkerRuntime(
             : null;
         },
         threadIdle,
+        runtime: createUnattendedCopilotRuntime(
+          intelligence,
+          config.runtime.intelligence.licenseToken,
+          async () => ({
+            id: intelligenceUserForActor(actor),
+            name: actor.name,
+          }),
+        ),
         persistThread: persistThread.append,
         recordActivity: async ({
           actor: activityActor,

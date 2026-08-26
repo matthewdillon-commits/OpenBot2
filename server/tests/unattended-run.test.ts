@@ -161,7 +161,7 @@ describe("startUnattendedRun", () => {
     expect(refused.error).toBe(UNATTENDED_REFUSALS.GOAL_MISMATCH);
   });
 
-  test("refuses when the mapped Intelligence thread is missing", async () => {
+  test("does not refuse when the mapped Intelligence thread is not yet known", async () => {
     const result = await startUnattendedRun({
       actor,
       orgId: actor.orgId,
@@ -177,10 +177,12 @@ describe("startUnattendedRun", () => {
         }),
         waitForThread: async () => "missing",
         persistThread: async () => {
-          throw new Error("must not persist when the thread is missing");
+          throw new Error("must not persist before the coworker is built");
         },
         recordActivity: async () => {
-          throw new Error("must not record activity on a refused run");
+          throw new Error(
+            "must not record activity before the coworker is built",
+          );
         },
         loadAgents: async () => [],
         loadTools: () => async () => [],
@@ -191,8 +193,10 @@ describe("startUnattendedRun", () => {
     });
 
     expect(result.outcome).toBe("refused");
-    expect(result.error).toBe(UNATTENDED_REFUSALS.THREAD_MISSING);
-    expect(result.persisted).toBeUndefined();
+    expect(result.error).not.toBe(UNATTENDED_REFUSALS.THREAD_MISSING);
+    expect(result.error).toBe(
+      "That coworker is not available to the acting user.",
+    );
   });
 
   test("keep / revise / revert on this goal is visible on the next unattended turn", async () => {
