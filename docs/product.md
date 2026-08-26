@@ -124,8 +124,9 @@ product.
   Intelligence thread per goal, shared with the owner’s LimitlessAI chat.
 - **Specialists on demand.** Skills/playbooks, a sub-agent a parent starts
   (including one with a computer), or members of an A2A room for that goal.
-  Not a five-bot sidebar. Not Sales / Website / Marketing / Customer / Ops
-  in the owner nav.
+  The three owner jobs spawn packaged workers: email campaign, marketing
+  research, always-on sales (`kind=` on `start_specialist`). Not a five-bot
+  sidebar. Not Sales / Website / Marketing / Customer / Ops in the owner nav.
 - **Rooms.** How the system works. Behind “See the work” on the goal
   (operator / admin), or Cmd-K “Rooms” for power users. First-run never
   tours the roster.
@@ -228,18 +229,30 @@ turn is told the last decision and outcome.
 
 **Two doors.** Home is Composer to LimitlessAI plus Goals (the existing
 channel list: name, Active | Needs you | Done, last action, time). Opening a
-goal talks to the orchestrator, not a worker. The orchestrator starts a
-finite specialist with `start_specialist` (a skill/playbook or a coworker,
-including one with a computer). That call enqueues via `enqueueUnattendedJob`
-on the same runner. Specialists share the organization’s CRM. “See the work”
-(deployment admin, or org owner/admin) opens the A2A room for this goal:
-members, jobs, computers, traces. Cmd-K Rooms is the same door for power
-users. A typical owner does not see Sales / Website / Marketing / Customer /
-Ops, leftover coworker names, or Agents in the nav. Skills and Plugins stay
-in the owner rail. CRM is the org book, not an agent roster. Deployment-wide
-`/admin` is platform superadmin / `INITIAL_ADMIN_EMAILS`, not an org owner.
-Raw tool traces belong behind See the work. A typical owner does not see
-rooms unless they opened See the work. First-run does not tour the roster.
+goal talks to the orchestrator, not a worker. The owner says the job;
+LimitlessAI stands up the worker. For an email campaign, marketing
+research, or always-on sales the orchestrator calls `start_specialist` with
+`kind=campaign` | `kind=research` | `kind=sales`. That enqueue is
+`enqueueUnattendedJob` on the same runner: the worker joins this goal’s
+room, shares the organization’s CRM, continues after the tab closes, and
+reports last action on that same goal. Always-on sales also writes a
+standing cron on the goal (`job_triggers`, hourly) so the loop wakes
+without the owner typing again; mailbox and webhook still enqueue the same
+job when mapped. Playbooks live in `server/src/jobs/worker-kinds.ts`.
+Packaged workers (`campaign-worker`, `research-worker`, `sales-worker`) are
+not owner-nav items and not seed channels. “See the work” (deployment
+admin, or org owner/admin) opens the A2A room for this goal: members,
+jobs, computers, traces. Cmd-K Rooms is the same door for power users. A
+typical owner does not see Sales / Website / Marketing / Customer / Ops,
+leftover coworker names, worker names, or Agents in the nav. Skills and
+Plugins stay in the owner rail. CRM is the org book, not an agent roster.
+Deployment-wide `/admin` is platform superadmin / `INITIAL_ADMIN_EMAILS`,
+not an org owner. Raw tool traces belong behind See the work. A typical
+owner does not see rooms unless they opened See the work. First-run does
+not tour the roster. Mail send is delivered when outbound mail is
+configured, otherwise logged. Research uses web search and the computer
+when this deployment has them. Inbound email is the signed POST, not a
+live inbox.
 
 ### How a coworker actually runs
 
@@ -397,6 +410,9 @@ and no second runner.
 | Owner thread hides raw tool traces | `app/src/components/channels/chat-messages.ts`, `app/src/components/channels/chat-transcript.tsx` |
 | `/admin` is platform / INITIAL_ADMIN, not org owner | `server/src/auth/guards.ts` `requireDeploymentAdmin`, `app/src/routes/_authed/admin/route.tsx` |
 | Specialist on demand | `server/src/jobs/specialist.ts` `startSpecialist`, `server/src/jobs/specialist-tool.ts` `start_specialist` |
+| Worker kinds (campaign / research / sales) | `server/src/jobs/worker-kinds.ts`; packaged in `examples/fintech/agents.yaml` (`campaign-worker`, `research-worker`, `sales-worker`) — not channels, not owner nav |
+| Standing sales cron | `server/src/jobs/specialist.ts`; `server/src/jobs/worker-kinds.ts` `standingSalesTriggerId`; existing `job_triggers` + `tickDueCrons` |
+| Existing orgs get new packaged workers | `server/src/orgs/provision.ts` `copyPackageOwnedAgents` on API boot and org create |
 | Specialist shares org CRM | `server/src/jobs/specialist.ts` `specialistCrmOrgId`; tools from `loadToolsForActor` |
 | Cmd-K Rooms | `app/src/components/command-palette.tsx` |
 | Cron standing row and due claim | `server/src/jobs/triggers.ts` `CLAIM_DUE_CRON_SQL`, `tickDueCrons`; `job_triggers` |

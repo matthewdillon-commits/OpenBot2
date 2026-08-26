@@ -17,6 +17,13 @@ export const LEFTOVER_COWORKER_NAMES = [
   "Risk Analyst",
 ] as const;
 
+/** Packaged specialist workers. Not owner-nav items; the owner talks to LimitlessAI. */
+export const WORKER_COWORKER_NAMES = [
+  "Email campaign",
+  "Marketing research",
+  "Always-on sales",
+] as const;
+
 export type OwnerNavItem = {
   to: "/" | "/crm" | "/plugins" | "/skills";
   label: string;

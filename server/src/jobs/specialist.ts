@@ -9,10 +9,21 @@ import type { AgentActor, AgentProfile } from "../agents/profile-types";
 import type { OpenBotRole } from "../auth/roles";
 import type { ChannelStore } from "../channels/routes";
 import { agentIsOrchestrator } from "../orchestrator";
-import { orgIdOf } from "../orgs/constants";
+import { orgIdOf, unscopedResourceId } from "../orgs/constants";
 import type { SpendStore } from "../orgs/spend";
 import { enqueueUnattendedJob, type EnqueueUnattendedResult } from "./enqueue";
 import type { JobStore } from "./store";
+import type { JobTriggerStore } from "./triggers";
+import {
+  findWorkerInOrg,
+  parseWorkerKind,
+  SALES_CRON_EVERY_SECONDS,
+  SALES_STANDING_PROMPT,
+  standingSalesTriggerId,
+  type WorkerKind,
+  workerKindOfUnscopedId,
+  WORKER_PLAYBOOKS,
+} from "./worker-kinds";
 
 export const SPECIALIST_REFUSALS = {
   NO_THREAD:
@@ -20,8 +31,10 @@ export const SPECIALIST_REFUSALS = {
   NO_CHANNEL: "A specialist can only start on a goal.",
   TASK_REQUIRED: "A specialist needs a finite chunk of work.",
   NO_SPECIALIST:
-    "Name a specialist in this organization, or a skill to follow.",
+    "Name a job kind (campaign, research, or sales), a specialist in this organization, or a skill to follow.",
   UNKNOWN_SPECIALIST: "That specialist is not available in this organization.",
+  UNKNOWN_WORKER:
+    "That job's worker is not available in this organization yet.",
   UNKNOWN_SKILL: "There is no such skill in this organization.",
   SELF: "The orchestrator cannot spawn itself as a specialist.",
   ROOM_FULL: "A goal room can have at most 8 coworkers.",
@@ -40,6 +53,8 @@ export type StartSpecialistInput = {
   threadId: string;
   parentCoworkerId: string;
   task: string;
+  /** campaign | research | sales — the three owner jobs. Prefer this over leftover ids. */
+  kind?: WorkerKind | string;
   specialistId?: string;
   skillSlug?: string;
   withComputer?: boolean;
@@ -56,6 +71,8 @@ export type StartSpecialistDeps = {
     input: Parameters<typeof enqueueUnattendedJob>[0],
   ) => Promise<EnqueueUnattendedResult>;
   spend?: SpendStore;
+  /** Sales is standing: a cron on this goal, same enqueue path. */
+  triggerStore?: Pick<JobTriggerStore, "create" | "list" | "get">;
 };
 
 export type StartSpecialistOk = {
@@ -66,6 +83,8 @@ export type StartSpecialistOk = {
   channelId: string;
   threadId: string;
   skillInstructions: string[];
+  kind?: WorkerKind;
+  standingTriggerId?: string;
 };
 
 export type StartSpecialistResult =
@@ -87,10 +106,30 @@ async function resolveSpecialist(
   input: StartSpecialistInput,
   deps: StartSpecialistDeps,
   orgId: string,
+  kind: WorkerKind | null,
 ): Promise<
   | { ok: true; agent: AgentProfile }
   | { ok: false; error: string; status: 400 | 404 }
 > {
+  if (kind) {
+    const listed = await deps.listAgents(input.actor);
+    const worker = findWorkerInOrg(listed, orgId, kind);
+    if (!worker || worker.deletedAt != null) {
+      return {
+        ok: false,
+        error: SPECIALIST_REFUSALS.UNKNOWN_WORKER,
+        status: 404,
+      };
+    }
+    if (
+      agentIsOrchestrator(worker, orgId) ||
+      worker.id === input.parentCoworkerId
+    ) {
+      return { ok: false, error: SPECIALIST_REFUSALS.SELF, status: 400 };
+    }
+    return { ok: true, agent: worker };
+  }
+
   const requested = input.specialistId?.trim() ?? "";
   if (requested) {
     const agent = await deps.getAgent(input.actor, requested);
@@ -127,6 +166,52 @@ async function resolveSpecialist(
   return { ok: true, agent: specialist };
 }
 
+async function ensureStandingSales(input: {
+  deps: StartSpecialistDeps;
+  orgId: string;
+  channelId: string;
+  threadId: string;
+  coworkerId: string;
+  actingUserId: string;
+}): Promise<string | undefined> {
+  const store = input.deps.triggerStore;
+  if (!store) return undefined;
+  const match = (row: {
+    kind: string;
+    channelId: string;
+    coworkerId: string;
+  }) =>
+    row.kind === "cron" &&
+    row.channelId === input.channelId &&
+    row.coworkerId === input.coworkerId;
+  const existing = (await store.list(input.orgId)).find(match);
+  if (existing) return existing.id;
+  const id = standingSalesTriggerId(
+    input.orgId,
+    input.channelId,
+    input.coworkerId,
+  );
+  try {
+    const created = await store.create({
+      id,
+      orgId: input.orgId,
+      kind: "cron",
+      channelId: input.channelId,
+      goalId: input.channelId,
+      threadId: input.threadId,
+      coworkerId: input.coworkerId,
+      actingUserId: input.actingUserId,
+      prompt: SALES_STANDING_PROMPT,
+      everySeconds: SALES_CRON_EVERY_SECONDS,
+    });
+    return created.trigger.id;
+  } catch {
+    const raced = await store.get(input.orgId, id);
+    if (raced) return raced.id;
+    return (await store.list(input.orgId)).find(match)?.id;
+  }
+}
+
 export async function startSpecialist(
   input: StartSpecialistInput,
   deps: StartSpecialistDeps,
@@ -135,6 +220,7 @@ export async function startSpecialist(
   const channelId = input.channelId.trim();
   const threadId = input.threadId.trim();
   const task = input.task.trim();
+  const kind = parseWorkerKind(input.kind);
   if (!channelId) {
     return { ok: false, error: SPECIALIST_REFUSALS.NO_CHANNEL, status: 400 };
   }
@@ -144,7 +230,14 @@ export async function startSpecialist(
   if (!task) {
     return { ok: false, error: SPECIALIST_REFUSALS.TASK_REQUIRED, status: 400 };
   }
-  if (!input.specialistId?.trim() && !input.skillSlug?.trim()) {
+  if (input.kind?.trim() && !kind) {
+    return {
+      ok: false,
+      error: SPECIALIST_REFUSALS.UNKNOWN_WORKER,
+      status: 400,
+    };
+  }
+  if (!kind && !input.specialistId?.trim() && !input.skillSlug?.trim()) {
     return { ok: false, error: SPECIALIST_REFUSALS.NO_SPECIALIST, status: 400 };
   }
 
@@ -175,7 +268,7 @@ export async function startSpecialist(
     ];
   }
 
-  const resolved = await resolveSpecialist(input, deps, orgId);
+  const resolved = await resolveSpecialist(input, deps, orgId, kind);
   if (!resolved.ok) return resolved;
   const specialist = resolved.agent;
 
@@ -196,6 +289,10 @@ export async function startSpecialist(
     input.withComputer === false
       ? "The parent did not hand you a computer for this chunk. Use CRM, search, and knowledge."
       : "The parent handed you this chunk including a computer when this deployment has one. Use it when the work needs the browser, files, or shell.";
+
+  if (kind) {
+    skillInstructions = [WORKER_PLAYBOOKS[kind], ...skillInstructions];
+  }
 
   const prompt = [
     "You are a specialist on this goal. When you finish, state the result in one sentence for the orchestrator.",
@@ -228,6 +325,22 @@ export async function startSpecialist(
     return { ok: false, error: enqueued.error, status: enqueued.status };
   }
 
+  let standingTriggerId: string | undefined;
+  if (kind === "sales") {
+    try {
+      standingTriggerId = await ensureStandingSales({
+        deps,
+        orgId,
+        channelId: room.id,
+        threadId: room.threadId ?? threadId,
+        coworkerId: specialist.id,
+        actingUserId: input.actor.id,
+      });
+    } catch {
+      standingTriggerId = undefined;
+    }
+  }
+
   return {
     ok: true,
     coworkerId: specialist.id,
@@ -236,5 +349,10 @@ export async function startSpecialist(
     channelId: room.id,
     threadId: room.threadId,
     skillInstructions,
+    kind:
+      kind ??
+      workerKindOfUnscopedId(unscopedResourceId(orgId, specialist.id)) ??
+      undefined,
+    standingTriggerId,
   };
 }

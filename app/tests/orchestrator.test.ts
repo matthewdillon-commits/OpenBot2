@@ -56,5 +56,25 @@ describe("pickOrchestrator", () => {
         "LimitlessAI",
       ),
     ).toBe("LimitlessAI");
+    expect(
+      ownerFacingCoworkerName(
+        {
+          id: "campaign-worker",
+          name: "Email campaign",
+          standingRole: null,
+        },
+        "LimitlessAI",
+      ),
+    ).toBe("LimitlessAI");
+    expect(
+      ownerFacingCoworkerName(
+        {
+          id: "org_acme__sales-worker",
+          name: "Always-on sales",
+          standingRole: null,
+        },
+        "LimitlessAI",
+      ),
+    ).toBe("LimitlessAI");
   });
 });

@@ -179,6 +179,7 @@ export async function createUnattendedWorkerRuntime(
         skillBySlug: (slug, orgId) => pluginStore.skillBySlug(slug, orgId),
         jobStore,
         spend: spendStore,
+        triggerStore,
       }),
     ...(webSearch ? { webSearch } : {}),
     ...(computerGateway ? { computerGateway } : {}),
