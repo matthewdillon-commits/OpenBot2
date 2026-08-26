@@ -28,6 +28,7 @@
     "cel-js": "^0.8.2",
     "drizzle-kit": "^0.31.10",
     "drizzle-orm": "^0.45.2",
+    "e2b": "^2.46.0",
     "eventsource": "3.0.7",
     "hono": "^4.10.0",
     "nodemailer": "^9.0.5",

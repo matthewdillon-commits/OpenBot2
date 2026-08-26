@@ -8,6 +8,10 @@ Newest first. `Unreleased` is what is on `main` and not yet tagged.
 
 ## Unreleased
 
+### Features
+
+- **SaaS computers run on E2B, not inside the Railway image.** The one-image deployment still has a shared Chromium; a second organization is still refused on that machine. Set `E2B_API_KEY` on openbot to give each organization×coworker its own sandbox (pause/resume, not a 24-hour TTL). Computer tools stay the existing server-side set. Owner-facing copy if a sandbox is gone is “the computer is not available” — no environment names. The Docker supervisor is unchanged for hosts that actually have a socket. Do not merge PR #11.
+
 ### Fixes
 
 - **Coworkers now use the computer when the job needs a live website.** `GET /api/capabilities` saying `browserEnabled: true` only means the action policy is on and a gateway is configured — not that a Bot will open a page. LimitlessAI was told to delegate browsing, `start_specialist` treated an omitted `with_computer` as withhold, and a computer that was down or would not authenticate returned a tool error with no Needs you. The orchestrator and packaged workers now call `computer_navigate` / snapshot / click / type themselves (`search_web` is extra context, not a substitute). Specialists spawned on a goal get this deployment’s computer unless the parent sets `with_computer` to false. In-tab and unattended turns share the same `loadToolsForActor` list. If the computer process is not running, the owner sees Needs you — “the computer is not available” — with no environment-variable names. A second organization on the shared Chromium is still refused. The one-image boot still starts agent-computer on 4100; when the operator did not set a computer token, the API and that process share a digest from the vault key already required to boot.

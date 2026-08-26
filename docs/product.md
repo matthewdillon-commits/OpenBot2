@@ -344,11 +344,11 @@ What that is not:
 - **Not a tenant package per customer.** `TENANT_PACKAGE_DIR` is one package
   for the process. A new org gets copies of the packaged coworkers. Brand,
   model, and knowledge YAML stay shared.
-- **Not a computer per tenant in the one-container image.** Without the
-  supervisor, every Bot shares one Chromium. That is fine for one trusted team.
-  A second organization is refused until `COMPUTER_SUPERVISOR_URL` is how
-  computers are made — one computer per org×bot. The supervisor needs a Docker
-  socket, which the shippable image does not include.
+- **Not a computer per tenant in the one-container image.** Without E2B (or
+  the Docker supervisor on a host that actually has a socket), every Bot
+  shares one Chromium. That is fine for one trusted team. A second
+  organization is refused until `E2B_API_KEY` selects one sandbox per
+  org×coworker. The Railway image does not run the supervisor.
 - **A durable transcript on the mapped Intelligence thread.** The first
   composer send and the first unattended job open that thread through
   CopilotRuntime (`getOrCreateThread` + `runner.run`). A second job
@@ -360,7 +360,7 @@ What that is not:
 people are in the app: sign-in (or `OPENBOT_EMAIL_AUTH`), encrypted
 credentials, gateway and audit, org-scoped CRM and plugins, RLS, Stripe
 checkout and seats, invite email, per-org SSO, a spend cap, traces, and a
-computer when the supervisor is actually running beside it. Home is still
+computer when `E2B_API_KEY` is set (or the Docker supervisor on a host that has a socket). Home is still
 Composer + Goals. Rooms stay behind See the work. Approval cards stay on the
 goal.
 
@@ -419,7 +419,7 @@ and no second runner.
 | Webhook and inbound email | `server/src/jobs/inbound.ts` `POST /api/inbound/webhook/:id`, `POST /api/inbound/email` |
 | First turn opens the mapped Intelligence thread | `server/src/jobs/open-thread.ts` `openIntelligenceThread`; `server/src/jobs/runtime-run.ts` `runUnattendedThroughRuntime`; `server/src/copilot.ts` first-contact wrapper |
 | Persist is the runner write, confirmed by getThread | `server/src/jobs/thread.ts` `createThreadPersister`; `server/tests/jobs-thread.test.ts` |
-| Shared computer without supervisor | `docs/deployment.md`, `COMPUTER_SUPERVISOR_URL` |
+| Shared computer without E2B | `docs/deployment.md`, `E2B_API_KEY` |
 | Composio keyed by org | `server/src/composio/client.ts` |
 | High-risk wait as an approval card | `server/src/loop/wait.ts` `createHighRiskWait`; `server/src/crm/gateway.ts`; `server/src/computer/gateway.ts`; `server/src/plugins/store.ts` |
 | Loop fields on the existing goal | `server/src/db/schema/core.ts` `channels.loop`; `server/src/loop/store.ts` |
@@ -440,7 +440,7 @@ mapped Intelligence thread (Part B). Still not:
    email, per-org SSO, spend caps, OpenTelemetry, and a stated multi-replica
    story (Postgres / Stripe / OTel, no in-process Map) exist (Part B). Still
    true: `TENANT_PACKAGE_DIR` is one package for the process; a shared
-   Chromium refuses a second org until `COMPUTER_SUPERVISOR_URL`. `/platform`
+   Chromium refuses a second org until `E2B_API_KEY`. `/platform`
    remains for superadmins; checkout is the owner path.
 2. **The rest of Stage 4 compounding.** Approval cards, expected impact,
    outcome, and keep / revise / revert live on the same goal (Part B). Home is

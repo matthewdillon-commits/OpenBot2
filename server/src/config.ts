@@ -39,7 +39,20 @@ export type SharedComputerConfig = {
   policy?: ActionPolicy;
 };
 
-export type ComputerConfig = DockerComputerConfig | SharedComputerConfig;
+export type E2BComputerConfig = {
+  provider: "e2b";
+  apiKey: string;
+  token?: string;
+  template?: string;
+  namespace?: string;
+  allowPrivateHosts: boolean;
+  policy?: ActionPolicy;
+};
+
+export type ComputerConfig =
+  | DockerComputerConfig
+  | SharedComputerConfig
+  | E2BComputerConfig;
 
 /**
  * Who a deployment lets in, and through which front door.
@@ -548,9 +561,10 @@ function sameImageComputerSecret(environment: Environment): string | undefined {
 }
 
 function computerConfig(environment: Environment): ComputerConfig | undefined {
+  const e2bKey = optional(environment, "E2B_API_KEY");
   const supervisorAddress = optional(environment, "COMPUTER_SUPERVISOR_URL");
   const sharedAddress = optional(environment, "AGENT_COMPUTER_URL");
-  if (!supervisorAddress && !sharedAddress) {
+  if (!e2bKey && !supervisorAddress && !sharedAddress) {
     return undefined;
   }
 
@@ -571,6 +585,24 @@ function computerConfig(environment: Environment): ComputerConfig | undefined {
   const allowPrivateHosts =
     optional(environment, "AGENT_COMPUTER_ALLOW_PRIVATE_HOSTS") === "true";
   const policy = actionPolicy(environment);
+
+  /*
+   * E2B is the SaaS computer plane. The Railway image still sets AGENT_COMPUTER_URL for the
+   * in-container Chromium; when the E2B key is present that shared browser is not the provider.
+   */
+  if (e2bKey) {
+    const template = optional(environment, "E2B_TEMPLATE");
+    const namespace = optional(environment, "COMPUTER_NAMESPACE");
+    return {
+      provider: "e2b",
+      apiKey: e2bKey,
+      allowPrivateHosts,
+      ...(computerToken ? { token: computerToken } : {}),
+      ...(policy ? { policy } : {}),
+      ...(template ? { template } : {}),
+      ...(namespace ? { namespace } : {}),
+    };
+  }
 
   const supervisorUrl = url(environment, "COMPUTER_SUPERVISOR_URL");
   if (supervisorUrl) {

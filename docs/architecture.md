@@ -93,7 +93,7 @@ startup.
 
 `agent-computer` requires `COMPUTER_TOKEN` and permits only `/health` without it. Docker Compose binds it to `127.0.0.1:4100`.
 
-With `COMPUTER_SUPERVISOR_URL`, each Bot gets its own computer container, workspace volume, and browser profile. Without it, all Bots share `AGENT_COMPUTER_URL`.
+With `E2B_API_KEY`, each org×coworker gets its own E2B sandbox running the computer HTTP API (navigate, snapshot, click, type, files, shell). Pause/resume is how that machine comes back. Without it, all Bots share `AGENT_COMPUTER_URL`. `COMPUTER_SUPERVISOR_URL` is the Docker-host alternative and is not how Railway runs.
 
 A command on the computer inherits PATH, locale and terminal names, and the proxy variables, not the rest of the process environment. Userinfo is stripped from a proxy URL. `COMPUTER_SHELL_ENV` names anything else a deployment wants passed.
 

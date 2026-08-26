@@ -883,6 +883,30 @@ describe("resolving a computer's address", () => {
 
     await expect(gateway.locate("bot-1")).resolves.toContain("http");
   });
+
+  test("locate names the computer with computerIdFor so two orgs never share one", async () => {
+    const { provider, fetchImpl, addressedAs } = fakeComputer({
+      isolation: "per-bot",
+    });
+    const { store } = fakeAudit();
+    const gateway = createComputerGateway({
+      provider,
+      fetchImpl,
+      auditStore: store,
+      policy: () => PERMISSIVE,
+    });
+
+    await gateway.snapshot("analyst", "org_acme");
+    await gateway.snapshot("analyst", "org_beta");
+    await gateway.snapshot("analyst", "org_acme");
+
+    expect(addressedAs).toEqual([
+      "org_acme__analyst",
+      "org_beta__analyst",
+      "org_acme__analyst",
+    ]);
+    expect(new Set(addressedAs).size).toBe(2);
+  });
 });
 
 /**
@@ -1051,6 +1075,34 @@ describe("shared computer isolation", () => {
       fetchImpl,
       auditStore: store,
       policy: () => PERMISSIVE,
+    });
+
+    await gateway.navigate(
+      "bot-1",
+      { id: "user-a", orgId: "org_one" },
+      "https://example.com/",
+    );
+    await gateway.navigate(
+      "bot-1",
+      { id: "user-b", orgId: "org_two" },
+      "https://example.com/",
+    );
+  });
+
+  test("E2B isolation is per-bot, so a second org is not the shared-claim refuse", async () => {
+    const { provider, fetchImpl } = fakeComputer({ isolation: "per-bot" });
+    const { store } = fakeAudit();
+    const e2b = { ...provider, name: "E2B" as const };
+    const gateway = createComputerGateway({
+      provider: e2b,
+      fetchImpl,
+      auditStore: store,
+      policy: () => PERMISSIVE,
+      sharedClaim: {
+        ensure: async () => {
+          throw new Error("shared-claim must not run for E2B");
+        },
+      },
     });
 
     await gateway.navigate(

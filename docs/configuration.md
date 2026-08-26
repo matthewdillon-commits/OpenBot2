@@ -169,7 +169,9 @@ where `<provider>` is `google`, `microsoft` or `okta`.
 | `COMPUTER_TOKEN`                     | Secret every computer request must present. The computer refuses to start without it.     |
 | `COMPUTER_MAX_BROWSERS`              | How many Bots may hold a running browser at once. `8` by default; the least recently used is closed past it. |
 | `COMPUTER_BROWSER_IDLE_MS`           | How long an untouched browser is kept. 30 minutes by default; `0` keeps them resident.    |
-| `COMPUTER_SUPERVISOR_URL`            | Supervisor URL for per-Bot computers. If absent, Bots share `AGENT_COMPUTER_URL`.         |
+| `E2B_API_KEY`                        | SaaS computers: one E2B sandbox per org×coworker. When set, this wins over the in-image shared Chromium. Absent, computers stay as below. |
+| `E2B_TEMPLATE`                       | E2B template alias. Defaults to `openbot-agent-computer`.                                 |
+| `COMPUTER_SUPERVISOR_URL`            | Supervisor URL for per-Bot computers on a Docker host. If absent, Bots share `AGENT_COMPUTER_URL`. |
 | `SUPERVISOR_TOKEN`                   | Bearer token required by the supervisor.                                                  |
 | `AGENT_COMPUTER_ALLOW_PRIVATE_HOSTS` | Local-only private-host browsing when `true`. Cloud metadata addresses are still refused. |
 | `AGENT_COMPUTER_POLICY`              | JSON action policy: `{"mode":"enforce","deny":[...],"allow":[...]}`.                      |
@@ -201,7 +203,8 @@ The supervisor also reads:
 
 `COMPUTER_NAMESPACE` defaults to `openbot` and names the deployment a computer belongs to. It is part
 of every container and volume name the supervisor derives, and the supervisor acts only on computers
-carrying it, so two deployments on one Docker host never adopt each other's.
+carrying it, so two deployments on one Docker host never adopt each other's. The E2B provider uses
+the same name as sandbox metadata for the same reason.
 
 Per-Bot computers belong to the supervisor rather than to Compose, so `docker compose down -v` does
 not remove them: their containers keep running and their profile volumes, which hold whatever the

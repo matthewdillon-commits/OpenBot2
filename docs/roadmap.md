@@ -112,10 +112,10 @@ run can use them. When the coworker needs a person (login, 2FA, a secret, a
 high-risk confirm), the job **pauses** (`needs-you`) instead of dying with the
 tab.
 
-**Supervisor before a second org gets a browser.** One Chromium for the whole
+**E2B before a second org gets a browser.** One Chromium for the whole
 image is acceptable for one trusted team. It is not a boundary between
 customers. Do not give a second organization a computer until
-`COMPUTER_SUPERVISOR_URL` is how computers are made — one computer per org×bot.
+`E2B_API_KEY` is how computers are made — one sandbox per org×coworker.
 
 When a computer job finishes and we know an outcome, record the same skinny
 status + last action Phase 1 already records. A pause is **Needs you** on
@@ -188,7 +188,7 @@ Approval cards stay on the goal.
 
 Honest leftovers, still in Part C: persist onto the Intelligence thread
 fails closed; one `TENANT_PACKAGE_DIR` for the process; a shared Chromium
-refuses a second org until `COMPUTER_SUPERVISOR_URL`.
+refuses a second org until `E2B_API_KEY`.
 
 ---
 

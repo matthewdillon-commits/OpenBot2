@@ -301,4 +301,17 @@ describe("computer provider factory", () => {
 
     expect(createComputerProvider(config).name).toBe("shared");
   });
+
+  test("selects the E2B adapter as one computer per Bot", () => {
+    const config: ComputerConfig = {
+      provider: "e2b",
+      apiKey: "e2b_test",
+      token: "computer-secret",
+      allowPrivateHosts: false,
+    };
+
+    const provider = createComputerProvider(config);
+    expect(provider.name).toBe("E2B");
+    expect(provider.isolation).toBe("per-bot");
+  });
 });

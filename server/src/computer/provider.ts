@@ -1,4 +1,5 @@
 import type { ComputerConfig } from "../config";
+import { createE2BComputerProvider } from "./e2b";
 import {
   createDockerSupervisorProvider,
   type SupervisorOptions,
@@ -211,6 +212,13 @@ export function createComputerProvider(
   config: ComputerConfig,
 ): ComputerProvider {
   switch (config.provider) {
+    case "e2b":
+      return createE2BComputerProvider({
+        apiKey: config.apiKey,
+        ...(config.token ? { token: config.token } : {}),
+        ...(config.template ? { template: config.template } : {}),
+        ...(config.namespace ? { namespace: config.namespace } : {}),
+      });
     case "docker": {
       const options: SupervisorOptions = {
         baseUrl: config.baseUrl,
