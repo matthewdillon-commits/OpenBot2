@@ -9,6 +9,12 @@ export type ToolRunContext = {
   channelId: string;
   threadId: string;
   goalId: string;
+  /**
+   * When false, computer_* are withheld even if the gateway is up. Omit or
+   * true to offer them. Specialists default to true unless the parent
+   * explicitly set with_computer false.
+   */
+  withComputer?: boolean;
 };
 
 export function threadIdFromCopilotRequest(

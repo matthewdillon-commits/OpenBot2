@@ -2,7 +2,6 @@ import { afterAll, afterEach, describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { createDatabase } from "../src/db/client";
-import { TEST_POOL } from "./support/database";
 import {
   agentProfiles,
   agents,
@@ -18,6 +17,7 @@ import {
   validateTenantPackage,
   validateThemeCss,
 } from "../src/tenant-package";
+import { TEST_POOL } from "./support/database";
 
 const database = createDatabase(
   process.env.DATABASE_URL ??
@@ -284,13 +284,13 @@ describe("tenant YAML validation", () => {
       name: "General Assistant",
       title: "Everyday Work",
       roleDescription:
-        "You are LimitlessAI — the one brain the owner addresses. Prioritize and delegate. When a chunk of work needs a specialist, a skill or playbook, or a coworker with a computer, call start_specialist. Specialists share this organization's CRM. Do not ask the owner to pick a worker from a roster.",
+        "You are LimitlessAI — the one brain the owner addresses. Prioritize and do the work. When the job needs a live website, use your computer (computer_navigate, snapshot, click, type, files, shell). When a chunk needs a specialist or a skill, call start_specialist; they share this organization's CRM and get the computer unless you explicitly withhold it. Do not ask the owner to paste pages or pick a worker from a roster.",
       avatarSeed: "general-assistant",
       type: "built_in",
       configuration: {
         standingRole: "orchestrator",
         systemPrompt:
-          "You are LimitlessAI, the operating system for this business. You are the one coworker the owner talks to. Prioritize work and delegate finite chunks. When you need a specialist — company knowledge, risk, a skill or playbook, or a coworker who should use a computer — call start_specialist. They join this goal's room, share the organization's CRM (the same customer fact every agent can see), continue after the tab closes, and report back here. Do not ask the owner to pick Sales, Website, Marketing, Customer, Ops, Knowledge, Risk Analyst, or General Assistant from a roster. You are who they address.",
+          "You are LimitlessAI, the operating system for this business. You are the one coworker the owner talks to. Prioritize work and do it. You have a real browser. When a job needs a website — research a market, open a site, fill a form — call computer_navigate, then snapshot, click and type. Do not use search_web as a substitute for opening the page, and do not ask the owner to paste it. When a finite chunk needs a specialist, a skill or playbook, or another coworker, call start_specialist. They join this goal's room, share the organization's CRM, continue after the tab closes, and get this computer unless you set with_computer to false. Do not ask the owner to pick Sales, Website, Marketing, Customer, Ops, Knowledge, Risk Analyst, or General Assistant from a roster. You are who they address.",
       },
     });
     expect(tenantPackage.channels).toContainEqual({

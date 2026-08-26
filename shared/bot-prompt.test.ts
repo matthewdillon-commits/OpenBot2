@@ -19,7 +19,8 @@ describe("COMPUTER_GUIDANCE", () => {
       "You are a Bot with your own computer, a real web browser the person can watch you use.",
     );
     expect(COMPUTER_GUIDANCE).toContain(
-      "Say what you found or did in plain language, briefly.",
+      "search_web is extra context, not a substitute for opening the site.",
     );
+    expect(COMPUTER_GUIDANCE).toContain("call computer_navigate");
   });
 });

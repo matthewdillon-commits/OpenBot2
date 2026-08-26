@@ -11,8 +11,8 @@ import type { OpenBotRole } from "../auth/roles";
 import type { AgentChannel, ChannelStore } from "../channels/routes";
 import { orgIdOf } from "../orgs/constants";
 import {
-  SpendCapError,
   assertSpend,
+  SpendCapError,
   type SpendKind,
   type SpendStore,
 } from "../orgs/spend";
@@ -50,6 +50,11 @@ export type EnqueueUnattendedInput = {
    * refuse — the trigger does not mint or retarget a thread.
    */
   expectedThreadId?: string;
+  /**
+   * When false, the worker withholds computer_* even if this deployment has a
+   * computer. Omit or true to hand the specialist the org computer.
+   */
+  withComputer?: boolean;
   lookupChannel: ChannelStore["get"];
   jobStore: Pick<JobStore, "enqueue">;
   /**
@@ -135,6 +140,7 @@ export async function enqueueUnattendedJob(
     ...(input.skillInstructions && input.skillInstructions.length > 0
       ? { skillInstructions: input.skillInstructions }
       : {}),
+    ...(input.withComputer === false ? { withComputer: false } : {}),
     trigger: input.trigger,
   });
 

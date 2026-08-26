@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import {
+  COMPUTER_UNAVAILABLE_LAST_ACTION,
+  COMPUTER_UNAVAILABLE_OWNER,
   computerTools,
   lastActionForNeedsYou,
 } from "../src/computer/computer-tools";
@@ -10,7 +14,10 @@ import {
   SharedComputerIsolationError,
   StaleSnapshotError,
 } from "../src/computer/gateway";
-import { createLoadToolsForActor } from "../src/jobs/tools";
+import {
+  computerToolsOffered,
+  createLoadToolsForActor,
+} from "../src/jobs/tools";
 import { REFUSAL_MARKER } from "../src/plugins/refusal";
 
 const actor = {
@@ -308,7 +315,7 @@ describe("server computer tools", () => {
     });
   });
 
-  test("names the skinny last action for help and a secret", () => {
+  test("names the skinny last action for help, a secret, and a down computer", () => {
     expect(
       lastActionForNeedsYou({ kind: "help", reason: "Sign in on this page." }),
     ).toBe("Needs you: Sign in on this page.");
@@ -318,6 +325,166 @@ describe("server computer tools", () => {
         label: "the code sent to your phone",
       }),
     ).toBe("Needs you: enter the code sent to your phone.");
+    expect(
+      lastActionForNeedsYou({
+        kind: "unavailable",
+        reason: COMPUTER_UNAVAILABLE_OWNER,
+      }),
+    ).toBe(COMPUTER_UNAVAILABLE_LAST_ACTION);
+    expect(COMPUTER_UNAVAILABLE_OWNER).not.toMatch(
+      /COMPUTER_TOKEN|AGENT_COMPUTER_URL|COMPUTER_SUPERVISOR_URL|SUPERVISOR_TOKEN/,
+    );
+    expect(COMPUTER_UNAVAILABLE_LAST_ACTION).not.toMatch(
+      /COMPUTER_TOKEN|AGENT_COMPUTER_URL|COMPUTER_SUPERVISOR_URL|SUPERVISOR_TOKEN/,
+    );
+  });
+
+  test("a computer that is down pauses as Needs you without naming env vars", async () => {
+    const events: Array<{ kind: string; reason?: string }> = [];
+    const { computer } = fakeComputer({
+      navigate: async () => {
+        throw new ComputerUnavailableError(
+          "The assistant's computer is not running.",
+        );
+      },
+    });
+    const result = JSON.parse(
+      await byName(
+        computerTools({
+          computer,
+          botId: "bot-1",
+          actor,
+          onNeedsYou: async (event) => {
+            events.push(event);
+          },
+        }),
+        "computer_navigate",
+      ).execute({ url: "https://example.com/" }),
+    );
+    expect(result).toEqual({
+      ok: false,
+      needs_you: true,
+      reason: COMPUTER_UNAVAILABLE_OWNER,
+    });
+    expect(JSON.stringify(result)).not.toMatch(
+      /COMPUTER_TOKEN|AGENT_COMPUTER_URL|COMPUTER_SUPERVISOR_URL/,
+    );
+    expect(events).toEqual([
+      { kind: "unavailable", reason: COMPUTER_UNAVAILABLE_OWNER },
+    ]);
+    expect(
+      lastActionForNeedsYou({
+        kind: "unavailable",
+        reason: COMPUTER_UNAVAILABLE_OWNER,
+      }),
+    ).toBe(COMPUTER_UNAVAILABLE_LAST_ACTION);
+  });
+
+  test("an unauthenticated computer is the same Needs you, still without env names", async () => {
+    const events: Array<{ kind: string }> = [];
+    const { computer } = fakeComputer({
+      snapshot: async () => {
+        throw new ComputerUnavailableError("Not authorised.");
+      },
+    });
+    const result = JSON.parse(
+      await byName(
+        computerTools({
+          computer,
+          botId: "bot-1",
+          actor,
+          onNeedsYou: async (event) => {
+            events.push(event);
+          },
+        }),
+        "computer_snapshot",
+      ).execute({}),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.needs_you).toBe(true);
+    expect(result.reason).toBe(COMPUTER_UNAVAILABLE_OWNER);
+    expect(events).toEqual([
+      { kind: "unavailable", reason: COMPUTER_UNAVAILABLE_OWNER },
+    ]);
+  });
+
+  test("a failed persist still returns needs_you when the computer is down", async () => {
+    const { computer } = fakeComputer({
+      click: async () => {
+        throw new ComputerUnavailableError(
+          "The assistant's computer is not running.",
+        );
+      },
+    });
+    const result = JSON.parse(
+      await byName(
+        computerTools({
+          computer,
+          botId: "bot-1",
+          actor,
+          onNeedsYou: async () => {
+            throw new Error("notify failed");
+          },
+        }),
+        "computer_click",
+      ).execute({ ref: "e1", snapshotId: 1 }),
+    );
+    expect(result).toEqual({
+      ok: false,
+      needs_you: true,
+      reason: COMPUTER_UNAVAILABLE_OWNER,
+    });
+  });
+
+  test("a person holding the wheel is not treated as a down computer", async () => {
+    const events: unknown[] = [];
+    const { computer } = fakeComputer({
+      click: async () => {
+        throw new ComputerUnavailableError(
+          "A person has control of this computer.",
+        );
+      },
+    });
+    const result = JSON.parse(
+      await byName(
+        computerTools({
+          computer,
+          botId: "bot-1",
+          actor,
+          onNeedsYou: async (event) => {
+            events.push(event);
+          },
+        }),
+        "computer_click",
+      ).execute({ ref: "e1", snapshotId: 1 }),
+    );
+    expect(result).toEqual({
+      ok: false,
+      reason: "A person has control of this computer.",
+      humanHasControl: true,
+    });
+    expect(events).toEqual([]);
+  });
+
+  test("a generic failure that names env vars is rewritten without them", async () => {
+    const { computer } = fakeComputer({
+      navigate: async () => {
+        throw new Error(
+          "Set COMPUTER_TOKEN and AGENT_COMPUTER_URL or COMPUTER_SUPERVISOR_URL",
+        );
+      },
+    });
+    const result = JSON.parse(
+      await byName(
+        computerTools({ computer, botId: "bot-1", actor }),
+        "computer_navigate",
+      ).execute({ url: "https://example.com/" }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe(COMPUTER_UNAVAILABLE_OWNER);
+    expect(JSON.stringify(result)).not.toMatch(
+      /COMPUTER_TOKEN|AGENT_COMPUTER_URL|COMPUTER_SUPERVISOR_URL/,
+    );
   });
 
   test("never puts a typed secret in a write-file or type tool result", async () => {
@@ -347,6 +514,12 @@ describe("loadToolsForActor computer wiring", () => {
     update: async () => "",
     send: async () => "",
   };
+  const policyOn = { mode: "enforce" as const, deny: [], allow: ["true"] };
+  const runContext = {
+    channelId: "channel_1",
+    threadId: "thread-1",
+    goalId: "channel_1",
+  };
 
   test("adds computer tools when the gateway is configured and the browser is on", async () => {
     const { computer } = fakeComputer();
@@ -355,12 +528,46 @@ describe("loadToolsForActor computer wiring", () => {
       knowledgeSearch: knowledgeSearch as never,
       database: {} as never,
       auditStore: auditStore as never,
-      policyFor: () => ({ mode: "enforce", deny: [], allow: ["true"] }),
+      policyFor: () => policyOn,
       crmGateway: crmGateway as never,
       computerGateway: computer,
     });
     const tools = await load("user-1", "org_local")("bot-1");
     expect(tools.some((tool) => tool.name === "computer_navigate")).toBe(true);
+    expect(tools.some((tool) => tool.name === "crm_search")).toBe(true);
+  });
+
+  test("still adds computer tools when withComputer is omitted on the run", async () => {
+    const { computer } = fakeComputer();
+    const load = createLoadToolsForActor({
+      pluginStore: pluginStore as never,
+      knowledgeSearch: knowledgeSearch as never,
+      database: {} as never,
+      auditStore: auditStore as never,
+      policyFor: () => policyOn,
+      crmGateway: crmGateway as never,
+      computerGateway: computer,
+    });
+    const tools = await load("user-1", "org_local", runContext)("bot-1");
+    expect(tools.some((tool) => tool.name === "computer_navigate")).toBe(true);
+  });
+
+  test("does not add computer tools when the parent set withComputer false", async () => {
+    const { computer } = fakeComputer();
+    const load = createLoadToolsForActor({
+      pluginStore: pluginStore as never,
+      knowledgeSearch: knowledgeSearch as never,
+      database: {} as never,
+      auditStore: auditStore as never,
+      policyFor: () => policyOn,
+      crmGateway: crmGateway as never,
+      computerGateway: computer,
+    });
+    const tools = await load("user-1", "org_local", {
+      ...runContext,
+      withComputer: false,
+    })("bot-1");
+    expect(tools.some((tool) => tool.name.startsWith("computer_"))).toBe(false);
     expect(tools.some((tool) => tool.name === "crm_search")).toBe(true);
   });
 
@@ -372,9 +579,7 @@ describe("loadToolsForActor computer wiring", () => {
       database: {} as never,
       auditStore: auditStore as never,
       policyFor: () => ({
-        mode: "enforce",
-        deny: [],
-        allow: ["true"],
+        ...policyOn,
         browserEnabled: false,
       }),
       crmGateway: crmGateway as never,
@@ -390,10 +595,62 @@ describe("loadToolsForActor computer wiring", () => {
       knowledgeSearch: knowledgeSearch as never,
       database: {} as never,
       auditStore: auditStore as never,
-      policyFor: () => ({ mode: "enforce", deny: [], allow: ["true"] }),
+      policyFor: () => policyOn,
       crmGateway: crmGateway as never,
     });
     const tools = await load("user-1", "org_local")("bot-1");
     expect(tools.some((tool) => tool.name.startsWith("computer_"))).toBe(false);
+  });
+
+  test("the API and the worker both build this list through createLoadToolsForActor", () => {
+    const index = readFileSync(
+      fileURLToPath(new URL("../src/index.ts", import.meta.url)),
+      "utf8",
+    );
+    const bootstrap = readFileSync(
+      fileURLToPath(new URL("../src/jobs/bootstrap.ts", import.meta.url)),
+      "utf8",
+    );
+    expect(index).toContain("createLoadToolsForActor");
+    expect(bootstrap).toContain("createLoadToolsForActor");
+    expect(index).toContain("computerGateway");
+    expect(bootstrap).toContain("computerGateway");
+    expect(bootstrap).toContain("job.payload.withComputer === false");
+  });
+});
+
+describe("computerToolsOffered", () => {
+  const policyOn = { mode: "enforce" as const, deny: [], allow: ["true"] };
+
+  test("is true when the gateway is present and the browser is on", () => {
+    const { computer } = fakeComputer();
+    expect(computerToolsOffered({ gateway: computer, policy: policyOn })).toBe(
+      true,
+    );
+    expect(
+      computerToolsOffered({
+        gateway: computer,
+        policy: policyOn,
+        withComputer: true,
+      }),
+    ).toBe(true);
+  });
+
+  test("is false when the browser is off, the gateway is missing, or the parent withheld the computer", () => {
+    const { computer } = fakeComputer();
+    expect(
+      computerToolsOffered({
+        gateway: computer,
+        policy: { ...policyOn, browserEnabled: false },
+      }),
+    ).toBe(false);
+    expect(computerToolsOffered({ policy: policyOn })).toBe(false);
+    expect(
+      computerToolsOffered({
+        gateway: computer,
+        policy: policyOn,
+        withComputer: false,
+      }),
+    ).toBe(false);
   });
 });

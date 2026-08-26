@@ -117,13 +117,23 @@ const secretParameters = z.object({
 
 const DEV_ACTOR_ID = "dev-local-user";
 
-export type NeedsYouKind = "help" | "secret";
+export type NeedsYouKind = "help" | "secret" | "unavailable";
 
 export type ComputerNeedsYouEvent = {
   kind: NeedsYouKind;
   reason?: string;
   label?: string;
 };
+
+/**
+ * Owner-facing copy when the computer process is down or would not authenticate.
+ * Never names an environment variable.
+ */
+export const COMPUTER_UNAVAILABLE_OWNER =
+  "The computer is not available. Ask your operator to get it running.";
+
+export const COMPUTER_UNAVAILABLE_LAST_ACTION =
+  "Needs you: the computer is not available.";
 
 export type ComputerToolsOptions = {
   computer: ComputerGateway;
@@ -142,6 +152,23 @@ function actionActorFrom(actor: AgentActor): ActionActor {
     orgId: orgIdOf(actor),
     ...(actor.id === DEV_ACTOR_ID ? {} : { userId: actor.id }),
   };
+}
+
+function withoutEnvNames(reason: string): string {
+  if (
+    /COMPUTER_TOKEN|AGENT_COMPUTER_URL|COMPUTER_SUPERVISOR_URL|SUPERVISOR_TOKEN/i.test(
+      reason,
+    )
+  ) {
+    return COMPUTER_UNAVAILABLE_OWNER;
+  }
+  return reason;
+}
+
+function isComputerDown(error: unknown): boolean {
+  if (!(error instanceof ComputerUnavailableError)) return false;
+  if (/control/i.test(error.message)) return false;
+  return true;
 }
 
 function recover(error: unknown): string {
@@ -189,7 +216,16 @@ function recover(error: unknown): string {
       humanHasControl: true,
     });
   }
-  const reason = error instanceof Error ? error.message : "That did not work.";
+  if (isComputerDown(error)) {
+    return JSON.stringify({
+      ok: false,
+      needs_you: true,
+      reason: COMPUTER_UNAVAILABLE_OWNER,
+    });
+  }
+  const reason = withoutEnvNames(
+    error instanceof Error ? error.message : "That did not work.",
+  );
   return JSON.stringify({ ok: false, reason });
 }
 
@@ -218,6 +254,16 @@ export function computerTools(options: ComputerToolsOptions): GrantedTool[] {
       try {
         return asJson(await run(parsed.data as Record<string, unknown>));
       } catch (error) {
+        if (isComputerDown(error)) {
+          try {
+            await options.onNeedsYou?.({
+              kind: "unavailable",
+              reason: COMPUTER_UNAVAILABLE_OWNER,
+            });
+          } catch {
+            // The owner copy still has to reach the model even if the job row failed.
+          }
+        }
         return recover(error);
       }
     },
@@ -413,6 +459,9 @@ export function computerTools(options: ComputerToolsOptions): GrantedTool[] {
 }
 
 export function lastActionForNeedsYou(event: ComputerNeedsYouEvent): string {
+  if (event.kind === "unavailable") {
+    return COMPUTER_UNAVAILABLE_LAST_ACTION;
+  }
   if (event.kind === "secret") {
     return `Needs you: enter ${event.label ?? "a secret"}.`;
   }

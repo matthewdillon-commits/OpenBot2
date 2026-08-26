@@ -27,6 +27,11 @@ export type JobPayload = {
   prompt: string;
   skillInstructions?: string[];
   agentId?: string;
+  /**
+   * When false, loadToolsForActor withholds computer_*. Omit means the
+   * specialist or unattended run gets the computer when this deployment has one.
+   */
+  withComputer?: boolean;
   result?: {
     text?: string;
     persisted?: boolean;
@@ -65,6 +70,8 @@ export type EnqueueJobInput = {
   prompt: string;
   skillInstructions?: string[];
   trigger?: string;
+  /** Persist only `false`. Omit to leave the computer on. */
+  withComputer?: boolean;
 };
 
 /**
@@ -166,6 +173,7 @@ export function asJobPayload(
       )
     : undefined;
   const agentId = typeof value.agentId === "string" ? value.agentId : undefined;
+  const withComputer = value.withComputer === false ? false : undefined;
   const result = skinnyResult(
     "result" in value ? (value as { result?: unknown }).result : undefined,
   );
@@ -175,6 +183,7 @@ export function asJobPayload(
       ? { skillInstructions }
       : {}),
     ...(agentId ? { agentId } : {}),
+    ...(withComputer === false ? { withComputer: false } : {}),
     ...(result ? { result } : {}),
   };
 }
@@ -247,6 +256,7 @@ export function createJobStore(database: Database): JobStore {
           ? { skillInstructions: input.skillInstructions }
           : {}),
         agentId: input.coworkerId,
+        ...(input.withComputer === false ? { withComputer: false } : {}),
       };
       const outcome = buildJobOutcome({
         status: "queued",
