@@ -416,6 +416,7 @@ describe("channel route composition", () => {
           name: "OpenBot Member",
           image: "https://example.test/member.png",
           platformSuperadmin: false,
+          deploymentAdmin: false,
         },
         "channel-1",
       ],
