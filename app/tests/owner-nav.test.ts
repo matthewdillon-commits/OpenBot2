@@ -4,6 +4,7 @@ import {
   LEFTOVER_COWORKER_NAMES,
   ownerNavItems,
   visibleOwnerNavLabels,
+  WORKER_COWORKER_NAMES,
 } from "@/lib/nav/owner-nav";
 
 function assertOwnerRail(labels: string[]) {
@@ -11,6 +12,9 @@ function assertOwnerRail(labels: string[]) {
     expect(labels).not.toContain(name);
   }
   for (const name of LEFTOVER_COWORKER_NAMES) {
+    expect(labels).not.toContain(name);
+  }
+  for (const name of WORKER_COWORKER_NAMES) {
     expect(labels).not.toContain(name);
   }
   expect(labels).not.toContain("Agents");

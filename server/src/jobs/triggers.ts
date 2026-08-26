@@ -140,6 +140,8 @@ export type CreateJobTriggerInput = {
   nextRunAt?: Date;
   mailbox?: string;
   enabled?: boolean;
+  /** Deterministic id for a standing sales cron so two replicas share one row. */
+  id?: string;
 };
 
 export type JobTriggerStore = {
@@ -212,7 +214,7 @@ function toTrigger(row: typeof jobTriggers.$inferSelect): JobTrigger {
 export function createJobTriggerStore(database: Database): JobTriggerStore {
   return {
     async create(input) {
-      const id = `jtr_${crypto.randomUUID()}`;
+      const id = input.id?.trim() || `jtr_${crypto.randomUUID()}`;
       const kind = input.kind;
       const secret =
         kind === "webhook" || kind === "email"

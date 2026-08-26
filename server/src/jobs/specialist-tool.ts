@@ -19,11 +19,17 @@ const parameters = z.object({
     .describe(
       "The finite chunk of work. The specialist reports back on this goal when it is done.",
     ),
+  kind: z
+    .enum(["campaign", "research", "sales"])
+    .optional()
+    .describe(
+      "The owner job. campaign = email campaign end to end. research = marketing research that actually researches. sales = always-on sales (standing wake). Prefer this over leftover coworker ids. The owner does not pick a bot.",
+    ),
   specialist_id: z
     .string()
     .optional()
     .describe(
-      "A coworker in this organization to start. Omit when a skill/playbook is enough.",
+      "A coworker in this organization to start. Omit when kind or a skill/playbook is enough.",
     ),
   skill_slug: z
     .string()
@@ -48,20 +54,25 @@ export function startSpecialistTool(options: {
   return {
     name: "start_specialist",
     description:
-      "Start a finite specialist on this goal. They join this goal’s room, share the organization’s CRM, and continue after the tab closes. Use this instead of asking the owner to pick a worker from a roster.",
+      "Stand up a specialist worker on this goal. The owner said the job; you pick kind and spawn. kind=campaign for an email campaign (audience, copy, send, track — owner is not in composer for each email). kind=research for marketing research (the worker actually researches; owner does not paste articles). kind=sales for always-on sales (standing wake; owner only when blocked). Workers join this goal’s room, share the organization’s CRM, enqueue an unattended job, and continue after the tab closes. Do not run the whole job yourself in this turn. Do not ask the owner to pick a worker from a roster.",
     parameters,
     execute: async (args) => {
       const parsed = parameters.safeParse(args);
       if (!parsed.success) {
-        return `${REFUSAL_MARKER} ${SPECIALIST_REFUSALS.TASK_REQUIRED}`;
+        const task =
+          typeof (args as { task?: unknown }).task === "string"
+            ? (args as { task: string }).task.trim()
+            : "";
+        return `${REFUSAL_MARKER} ${task ? SPECIALIST_REFUSALS.NO_SPECIALIST : SPECIALIST_REFUSALS.TASK_REQUIRED}`;
       }
       const threadId = options.runContext?.threadId?.trim() ?? "";
       if (!threadId || !options.runContext) {
         return `${REFUSAL_MARKER} ${SPECIALIST_REFUSALS.NO_THREAD}`;
       }
+      const kind = parsed.data.kind;
       const specialistId = parsed.data.specialist_id?.trim();
       const skillSlug = parsed.data.skill_slug?.trim();
-      if (!specialistId && !skillSlug) {
+      if (!kind && !specialistId && !skillSlug) {
         return `${REFUSAL_MARKER} ${SPECIALIST_REFUSALS.NO_SPECIALIST}`;
       }
       const result = await options.start({
@@ -71,6 +82,7 @@ export function startSpecialistTool(options: {
         threadId,
         parentCoworkerId: options.parentCoworkerId,
         task: parsed.data.task,
+        ...(kind ? { kind } : {}),
         ...(specialistId ? { specialistId } : {}),
         ...(skillSlug ? { skillSlug } : {}),
         withComputer: parsed.data.with_computer,
@@ -78,12 +90,20 @@ export function startSpecialistTool(options: {
       if (!result.ok) {
         return `${REFUSAL_MARKER} ${result.error}`;
       }
-      return [
-        `Started specialist ${result.coworkerId} on this goal.`,
+      const lines = [
+        result.kind
+          ? `Started the ${result.kind} worker ${result.coworkerId} on this goal.`
+          : `Started specialist ${result.coworkerId} on this goal.`,
         `They share this organization’s CRM (${result.orgId}).`,
         `Unattended job ${result.jobId} is queued on thread ${result.threadId}.`,
         "They will report back on this goal when the chunk is done.",
-      ].join(" ");
+      ];
+      if (result.standingTriggerId) {
+        lines.push(
+          "Always-on sales will keep going on a standing wake; the owner is pulled in only when something is blocked.",
+        );
+      }
+      return lines.join(" ");
     },
   };
 }

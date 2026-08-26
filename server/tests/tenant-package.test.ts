@@ -279,20 +279,44 @@ describe("tenant YAML validation", () => {
     expect(tenantPackage.stylesheet).toBeNull();
     expect(tenantPackage.themeCss).toBe("");
     expect(tenantPackage.checksum).toMatch(/^[a-f0-9]{64}$/);
-    expect(tenantPackage.agents).toContainEqual({
+    const orchestrator = tenantPackage.agents.find(
+      (agent) => agent.id === "general-assistant",
+    );
+    expect(orchestrator).toMatchObject({
       id: "general-assistant",
       name: "General Assistant",
       title: "Everyday Work",
-      roleDescription:
-        "You are LimitlessAI — the one brain the owner addresses. Prioritize and delegate. When a chunk of work needs a specialist, a skill or playbook, or a coworker with a computer, call start_specialist. Specialists share this organization's CRM. Do not ask the owner to pick a worker from a roster.",
-      avatarSeed: "general-assistant",
       type: "built_in",
-      configuration: {
-        standingRole: "orchestrator",
-        systemPrompt:
-          "You are LimitlessAI, the operating system for this business. You are the one coworker the owner talks to. Prioritize work and delegate finite chunks. When you need a specialist — company knowledge, risk, a skill or playbook, or a coworker who should use a computer — call start_specialist. They join this goal's room, share the organization's CRM (the same customer fact every agent can see), continue after the tab closes, and report back here. Do not ask the owner to pick Sales, Website, Marketing, Customer, Ops, Knowledge, Risk Analyst, or General Assistant from a roster. You are who they address.",
-      },
     });
+    expect(orchestrator).toBeDefined();
+    if (!orchestrator) return;
+    expect(orchestrator.configuration).toMatchObject({
+      standingRole: "orchestrator",
+    });
+    const orchestratorPrompt = String(
+      (orchestrator.configuration as { systemPrompt?: string }).systemPrompt ??
+        "",
+    );
+    expect(orchestratorPrompt).toContain("kind=campaign");
+    expect(orchestratorPrompt).toContain("kind=research");
+    expect(orchestratorPrompt).toContain("kind=sales");
+    expect(orchestratorPrompt).toContain(
+      "Do not ask the owner to pick Sales, Website, Marketing, Customer, Ops",
+    );
+    expect(tenantPackage.agents.map((agent) => agent.id)).toEqual(
+      expect.arrayContaining([
+        "general-assistant",
+        "campaign-worker",
+        "research-worker",
+        "sales-worker",
+        "knowledge",
+      ]),
+    );
+    const channelIds = tenantPackage.channels.map((channel) => channel.id);
+    expect(channelIds).toContain("general-assistant");
+    expect(channelIds).not.toContain("campaign-worker");
+    expect(channelIds).not.toContain("research-worker");
+    expect(channelIds).not.toContain("sales-worker");
     expect(tenantPackage.channels).toContainEqual({
       id: "general-assistant",
       name: "General Assistant",

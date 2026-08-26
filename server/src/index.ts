@@ -226,6 +226,26 @@ const loadAgentsForActor = createRuntimeAgentLoader(
 );
 await synchronizeTenantPackage(database, tenantPackage);
 /*
+ * Package workers (campaign / research / sales) land in org_local on sync.
+ * Existing tenant orgs only received copies at create-time, so a new packaged
+ * worker would never appear there. Copy (and refresh package-owned prompts)
+ * into every other org on boot. New orgs still copy in create() below.
+ */
+for (const org of await organizationStore.listAll()) {
+  if (org.id === LOCAL_ORGANIZATION_ID) continue;
+  try {
+    await copyPackageOwnedAgents(database, LOCAL_ORGANIZATION_ID, org.id);
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        type: "organization-package-copy-failed",
+        orgId: org.id,
+        error: String(error),
+      }),
+    );
+  }
+}
+/*
  * Built before `auth`, because the deny list is consulted during sign-in and the store is what
  * holds it. It needs the administrator list too, so it can tell the screen which people the
  * deployment's configuration has already decided about.
@@ -486,6 +506,7 @@ const loadToolsForActor = createLoadToolsForActor({
       skillBySlug: (slug, orgId) => pluginStore.skillBySlug(slug, orgId),
       jobStore,
       spend: spendStore,
+      triggerStore: jobTriggerStore,
     }),
   ...(webSearch ? { webSearch } : {}),
   ...(computerGateway ? { computerGateway } : {}),

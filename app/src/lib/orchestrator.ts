@@ -11,8 +11,19 @@ export const LEFTOVER_COWORKER_NAMES = [
   "Risk Analyst",
 ] as const;
 
+/** Packaged specialist workers. Not first-class on the owner thread. */
+export const WORKER_COWORKER_NAMES = [
+  "Email campaign",
+  "Marketing research",
+  "Always-on sales",
+] as const;
+
 export function isLeftoverCoworkerName(name: string): boolean {
   return (LEFTOVER_COWORKER_NAMES as readonly string[]).includes(name);
+}
+
+export function isWorkerCoworkerName(name: string): boolean {
+  return (WORKER_COWORKER_NAMES as readonly string[]).includes(name);
 }
 
 export function isOrchestratorId(id: string): boolean {
@@ -85,7 +96,11 @@ export function ownerFacingCoworkerName(
   },
   productName: string,
 ): string {
-  if (agentIsOrchestrator(agent) || isLeftoverCoworkerName(agent.name)) {
+  if (
+    agentIsOrchestrator(agent) ||
+    isLeftoverCoworkerName(agent.name) ||
+    isWorkerCoworkerName(agent.name)
+  ) {
     return productName;
   }
   return agent.name;
