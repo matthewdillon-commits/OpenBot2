@@ -4,6 +4,7 @@ import {
   applyCommandChips,
   type CommandOption,
   enforceSingleAgent,
+  liveComposerSegments,
   toDraft,
 } from "./draft";
 
@@ -124,5 +125,28 @@ describe("applyCommandChips", () => {
   test("keeps a chip for a command that is no longer registered", () => {
     const { segments } = applyCommandChips([command("search", "search")], []);
     expect(toDraft(segments).commandIds).toEqual(["search"]);
+  });
+});
+
+describe("liveComposerSegments", () => {
+  test("uses committed segments when they already have text", () => {
+    const value = [text("Say hello")];
+    expect(liveComposerSegments(value, "")).toEqual(value);
+  });
+
+  test("keeps chips from committed segments instead of flattening live text", () => {
+    const value = [agent("knowledge", "Knowledge"), text(" what changed?")];
+    expect(liveComposerSegments(value, "@Knowledge what changed?")).toBe(value);
+  });
+
+  test("takes the editor's live text when React value is still empty", () => {
+    expect(toDraft(liveComposerSegments([], "Say hello")).text).toBe(
+      "Say hello",
+    );
+  });
+
+  test("stays empty when both the value and the editor are empty", () => {
+    expect(toDraft(liveComposerSegments([], "   ")).isEmpty).toBe(true);
+    expect(toDraft(liveComposerSegments([], null)).isEmpty).toBe(true);
   });
 });
