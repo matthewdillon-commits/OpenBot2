@@ -6,6 +6,60 @@ import {
   waitingForAnswer,
 } from "./chat-messages";
 
+function traceMessages(): Message[] {
+  return [
+    {
+      id: "a1",
+      role: "assistant",
+      content: "I looked that up.",
+      toolCalls: [
+        {
+          id: "t-search",
+          type: "function",
+          function: {
+            name: "crm_search",
+            arguments: '{"query":"Casey"}',
+          },
+        },
+        {
+          id: "t-create",
+          type: "function",
+          function: {
+            name: "crm_create",
+            arguments: '{"kind":"person","name":"Casey"}',
+          },
+        },
+        {
+          id: "t-skill",
+          type: "function",
+          function: {
+            name: "start_specialist",
+            arguments: '{"skill":"missing"}',
+          },
+        },
+      ],
+    } as Message,
+    {
+      id: "r-search",
+      role: "tool",
+      toolCallId: "t-search",
+      content: "Casey",
+    } as Message,
+    {
+      id: "r-create",
+      role: "tool",
+      toolCallId: "t-create",
+      content: "Added Casey",
+    } as Message,
+    {
+      id: "r-skill",
+      role: "tool",
+      toolCallId: "t-skill",
+      content: "Refused. There is no such skill in this organization.",
+    } as Message,
+  ];
+}
+
 describe("toVisibleChatItems", () => {
   test("keeps an assistant name", () => {
     const message = {
@@ -41,6 +95,40 @@ describe("toVisibleChatItems", () => {
         text: "Hello.",
       },
     ]);
+  });
+
+  test("the owner thread omits raw tool traces and Blocked-skill dumps", () => {
+    const items = toVisibleChatItems(traceMessages());
+    expect(items.every((item) => item.kind !== "tool")).toBe(true);
+    expect(JSON.stringify(items)).not.toContain("Search CRM");
+    expect(JSON.stringify(items)).not.toContain("Add to CRM");
+    expect(JSON.stringify(items)).not.toContain("Blocked");
+    expect(JSON.stringify(items)).not.toContain(
+      "There is no such skill in this organization",
+    );
+    expect(items).toEqual([
+      {
+        kind: "text",
+        id: "a1",
+        role: "assistant",
+        text: "I looked that up.",
+      },
+    ]);
+  });
+
+  test("See the work still projects tool traces including a Blocked skill", () => {
+    const items = toVisibleChatItems(traceMessages(), { toolTraces: true });
+    const tools = items.filter((item) => item.kind === "tool");
+    expect(tools).toHaveLength(3);
+    expect(tools[0]?.kind === "tool" && tools[0].toolCall.function.name).toBe(
+      "crm_search",
+    );
+    expect(tools[1]?.kind === "tool" && tools[1].toolCall.function.name).toBe(
+      "crm_create",
+    );
+    expect(tools[2]?.kind === "tool" && tools[2].result).toContain(
+      "There is no such skill in this organization",
+    );
   });
 });
 

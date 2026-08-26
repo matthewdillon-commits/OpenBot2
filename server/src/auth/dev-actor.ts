@@ -34,6 +34,7 @@ export const DEV_ACTOR: AuthenticatedActor = {
   orgSlug: LOCAL_ORGANIZATION_SLUG,
   orgName: LOCAL_ORGANIZATION_NAME,
   orgRole: "owner",
+  deploymentAdmin: true,
 };
 
 type UserWriter = Pick<Database, "insert">;

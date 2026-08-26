@@ -51,8 +51,8 @@ export const actionPolicy = pgTable("action_policy", {
  * Which organization first used the one shared Chromium.
  *
  * One row (`id = shared`). Insert-on-conflict so two replicas cannot both
- * believe they are first. A second org is refused until COMPUTER_SUPERVISOR_URL
- * selects the docker provider (one computer per org×bot).
+ * believe they are first. A second org is refused until a supervisor can make
+ * computers one per org×bot. Customer-facing copy must not name the env var.
  */
 export const SHARED_COMPUTER_CLAIM_ID = "shared";
 

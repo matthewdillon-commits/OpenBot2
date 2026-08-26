@@ -8,7 +8,7 @@ import {
   openBotRoleFor,
 } from "../orgs/constants";
 import type { OrganizationStore } from "../orgs/store";
-import type { OpenBotRole } from "./roles";
+import { isConfiguredAdmin, type OpenBotRole } from "./roles";
 
 export type AuthenticatedActor = {
   id: string;
@@ -21,6 +21,12 @@ export type AuthenticatedActor = {
   orgName?: string;
   orgRole?: OrganizationRole;
   platformSuperadmin?: boolean;
+  /**
+   * Deployment-wide `/admin`. Distinct from org owner: `role` is admin for an
+   * org owner, but this is only true for PLATFORM_SUPERADMINS,
+   * INITIAL_ADMIN_EMAILS, or a user_roles administrator.
+   */
+  deploymentAdmin?: boolean;
 };
 
 export type AuthService = {
@@ -82,7 +88,10 @@ export function createRequireUser(
    * Off when this deployment offers email sign-up, because that person is about to
    * create their own organization rather than land in the backfilled local one.
    */
-  options?: { autoJoinSoleOrganization?: boolean },
+  options?: {
+    autoJoinSoleOrganization?: boolean;
+    initialAdminEmails?: readonly string[];
+  },
 ): MiddlewareHandler<{ Variables: AppVariables }> {
   return async (context, next) => {
     const session = await auth.api.getSession({
@@ -115,6 +124,15 @@ export function createRequireUser(
 
     const orgRole = membership?.role;
     const role = orgRole ? openBotRoleFor(orgRole) : fallbackRole;
+    const initialAdminEmails = options?.initialAdminEmails ?? [];
+    const platformSuperadmin = isPlatformSuperadminEmail(
+      session.user.email,
+      platformSuperadmins,
+    );
+    const deploymentAdmin =
+      fallbackRole === "admin" ||
+      isConfiguredAdmin(session.user.email, initialAdminEmails) ||
+      platformSuperadmin;
 
     context.set("actor", {
       id: session.user.id,
@@ -130,10 +148,8 @@ export function createRequireUser(
             orgRole: membership.role,
           }
         : {}),
-      platformSuperadmin: isPlatformSuperadminEmail(
-        session.user.email,
-        platformSuperadmins,
-      ),
+      platformSuperadmin,
+      deploymentAdmin,
     });
     await next();
   };
@@ -167,6 +183,30 @@ export function requireAdmin(context: Context<{ Variables: AppVariables }>) {
 
 /** Owner or admin of the current organization. Same bar as {@link requireAdmin}. */
 export const requireOrgAdmin = requireAdmin;
+
+/**
+ * Deployment-wide `/admin`. Org owner is not enough: that person is `role`
+ * admin via the org mapping, and must not open settings that apply to everybody
+ * in this deployment.
+ */
+export function canOpenDeploymentAdmin(actor: {
+  platformSuperadmin?: boolean | null;
+  deploymentAdmin?: boolean | null;
+}): boolean {
+  return actor.platformSuperadmin === true || actor.deploymentAdmin === true;
+}
+
+export function requireDeploymentAdmin(
+  context: Context<{ Variables: AppVariables }>,
+) {
+  if (canOpenDeploymentAdmin(context.var.actor)) {
+    return undefined;
+  }
+  return context.json(
+    { error: "Platform administrator access required." },
+    403,
+  );
+}
 
 export function requirePlatformSuperadmin(
   context: Context<{ Variables: AppVariables }>,

@@ -9,7 +9,7 @@ export const Route = createFileRoute("/_authed/admin")({
     const user = await context.queryClient.ensureQueryData(
       currentUserQueryOptions(),
     );
-    if (user?.role !== "admin") {
+    if (!user?.canOpenDeploymentAdmin) {
       throw redirect({ to: "/" });
     }
   },

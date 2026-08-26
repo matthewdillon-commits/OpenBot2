@@ -117,6 +117,37 @@ export type RuntimeModel = {
 };
 
 /**
+ * The model id Intelligence / tab / unattended BuiltInAgent runs send to the LLM.
+ *
+ * `BOT_MODEL` wins, then `OPENAI_MODEL`, then the tenant package `default_model`.
+ * The live xAI 404 was `gpt-4.1` from the package while production had
+ * `BOT_MODEL=grok-4.6` and no `OPENAI_MODEL`. A leading `openai/` is stripped
+ * so `BOT_MODEL=openai/gpt-4o` still becomes the id CopilotKit's `openai/<id>`
+ * string and `createOpenAI().chat(id)` expect.
+ */
+export function modelNameFromEnv(
+  env: Record<string, string | undefined> = process.env,
+): string | undefined {
+  const name = env.BOT_MODEL?.trim() || env.OPENAI_MODEL?.trim();
+  return name || undefined;
+}
+
+export function resolveRuntimeModel(
+  packaged: RuntimeModel,
+  env: Record<string, string | undefined> = process.env,
+): RuntimeModel {
+  const fromEnv = modelNameFromEnv(env);
+  if (!fromEnv) return packaged;
+  const prefix = `${packaged.provider}/`;
+  return {
+    ...packaged,
+    defaultModel: fromEnv.startsWith(prefix)
+      ? fromEnv.slice(prefix.length)
+      : fromEnv,
+  };
+}
+
+/**
  * Which model object CopilotKit should call.
  *
  * CopilotKit's `openai/<id>` string uses the OpenAI Responses API. That path emits

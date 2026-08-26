@@ -5,6 +5,7 @@ export {
   type CommandKind,
   type CommandOption,
   type ComposerDraft,
+  liveComposerSegments,
 } from "./draft";
 export {
   type QueueAction,

@@ -16,10 +16,12 @@ import { createDevRequireUser } from "./auth/dev-actor";
 import {
   type AppVariables,
   type AuthService,
+  canOpenDeploymentAdmin,
   createRequireUser,
   type RoleRepository,
   requireActiveOrganization,
   requireAdmin,
+  requireDeploymentAdmin,
 } from "./auth/guards";
 import type { IdentityProviderStore } from "./auth/identity-provider-store";
 import type { ChannelEventHub } from "./channels/events";
@@ -433,6 +435,7 @@ export function createApp(
           config.platformSuperadmins,
           {
             autoJoinSoleOrganization: config.auth?.emailPassword !== true,
+            initialAdminEmails: config.auth?.initialAdminEmails ?? [],
           },
         )
       : authenticationUnavailable;
@@ -496,12 +499,13 @@ export function createApp(
       user: {
         ...context.var.actor,
         canSeeTheWork: canSeeTheWork(context.var.actor),
+        canOpenDeploymentAdmin: canOpenDeploymentAdmin(context.var.actor),
       },
       organizations,
     });
   });
   app.get("/api/admin/status", requireUser, (context) => {
-    const denied = requireAdmin(context);
+    const denied = requireDeploymentAdmin(context);
     return denied ?? context.json({ status: "ok" });
   });
   app.get("/api/admin/audit-events", requireUser, async (context) => {

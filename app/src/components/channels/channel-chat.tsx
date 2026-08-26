@@ -19,7 +19,6 @@ import {
   withOutgoingEcho,
 } from "@/components/channels/transcript-messages";
 import { agentListQueryOptions } from "@/lib/agents/queries";
-import { currentUserQueryOptions } from "@/lib/auth/queries";
 import { recordChannelActivityMutationOptions } from "@/lib/channels/mutations";
 import type { AgentChannel } from "@/lib/channels/queries";
 import { useActiveBot } from "@/lib/copilot/active-bot";
@@ -35,7 +34,7 @@ import { enqueueJobMutationOptions } from "@/lib/jobs/mutations";
 import { jobQueryOptions } from "@/lib/jobs/queries";
 import {
   agentIsOrchestrator,
-  coworkerDisplayName,
+  ownerFacingCoworkerName,
   pickOrchestratorId,
 } from "@/lib/orchestrator";
 import { useSkillCommands } from "@/lib/plugins/skill-commands";
@@ -74,7 +73,6 @@ export function ChannelChat({
   // The core attaches the frontend tool registry; direct agent runs do not.
   const { copilotkit } = useCopilotKit();
   const { data: agentProfiles } = useQuery(agentListQueryOptions());
-  const { data: currentUser } = useQuery(currentUserQueryOptions());
   const productName = appConfig.brand.productName;
   /**
    * First-message seed from the compose screen. It is taken once per mount and retained until the
@@ -193,11 +191,13 @@ export function ChannelChat({
         // (Not Found / THREAD_NOT_FOUND) and locks the composer. The first
         // runAgent goes through handleIntelligenceRun, which opens the mapped
         // id. Existing goals still connect so an in-flight run can resume.
+        // An unseeded first "Say hello" still connects; first-contact errors
+        // must not set runError below.
         if (!seed.message) {
           await copilotkit.connectAgent({ agent });
         }
       } catch (error) {
-        if (!seed.message && !isUnknownThreadError(error)) {
+        if (!isUnknownThreadError(error)) {
           // Reported by the run-failure subscriber below; history is still worth restoring.
         }
       }
@@ -235,9 +235,12 @@ export function ChannelChat({
     resolveSpeaker(channel.agentIds, composerDraft?.agentId, speaker) ??
     speaker;
   const skillCommands = useSkillCommands(menuSpeaker);
-  const speakerName = agentProfiles?.find(
+  const speakerProfile = agentProfiles?.find(
     (profile) => profile.id === speaker,
-  )?.name;
+  );
+  const speakerName = speakerProfile
+    ? ownerFacingCoworkerName(speakerProfile, productName)
+    : undefined;
   const speakerNameRef = useRef(speakerName);
   speakerNameRef.current = speakerName;
   const speakerRef = useRef(speaker);
@@ -408,7 +411,10 @@ export function ChannelChat({
   useEffect(() => {
     const fail = (message: string) => {
       if (!awaitingReply.current) return;
-      if (seed.message && isUnknownThreadError(message)) return;
+      // First-contact Not Found must not lock the composer. A new goal
+      // created by POST /api/channels has no compose-screen seed; "Say hello"
+      // is still the first Intelligence turn.
+      if (isUnknownThreadError(message)) return;
       awaitingReply.current = false;
       setRunError(message);
     };
@@ -442,7 +448,7 @@ export function ChannelChat({
       },
     });
     return () => subscription?.unsubscribe();
-  }, [agent, seed.message]);
+  }, [agent]);
 
   /** Stable reference for effects and component callbacks. */
   const sayRef = useRef(say);
@@ -518,20 +524,14 @@ export function ChannelChat({
     // Keep `seed` in state; transcriptMessages hides it as soon as agent messages exist.
   }, [joinGatePromise]);
 
-  const mentionProfiles =
-    currentUser?.canSeeTheWork === true
-      ? agentProfiles?.filter((profile) =>
-          channel.agentIds.includes(profile.id),
-        )
-      : agentProfiles?.filter(
-          (profile) =>
-            channel.agentIds.includes(profile.id) &&
-            agentIsOrchestrator(profile),
-        );
+  const mentionProfiles = agentProfiles?.filter(
+    (profile) =>
+      channel.agentIds.includes(profile.id) && agentIsOrchestrator(profile),
+  );
   const mentionAgents = toAgentOptions(
     mentionProfiles?.map((profile) => ({
       ...profile,
-      name: coworkerDisplayName(profile, productName),
+      name: ownerFacingCoworkerName(profile, productName),
     })),
   );
 

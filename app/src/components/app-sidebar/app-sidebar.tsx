@@ -1,6 +1,5 @@
 import {
   IconAddressBook,
-  IconBolt,
   IconBox,
   IconBuilding,
   IconLogout,
@@ -287,10 +286,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     <span className="flex size-7 items-center justify-center rounded-full border border-border">
                       <IconPlug className="size-3.5" />
                     </span>
-                  ) : item.to === "/skills" ? (
-                    <IconBox />
                   ) : (
-                    <IconBolt />
+                    <IconBox />
                   )}
                 </div>
                 <span className="text-sm tracking-tight">{item.label}</span>
@@ -323,7 +320,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   <IconBuilding />
                   {currentUser?.orgName ?? "Organizations"}
                 </DropdownMenuItem>
-                {currentUser?.role === "admin" ? (
+                {currentUser?.canOpenDeploymentAdmin ? (
                   <DropdownMenuItem
                     className={userMenuItemClassName}
                     render={<Link {...adminLinkOptions} />}

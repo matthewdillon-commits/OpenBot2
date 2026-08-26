@@ -2,7 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { loopStageLabel } from "@/lib/channels/loop";
+import { loopStageLabel, readableLoopText } from "@/lib/channels/loop";
 import {
   recordGoalDecisionMutationOptions,
   recordGoalOutcomeMutationOptions,
@@ -76,11 +76,11 @@ function ApprovalCard({
         </div>
         <div>
           <dt className="font-medium text-foreground">Before</dt>
-          <dd>{card.before}</dd>
+          <dd>{readableLoopText(card.before)}</dd>
         </div>
         <div>
           <dt className="font-medium text-foreground">After</dt>
-          <dd>{card.after}</dd>
+          <dd>{readableLoopText(card.after)}</dd>
         </div>
         <div>
           <dt className="font-medium text-foreground">Rollback</dt>

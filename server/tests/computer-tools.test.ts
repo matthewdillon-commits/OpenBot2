@@ -219,7 +219,7 @@ describe("server computer tools", () => {
     });
   });
 
-  test("a second-org gate becomes a failed tool result naming the supervisor", async () => {
+  test("a second-org gate becomes a failed tool result without naming the env var", async () => {
     const { computer } = fakeComputer({
       navigate: async () => {
         throw new SharedComputerIsolationError();
@@ -232,7 +232,8 @@ describe("server computer tools", () => {
       ).execute({ url: "https://example.com/" }),
     );
     expect(result.ok).toBe(false);
-    expect(result.reason).toContain("COMPUTER_SUPERVISOR_URL");
+    expect(result.reason).not.toContain("COMPUTER_SUPERVISOR_URL");
+    expect(result.reason).toContain("Ask your operator");
   });
 
   test("help and secret ask, persist needs_you, notify, and return immediately", async () => {

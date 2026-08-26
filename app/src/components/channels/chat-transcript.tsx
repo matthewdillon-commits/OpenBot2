@@ -51,6 +51,11 @@ type ChatTranscriptProps = {
   stopped?: string;
   /** Who is answering, for the working line in a room. */
   thinkingName?: string;
+  /**
+   * Raw tool traces (Search CRM, Blocked skill, computer lines). Off on the
+   * owner thread; See the work passes true.
+   */
+  toolTraces?: boolean;
 };
 
 /** One shared empty array, so a screen without a queue does not hand down a new one per render. */
@@ -479,6 +484,7 @@ export function ChatTranscript({
   queued = EMPTY_QUEUE,
   stopped,
   thinkingName,
+  toolTraces = false,
 }: ChatTranscriptProps) {
   /*
    * NOT MEMOISED, AND THAT IS DELIBERATE. `useMemo` keyed on `messages` looks obviously right and
@@ -490,7 +496,7 @@ export function ChatTranscript({
    * cost was markdown parsing and chart SVGs, and those are skipped by the memoised children below,
    * which is where the 25x came from. This runs per render and is not worth guarding.
    */
-  const items = toVisibleChatItems(messages);
+  const items = toVisibleChatItems(messages, { toolTraces });
 
   /*
    * UNTIL THE BOT WRITES SOMETHING. A tool call is work, not an answer, and hiding this the moment
