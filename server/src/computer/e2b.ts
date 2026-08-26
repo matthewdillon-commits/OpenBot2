@@ -1,3 +1,7 @@
+import {
+  AGENT_COMPUTER_PATH,
+  AGENT_COMPUTER_START_CMD,
+} from "../../e2b/start";
 import { ComputerUnavailableError } from "./client";
 import type {
   E2BClient,
@@ -145,7 +149,7 @@ export function createE2BComputerProvider(
     } catch {
       // Start, or start again after a filesystem-only resume.
     }
-    await handle.startComputer("/root/.bun/bin/bun src/index.ts", "/app");
+    await handle.startComputer(AGENT_COMPUTER_START_CMD, "/app");
     await waitUntilAnswering(url);
   }
 
@@ -162,12 +166,13 @@ export function createE2BComputerProvider(
             template,
             metadata: metadataFor(computerId, namespace),
             envs: {
+              // Overwrites the template-build placeholder. Never omit this.
               COMPUTER_TOKEN: options.token,
               COMPUTER_BOT_ID: computerId,
               PORT: String(COMPUTER_PORT),
               WORKSPACE_DIR: "/workspace",
               PROFILES_DIR: "/profiles",
-              PATH: "/root/.bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+              PATH: AGENT_COMPUTER_PATH,
             },
             timeoutMs: RUNNING_TIMEOUT_MS,
           });
