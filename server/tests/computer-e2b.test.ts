@@ -10,6 +10,11 @@ import {
   E2BSandboxGoneError,
 } from "../src/computer/e2b-client";
 import {
+  AGENT_COMPUTER_PATH,
+  AGENT_COMPUTER_START_CMD,
+  AGENT_COMPUTER_TEMPLATE_TOKEN,
+} from "../e2b/start";
+import {
   createE2BComputerProvider,
   DEFAULT_E2B_NAMESPACE,
   DEFAULT_E2B_TEMPLATE,
@@ -50,11 +55,13 @@ function fakeE2B(options?: {
   client: E2BClient;
   creates: E2BCreateInput[];
   starts: string[];
+  startCommands: string[];
   sandboxes: Map<string, FakeSandbox>;
 } {
   const sandboxes = new Map<string, FakeSandbox>();
   const creates: E2BCreateInput[] = [];
   const starts: string[] = [];
+  const startCommands: string[] = [];
   let next = 0;
 
   function handle(record: FakeSandbox): E2BSandboxHandle {
@@ -69,8 +76,9 @@ function fakeE2B(options?: {
         sandboxes.delete(record.sandboxId);
       },
       setTimeout: async () => undefined,
-      startComputer: async () => {
+      startComputer: async (command) => {
         starts.push(record.sandboxId);
+        startCommands.push(command);
       },
     };
   }
@@ -133,7 +141,7 @@ function fakeE2B(options?: {
     },
   };
 
-  return { client, creates, starts, sandboxes };
+  return { client, creates, starts, startCommands, sandboxes };
 }
 
 describe("E2B computer provider factory", () => {
@@ -173,6 +181,11 @@ describe("E2B computer lifecycle", () => {
     expect(creates[0]?.template).toBe(DEFAULT_E2B_TEMPLATE);
     expect(creates[0]?.envs.COMPUTER_BOT_ID).toBe("org_acme__analyst");
     expect(creates[0]?.envs.COMPUTER_TOKEN).toBe("computer-secret");
+    expect(creates[0]?.envs.COMPUTER_TOKEN).not.toBe(
+      AGENT_COMPUTER_TEMPLATE_TOKEN,
+    );
+    expect(creates[0]?.envs.PATH).toBe(AGENT_COMPUTER_PATH);
+    expect(creates[0]?.envs.PATH).not.toMatch(/\/root\/\.bun/);
   });
 
   test("two org-scoped ids never share a sandbox", async () => {
@@ -285,7 +298,7 @@ describe("E2B computer lifecycle", () => {
   });
 
   test("starts agent-computer inside the sandbox when health is down", async () => {
-    const { client, starts } = fakeE2B();
+    const { client, starts, startCommands } = fakeE2B();
     let calls = 0;
     const fetchImpl = (async () => {
       calls += 1;
@@ -301,6 +314,43 @@ describe("E2B computer lifecycle", () => {
 
     await provider.locate("sales");
     expect(starts).toEqual(["sbx_1"]);
+    expect(startCommands).toEqual([AGENT_COMPUTER_START_CMD]);
+    expect(startCommands[0]).not.toMatch(/\/root\/\.bun/);
+  });
+});
+
+describe("E2B template start command", () => {
+  test("starts bun from a world-executable path, not /root/.bun", () => {
+    const source = readFileSync(
+      fileURLToPath(new URL("../e2b/template.ts", import.meta.url)),
+      "utf8",
+    );
+    expect(AGENT_COMPUTER_START_CMD).toBe("bun src/index.ts");
+    expect(AGENT_COMPUTER_START_CMD).not.toMatch(/\/root\/\.bun/);
+    expect(AGENT_COMPUTER_PATH).toContain("/usr/local/bin");
+    expect(AGENT_COMPUTER_PATH).not.toMatch(/\/root\/\.bun/);
+    expect(source).toContain("AGENT_COMPUTER_START_CMD");
+    expect(source).toContain("waitForPort(4100)");
+    expect(source).toContain("/usr/local/bin/bun");
+    expect(source).toContain("chmod 755");
+    expect(source).not.toMatch(/setStartCmd\([^)]*\/root\/\.bun/);
+    expect(source).not.toMatch(/PATH:\s*["'][^"']*\/root\/\.bun/);
+  });
+
+  test("bakes only a non-secret placeholder so waitForPort can bind :4100", () => {
+    const template = readFileSync(
+      fileURLToPath(new URL("../e2b/template.ts", import.meta.url)),
+      "utf8",
+    );
+    const provider = readFileSync(
+      fileURLToPath(new URL("../src/computer/e2b.ts", import.meta.url)),
+      "utf8",
+    );
+    expect(AGENT_COMPUTER_TEMPLATE_TOKEN).toBe("template-build");
+    expect(template).toContain("AGENT_COMPUTER_TEMPLATE_TOKEN");
+    expect(template).toContain("waitForPort(4100)");
+    expect(provider).toContain("COMPUTER_TOKEN: options.token");
+    expect(provider).not.toContain("AGENT_COMPUTER_TEMPLATE_TOKEN");
   });
 });
 
