@@ -14,9 +14,16 @@ import { createThreadReader } from "../src/channels/thread-status";
 describe("reading whether Intelligence still has a thread", () => {
   test("a thread it can produce is known", async () => {
     const reader = createThreadReader({
-      getThread: async () => ({ id: "irrelevant" }),
+      getThread: async () => ({ id: "thread-1" }),
     });
     await expect(reader("thread-1", "user-1")).resolves.toBe("known");
+  });
+
+  test("an empty getThread resolve is unknown, not known", async () => {
+    const reader = createThreadReader({
+      getThread: async () => ({}),
+    });
+    await expect(reader("thread-1", "user-1")).resolves.toBe("unknown");
   });
 
   test("a 404 means the thread is unknown, not a failure", async () => {

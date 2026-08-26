@@ -5,6 +5,7 @@ import {
   firstContactFromRequest,
   openIntelligenceThread,
   openThreadForFirstContact,
+  THREAD_NOT_ON_PLATFORM,
 } from "../src/jobs/open-thread";
 import { startUnattendedRun, UNATTENDED_REFUSALS } from "../src/jobs/run";
 import { runUnattendedThroughRuntime } from "../src/jobs/runtime-run";
@@ -642,7 +643,47 @@ describe("first-contact thread open", () => {
           agentId: "researcher",
         },
       ),
-    ).rejects.toThrow(/not found/);
+    ).rejects.toThrow(/does not have this thread|not found/);
+  });
+
+  test("a wrapper that only returns the mapped id POSTs createThread, then getThread reads it", async () => {
+    const threads = new Map<string, { id: string; userId: string }>();
+    const posts: Array<{
+      threadId: string;
+      userId: string;
+      agentId: string;
+    }> = [];
+    await openIntelligenceThread(
+      {
+        getOrCreateThread: async () => ({
+          thread: { id: "thread-1" },
+          created: true,
+        }),
+        getThread: async ({ threadId, userId }) => {
+          const thread = threads.get(threadId);
+          if (!thread || thread.userId !== userId) notFound(threadId);
+          return { id: thread.id };
+        },
+        createThread: async ({ threadId, userId, agentId }) => {
+          posts.push({ threadId, userId, agentId });
+          threads.set(threadId, { id: threadId, userId });
+          return { id: threadId };
+        },
+      },
+      {
+        threadId: "thread-1",
+        userId: intelligenceUser,
+        agentId: "researcher",
+      },
+    );
+    expect(posts).toEqual([
+      {
+        threadId: "thread-1",
+        userId: intelligenceUser,
+        agentId: "researcher",
+      },
+    ]);
+    expect(threads.get("thread-1")?.id).toBe("thread-1");
   });
 });
 
@@ -1001,5 +1042,86 @@ describe("unattended CopilotKitIntelligence without an HTTP Request", () => {
     } finally {
       http.restore();
     }
+  });
+
+  test("a mint that still 404s after getOrCreate fails the job in seconds, not minutes", async () => {
+    const started = Date.now();
+    const result = await startUnattendedRun({
+      actor,
+      orgId: actor.orgId,
+      channelId: "channel_1",
+      threadId: "thread-1",
+      prompt: "Say hello in one short sentence.",
+      coworkerId: "researcher",
+      deps: coworkerDeps(recordingIntelligence(), {
+        runtime: {
+          intelligence: {
+            getOrCreateThread: async () => ({
+              thread: { id: "thread-1" },
+              created: true,
+            }),
+            getThread: async () => notFound("thread-1"),
+            createThread: async () => notFound("thread-1"),
+          },
+          runner: {
+            run() {
+              return { subscribe() {} };
+            },
+            runWithStartupBoundary() {
+              return {
+                startup: new Promise<void>(() => {}),
+                events: { subscribe() {} },
+              };
+            },
+          },
+          runnerStartupTimeoutMs: 8_000,
+        },
+        timeoutMs: 8_000,
+      }),
+    });
+    const elapsed = Date.now() - started;
+    expect(result.outcome).toBe("failed");
+    expect(result.error).toContain(THREAD_NOT_ON_PLATFORM);
+    expect(result.text).toBeUndefined();
+    expect(elapsed).toBeLessThan(3_000);
+  });
+
+  test("a runner that never joins fails quickly and does not echo the prompt as the reply", async () => {
+    const intelligence = recordingIntelligence();
+    const started = Date.now();
+    const result = await startUnattendedRun({
+      actor,
+      orgId: actor.orgId,
+      channelId: "channel_1",
+      threadId: "thread-1",
+      prompt: "Say hello in one short sentence.",
+      coworkerId: "researcher",
+      deps: coworkerDeps(intelligence, {
+        runtime: {
+          intelligence: intelligence.client,
+          runner: {
+            run() {
+              return { subscribe() {} };
+            },
+            runWithStartupBoundary() {
+              return {
+                startup: new Promise<void>(() => {}),
+                events: { subscribe() {} },
+              };
+            },
+          },
+          runnerStartupTimeoutMs: 80,
+        },
+        timeoutMs: 5_000,
+      }),
+    });
+    const elapsed = Date.now() - started;
+    expect(result.outcome).toBe("failed");
+    expect(result.error).toMatch(/did not join the thread in time/);
+    expect(result.text).toBeUndefined();
+    expect(
+      result.messages.some((message) => message.role === "assistant"),
+    ).toBe(false);
+    expect(elapsed).toBeLessThan(1_500);
   });
 });

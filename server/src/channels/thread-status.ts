@@ -20,12 +20,38 @@ import type { ThreadReader } from "./thread-routes";
  * anything, and treating the two the same would let a browser discard history that is only
  * temporarily unreachable, not actually missing.
  */
+function threadIdOf(value: unknown): string | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+  const nested =
+    record.thread && typeof record.thread === "object"
+      ? (record.thread as Record<string, unknown>)
+      : null;
+  for (const candidate of [
+    record.id,
+    record.threadId,
+    nested?.id,
+    nested?.threadId,
+  ]) {
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate.trim();
+    }
+  }
+  return null;
+}
+
 export function createThreadReader(intelligence: {
   getThread: (params: { threadId: string; userId: string }) => Promise<unknown>;
 }): ThreadReader {
   return async (threadId, userId) => {
     try {
-      await intelligence.getThread({ threadId, userId });
+      const thread = await intelligence.getThread({ threadId, userId });
+      // An empty resolve is not "known". The live walk after #35 had
+      // App GET known:true while Intelligence still 404'd the same id —
+      // a wrapper that returns without a thread id.
+      if (threadIdOf(thread) !== threadId) {
+        return "unknown";
+      }
       return "known";
     } catch (error) {
       if ((error as { status?: unknown } | null)?.status === 404) {
