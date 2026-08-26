@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { AbstractAgent } from "@ag-ui/client";
+import { CopilotKitIntelligence, CopilotRuntime } from "@copilotkit/runtime/v2";
 import { startUnattendedRun } from "../src/jobs/run";
 import {
+  installLockReleaseOnComplete,
   isRetryableThreadLockError,
   runUnattendedThroughRuntime,
   THREAD_LOCK_FAILED,
@@ -268,6 +270,83 @@ describe("withLockReleaseOnComplete", () => {
         });
     });
     expect(cleaned).toEqual([{ threadId: "thread-1", runId: "run-1" }]);
+  });
+
+  test("installs lock release on the existing runner because CopilotRuntime.runner is a getter", async () => {
+    const cleaned: Array<{ threadId: string; runId: string }> = [];
+    const runner = {
+      run() {
+        return {
+          subscribe(observer: { complete?: () => void }) {
+            observer.complete?.();
+            return { unsubscribe() {} };
+          },
+        };
+      },
+      runWithStartupBoundary() {
+        return {
+          events: {
+            subscribe(observer: { complete?: () => void }) {
+              observer.complete?.();
+              return { unsubscribe() {} };
+            },
+          },
+          startup: Promise.resolve(),
+        };
+      },
+      stop() {
+        return true;
+      },
+    };
+    const installed = installLockReleaseOnComplete(runner, {
+      ɵcleanupThreadLock: async (params) => {
+        cleaned.push(params);
+      },
+    });
+    expect(installed).toBe(runner);
+    expect(typeof runner.stop).toBe("function");
+    await new Promise<void>((resolve, reject) => {
+      runner
+        .runWithStartupBoundary({
+          threadId: "thread-1",
+          agent: {} as AbstractAgent,
+          input: {
+            threadId: "thread-1",
+            runId: "run-1",
+            messages: [],
+            tools: [],
+            context: [],
+          },
+        })
+        .events.subscribe({
+          complete: resolve,
+          error: reject,
+        });
+    });
+    expect(cleaned).toEqual([{ threadId: "thread-1", runId: "run-1" }]);
+  });
+
+  test("does not assign CopilotRuntime.runner — it is a getter", () => {
+    const intelligence = new CopilotKitIntelligence({
+      apiUrl: "https://intelligence.test",
+      wsUrl: "wss://realtime.intelligence.test",
+      apiKey: "test-key",
+    });
+    const runtime = new CopilotRuntime({
+      identifyUser: async () => ({ id: "u", name: "u" }),
+      intelligence,
+      licenseToken: "ci-not-a-real-licence",
+      agents: {},
+    });
+    const before = runtime.runner;
+    expect(() => {
+      (runtime as { runner: unknown }).runner = {};
+    }).toThrow(/readonly|Cannot set property|which has only a getter/i);
+    expect(runtime.runner).toBe(before);
+    expect(() =>
+      installLockReleaseOnComplete(runtime.runner, intelligence),
+    ).not.toThrow();
+    expect(runtime.runner).toBe(before);
   });
 
   test("runUnattendedThroughRuntime still uses the mapped thread after a lock retry", async () => {

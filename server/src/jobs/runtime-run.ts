@@ -459,6 +459,32 @@ export function withLockReleaseOnComplete<T extends UnattendedRuntimeRunner>(
 }
 
 /**
+ * CopilotRuntime.runner is a getter onto the Intelligence delegate.
+ * Assigning it throws (`TypeError: Attempted to assign to readonly
+ * property`) and takes the API down before /api/capabilities answers.
+ * Wrap run / runWithStartupBoundary on that same runner. Do not replace
+ * the runner object — stop, connect, and threads live on it.
+ */
+export function installLockReleaseOnComplete<T extends UnattendedRuntimeRunner>(
+  runner: T,
+  intelligence: ThreadLockClient | undefined,
+): T {
+  const original: UnattendedRuntimeRunner = {
+    run: runner.run.bind(runner),
+  };
+  if (typeof runner.runWithStartupBoundary === "function") {
+    original.runWithStartupBoundary =
+      runner.runWithStartupBoundary.bind(runner);
+  }
+  const wrapped = withLockReleaseOnComplete(original, intelligence);
+  runner.run = wrapped.run;
+  if (wrapped.runWithStartupBoundary) {
+    runner.runWithStartupBoundary = wrapped.runWithStartupBoundary;
+  }
+  return runner;
+}
+
+/**
  * `handleIntelligenceRun` acquires this lock before `runner.run` so the
  * Phoenix ingestion channel join is accepted. Without it the runner
  * completes with CHANNEL_JOIN_ERROR and nothing is written.

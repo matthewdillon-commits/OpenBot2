@@ -17,7 +17,7 @@ import type { StallGuard } from "./channels/stall-guard";
 import type { DeploymentConfig } from "./config";
 import { openThreadForFirstContact } from "./jobs/open-thread";
 import type { ToolRunContext } from "./jobs/run-context";
-import { withLockReleaseOnComplete } from "./jobs/runtime-run";
+import { installLockReleaseOnComplete } from "./jobs/runtime-run";
 import { orgIdOf } from "./orgs/constants";
 import {
   jsonSchemaForLlmTool,
@@ -735,10 +735,8 @@ export function mountCopilotRuntime(
   // successful runner complete, only clears the heartbeat. The lock then
   // sits until TTL, so a follow-up on the same mapped thread 409s
   // (THREAD_LOCK_FAILED). Release on that same complete. Same thread id.
-  runtime.runner = withLockReleaseOnComplete(
-    runtime.runner,
-    intelligenceClient,
-  );
+  // CopilotRuntime.runner is a getter; assigning it crashes the API process.
+  installLockReleaseOnComplete(runtime.runner, intelligenceClient);
 
   const copilot = createCopilotHonoHandler({ runtime, basePath });
   const wrapped = new Hono();
