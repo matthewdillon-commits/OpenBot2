@@ -532,6 +532,52 @@ describe("deployment configuration", () => {
     expect(loadConfig(baseEnvironment).computer).toBeUndefined();
   });
 
+  test("configures E2B as the per-Bot computer provider", () => {
+    const config = loadConfig({
+      ...baseEnvironment,
+      E2B_API_KEY: " e2b_test ",
+      COMPUTER_TOKEN: "computer-token",
+    });
+
+    expect(config.computer?.provider).toBe("e2b");
+    expect(config.computer).toEqual({
+      provider: "e2b",
+      apiKey: "e2b_test",
+      token: "computer-token",
+      allowPrivateHosts: false,
+    });
+  });
+
+  test("E2B wins over the in-image shared Chromium URL", () => {
+    const config = loadConfig({
+      ...baseEnvironment,
+      E2B_API_KEY: "e2b_test",
+      AGENT_COMPUTER_URL: "http://localhost:4100",
+      COMPUTER_SUPERVISOR_URL: "http://localhost:4300",
+      COMPUTER_TOKEN: "computer-token",
+      E2B_TEMPLATE: "openbot-agent-computer",
+      COMPUTER_NAMESPACE: "os2",
+    });
+
+    expect(config.computer).toEqual({
+      provider: "e2b",
+      apiKey: "e2b_test",
+      token: "computer-token",
+      allowPrivateHosts: false,
+      template: "openbot-agent-computer",
+      namespace: "os2",
+    });
+  });
+
+  test("an E2B key without a shared URL still turns computers on", () => {
+    expect(
+      loadConfig({
+        ...baseEnvironment,
+        E2B_API_KEY: "e2b_test",
+      }).computer?.provider,
+    ).toBe("e2b");
+  });
+
   test("offers web search only when a Tavily key is set", () => {
     expect(loadConfig(baseEnvironment).tavilyApiKey).toBeUndefined();
     expect(

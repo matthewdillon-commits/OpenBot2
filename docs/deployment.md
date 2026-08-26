@@ -43,6 +43,23 @@ do on a laptop with no supervisor configured. A shared browser means shared logi
 shared session between Bots, which is fine for a deployment where one team trusts its own Bots and
 is not fine as a boundary between tenants.
 
+## Multi-tenant computers (E2B)
+
+The Railway one-image deployment is that shared Chromium. A second organization is refused until
+computers are made somewhere that is not this container.
+
+SaaS computers are E2B: one sandbox per organization×coworker, resumed when the coworker comes back.
+Set `E2B_API_KEY` on the openbot service (Railway variables). That selects the E2B provider even
+though the image still has an in-container browser URL. Do not put that name in owner-facing copy.
+
+Pause/resume is how the same machine comes back. A running sandbox still hits the E2B plan's
+continuous limit (one hour on Hobby, 24 hours on Pro); when it expires this provider pauses rather
+than killing. Pause is not a 24-hour TTL and is not a promise the sandbox exists forever. If it has
+been killed, the owner sees that the computer is not available.
+
+Remaining operator steps: create an E2B account, build the `openbot-agent-computer` template
+(`bun server/e2b/build.ts` from the repo root with the key set), paste the key into Railway.
+
 ## Minimum size
 
 Measured on the real image, one Bot, arm64.

@@ -332,10 +332,10 @@ describe("server computer tools", () => {
       }),
     ).toBe(COMPUTER_UNAVAILABLE_LAST_ACTION);
     expect(COMPUTER_UNAVAILABLE_OWNER).not.toMatch(
-      /COMPUTER_TOKEN|AGENT_COMPUTER_URL|COMPUTER_SUPERVISOR_URL|SUPERVISOR_TOKEN/,
+      /COMPUTER_TOKEN|AGENT_COMPUTER_URL|COMPUTER_SUPERVISOR_URL|SUPERVISOR_TOKEN|E2B_API_KEY|E2B_TEMPLATE/,
     );
     expect(COMPUTER_UNAVAILABLE_LAST_ACTION).not.toMatch(
-      /COMPUTER_TOKEN|AGENT_COMPUTER_URL|COMPUTER_SUPERVISOR_URL|SUPERVISOR_TOKEN/,
+      /COMPUTER_TOKEN|AGENT_COMPUTER_URL|COMPUTER_SUPERVISOR_URL|SUPERVISOR_TOKEN|E2B_API_KEY|E2B_TEMPLATE/,
     );
   });
 
@@ -367,7 +367,7 @@ describe("server computer tools", () => {
       reason: COMPUTER_UNAVAILABLE_OWNER,
     });
     expect(JSON.stringify(result)).not.toMatch(
-      /COMPUTER_TOKEN|AGENT_COMPUTER_URL|COMPUTER_SUPERVISOR_URL/,
+      /COMPUTER_TOKEN|AGENT_COMPUTER_URL|COMPUTER_SUPERVISOR_URL|E2B_API_KEY/,
     );
     expect(events).toEqual([
       { kind: "unavailable", reason: COMPUTER_UNAVAILABLE_OWNER },
@@ -470,7 +470,7 @@ describe("server computer tools", () => {
     const { computer } = fakeComputer({
       navigate: async () => {
         throw new Error(
-          "Set COMPUTER_TOKEN and AGENT_COMPUTER_URL or COMPUTER_SUPERVISOR_URL",
+          "Set COMPUTER_TOKEN and AGENT_COMPUTER_URL or COMPUTER_SUPERVISOR_URL or E2B_API_KEY",
         );
       },
     });
@@ -483,7 +483,7 @@ describe("server computer tools", () => {
     expect(result.ok).toBe(false);
     expect(result.reason).toBe(COMPUTER_UNAVAILABLE_OWNER);
     expect(JSON.stringify(result)).not.toMatch(
-      /COMPUTER_TOKEN|AGENT_COMPUTER_URL|COMPUTER_SUPERVISOR_URL/,
+      /COMPUTER_TOKEN|AGENT_COMPUTER_URL|COMPUTER_SUPERVISOR_URL|E2B_API_KEY/,
     );
   });
 

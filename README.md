@@ -172,7 +172,8 @@ Settings worth knowing:
 | `OPENAI_BASE_URL` | OpenAI-compatible host (xAI and similar). Built-in Bots then use Chat Completions. |
 | `TAVILY_API_KEY` | Offers every Bot `search_web`. |
 | `COMPOSIO_API_KEY` | Loads the plugins catalogue. Connections are keyed by organization. |
-| `COMPUTER_SUPERVISOR_URL` | One computer per Bot instead of one shared Chromium. |
+| `E2B_API_KEY` | SaaS computers: one sandbox per organization×coworker. Railway stays on the shared Chromium until this is set. |
+| `COMPUTER_SUPERVISOR_URL` | One computer per Bot on a Docker host instead of one shared Chromium. |
 | `TENANT_PACKAGE_DIR` | Tenant YAML. Defaults to `../examples/fintech`. One package per process. |
 | `DEPLOYMENT_ID` | Names this process when two share one Intelligence project. |
 

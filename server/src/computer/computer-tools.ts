@@ -156,7 +156,7 @@ function actionActorFrom(actor: AgentActor): ActionActor {
 
 function withoutEnvNames(reason: string): string {
   if (
-    /COMPUTER_TOKEN|AGENT_COMPUTER_URL|COMPUTER_SUPERVISOR_URL|SUPERVISOR_TOKEN/i.test(
+    /COMPUTER_TOKEN|AGENT_COMPUTER_URL|COMPUTER_SUPERVISOR_URL|SUPERVISOR_TOKEN|E2B_API_KEY|E2B_TEMPLATE/i.test(
       reason,
     )
   ) {
