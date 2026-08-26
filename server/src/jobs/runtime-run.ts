@@ -76,6 +76,13 @@ export type ThreadLockClient = {
   }) => Promise<unknown>;
 };
 
+export type ThreadLockRetry = {
+  /** First acquire plus this many waits. Tests inject 2–3 so a 409 is not a hang. */
+  maxAttempts: number;
+  delaysMs: number[];
+  sleep?: (ms: number) => Promise<void>;
+};
+
 export type UnattendedCopilotRuntime = {
   runner: UnattendedRuntimeRunner;
   intelligence?: IntelligenceThreadOpener & ThreadLockClient;
@@ -89,6 +96,14 @@ export type UnattendedCopilotRuntime = {
    * on this timeout.
    */
   runnerStartupTimeoutMs?: number;
+  /**
+   * `THREAD_LOCK_FAILED` is retryable. The in-tab runner holds the same
+   * mapped thread lock and CopilotKit's handleIntelligenceRun does not
+   * cleanup on a successful complete — only on error. A follow-up job
+   * that locks immediately after the first turn therefore 409s. Retry
+   * the same thread id; do not mint a second one.
+   */
+  lockRetry?: ThreadLockRetry;
 };
 
 /** Fail the job in seconds if the Intelligence runner never joins. */
@@ -97,10 +112,67 @@ export const DEFAULT_RUNNER_STARTUP_TIMEOUT_MS = 15_000;
 export const RUNNER_JOIN_TIMEOUT =
   "Intelligence runner did not join the thread in time. The job will not stay running on a missing join.";
 
+export const THREAD_LOCK_FAILED = "THREAD_LOCK_FAILED";
+
+export const THREAD_LOCK_STILL_HELD =
+  "This thread is still locked by another runner. The job stopped instead of waiting forever.";
+
+/**
+ * Cover the default Intelligence lock TTL (20s) plus a little, so a
+ * leftover in-tab lock can expire. Tests pass a short `lockRetry`.
+ */
+export const DEFAULT_THREAD_LOCK_RETRY: ThreadLockRetry = {
+  maxAttempts: 7,
+  delaysMs: [400, 800, 1_600, 3_200, 6_400, 8_000],
+};
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object"
     ? (value as Record<string, unknown>)
     : null;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function textOf(error: unknown): string {
+  if (typeof error === "string") return error;
+  if (error instanceof Error) return error.message;
+  const record = asRecord(error);
+  return typeof record?.message === "string" ? record.message : "";
+}
+
+function codeOf(error: unknown): string {
+  const record = asRecord(error);
+  return typeof record?.code === "string" ? record.code : "";
+}
+
+function statusOf(error: unknown): number | undefined {
+  const record = asRecord(error);
+  return typeof record?.status === "number" ? record.status : undefined;
+}
+
+/**
+ * Intelligence POST `/api/threads/:id/lock` 409 `THREAD_LOCK_FAILED`
+ * (`retryable: true`). Same thread, later attempt — not a new id.
+ */
+export function isRetryableThreadLockError(error: unknown): boolean {
+  const code = codeOf(error);
+  const status = statusOf(error);
+  const text = textOf(error);
+  const retryable = asRecord(error)?.retryable;
+  if (retryable === false) return false;
+  if (code === THREAD_LOCK_FAILED) return true;
+  if (
+    status === 409 &&
+    /THREAD_LOCK_FAILED|already locked|Thread lock denied/i.test(text)
+  ) {
+    return true;
+  }
+  return /THREAD_LOCK_FAILED|Thread is already locked by another runner/i.test(
+    text,
+  );
 }
 
 /**
@@ -264,6 +336,154 @@ async function waitForRunner(
   await finished;
 }
 
+async function acquireThreadLock(
+  intelligence: ThreadLockClient,
+  params: {
+    threadId: string;
+    runId: string;
+    userId: string;
+    agentId: string;
+    ttlSeconds: number;
+    retry: ThreadLockRetry;
+  },
+): Promise<{ threadId?: string; runId?: string; joinToken?: string }> {
+  if (typeof intelligence.ɵacquireThreadLock !== "function") {
+    return { threadId: params.threadId, runId: params.runId };
+  }
+  const wait = params.retry.sleep ?? sleep;
+  const maxAttempts = Math.max(1, params.retry.maxAttempts);
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await intelligence.ɵacquireThreadLock.call(intelligence, {
+        threadId: params.threadId,
+        runId: params.runId,
+        userId: params.userId,
+        agentId: params.agentId,
+        ttlSeconds: params.ttlSeconds,
+      });
+    } catch (error) {
+      lastError = error;
+      const retryable = isRetryableThreadLockError(error);
+      if (!retryable || attempt === maxAttempts) {
+        if (retryable) {
+          const held = new Error(THREAD_LOCK_STILL_HELD);
+          (held as Error & { cause: unknown }).cause = error;
+          throw held;
+        }
+        throw error;
+      }
+      const delay =
+        params.retry.delaysMs[attempt - 1] ??
+        params.retry.delaysMs.at(-1) ??
+        1_000;
+      if (delay > 0) await wait(delay);
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(THREAD_LOCK_STILL_HELD);
+}
+
+function runIdsOf(request: { threadId: string; input?: { runId?: string } }): {
+  threadId: string;
+  runId: string;
+} {
+  const runId =
+    typeof request.input?.runId === "string" ? request.input.runId.trim() : "";
+  return { threadId: request.threadId, runId };
+}
+
+/**
+ * CopilotKit `handleIntelligenceRun` acquires the thread lock, then on a
+ * successful runner `complete` only clears the heartbeat — it does not
+ * call `ɵcleanupThreadLock`. The lock sits until TTL. A follow-up on the
+ * same mapped thread (in-tab or unattended) then 409s.
+ *
+ * Wrap the runner so the one subscribe handleIntelligenceRun already
+ * does also releases the lock. Do not subscribe a second time: the
+ * Intelligence runner is a cold Observable.
+ */
+export function withLockReleaseOnComplete<T extends UnattendedRuntimeRunner>(
+  runner: T,
+  intelligence: ThreadLockClient | undefined,
+): T {
+  const release = (ids: { threadId: string; runId: string }) => {
+    if (
+      !intelligence ||
+      typeof intelligence.ɵcleanupThreadLock !== "function"
+    ) {
+      return;
+    }
+    if (!ids.threadId || !ids.runId) return;
+    void intelligence.ɵcleanupThreadLock
+      .call(intelligence, ids)
+      .catch(() => undefined);
+  };
+
+  const wrapObservable = (
+    observable: { subscribe: (observer: RunnerObserver) => unknown },
+    ids: { threadId: string; runId: string },
+  ) => ({
+    subscribe(observer: RunnerObserver) {
+      return observable.subscribe({
+        next: observer.next,
+        error: (error) => {
+          release(ids);
+          observer.error?.(error);
+        },
+        complete: () => {
+          release(ids);
+          observer.complete?.();
+        },
+      });
+    },
+  });
+
+  const wrapped: UnattendedRuntimeRunner = {
+    run(request) {
+      return wrapObservable(runner.run(request), runIdsOf(request));
+    },
+  };
+  if (typeof runner.runWithStartupBoundary === "function") {
+    const start = runner.runWithStartupBoundary.bind(runner);
+    wrapped.runWithStartupBoundary = (request) => {
+      const started = start(request);
+      return {
+        startup: started.startup,
+        events: wrapObservable(started.events, runIdsOf(request)),
+      };
+    };
+  }
+  return wrapped as T;
+}
+
+/**
+ * CopilotRuntime.runner is a getter onto the Intelligence delegate.
+ * Assigning it throws (`TypeError: Attempted to assign to readonly
+ * property`) and takes the API down before /api/capabilities answers.
+ * Wrap run / runWithStartupBoundary on that same runner. Do not replace
+ * the runner object — stop, connect, and threads live on it.
+ */
+export function installLockReleaseOnComplete<T extends UnattendedRuntimeRunner>(
+  runner: T,
+  intelligence: ThreadLockClient | undefined,
+): T {
+  const original: UnattendedRuntimeRunner = {
+    run: runner.run.bind(runner),
+  };
+  if (typeof runner.runWithStartupBoundary === "function") {
+    original.runWithStartupBoundary =
+      runner.runWithStartupBoundary.bind(runner);
+  }
+  const wrapped = withLockReleaseOnComplete(original, intelligence);
+  runner.run = wrapped.run;
+  if (wrapped.runWithStartupBoundary) {
+    runner.runWithStartupBoundary = wrapped.runWithStartupBoundary;
+  }
+  return runner;
+}
+
 /**
  * `handleIntelligenceRun` acquires this lock before `runner.run` so the
  * Phoenix ingestion channel join is accepted. Without it the runner
@@ -278,6 +498,7 @@ async function withThreadLock<T>(
     agentId: string;
     ttlSeconds: number;
     heartbeatMs: number;
+    retry: ThreadLockRetry;
   },
   run: (canonical: { threadId: string; runId: string }) => Promise<T>,
 ): Promise<T> {
@@ -290,12 +511,13 @@ async function withThreadLock<T>(
   if (!intelligence || typeof intelligence.ɵacquireThreadLock !== "function") {
     return run({ threadId: params.threadId, runId: params.runId });
   }
-  const lock = await intelligence.ɵacquireThreadLock.call(intelligence, {
+  const lock = await acquireThreadLock(intelligence, {
     threadId: params.threadId,
     runId: params.runId,
     userId: params.userId,
     agentId: params.agentId,
     ttlSeconds: params.ttlSeconds,
+    retry: params.retry,
   });
   const threadId = lock.threadId?.trim() || params.threadId;
   const runId = lock.runId?.trim() || params.runId;
@@ -360,6 +582,7 @@ export async function runUnattendedThroughRuntime(input: {
   const heartbeatMs = (input.runtime.lockHeartbeatIntervalSeconds ?? 15) * 1000;
   const startupTimeoutMs =
     input.runtime.runnerStartupTimeoutMs ?? DEFAULT_RUNNER_STARTUP_TIMEOUT_MS;
+  const lockRetry = input.runtime.lockRetry ?? DEFAULT_THREAD_LOCK_RETRY;
   await withThreadLock(
     intelligence,
     {
@@ -369,6 +592,7 @@ export async function runUnattendedThroughRuntime(input: {
       agentId: input.agentId,
       ttlSeconds,
       heartbeatMs,
+      retry: lockRetry,
     },
     async (canonical) => {
       agent.threadId = canonical.threadId;
