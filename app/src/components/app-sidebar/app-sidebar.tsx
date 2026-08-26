@@ -5,7 +5,6 @@ import {
   IconLogout,
   IconPlug,
   IconPlus,
-  IconSearch,
   IconSettings,
   IconShieldLock,
 } from "@tabler/icons-react";
@@ -16,20 +15,14 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { Link, type LinkOptions, useNavigate } from "@tanstack/react-router";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import type * as React from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupInput,
-} from "@/components/ui/input-group";
 import {
   Sidebar,
   SidebarContent,
@@ -43,17 +36,13 @@ import {
 } from "@/components/ui/sidebar";
 import { signOutMutationOptions } from "@/lib/auth/mutations";
 import { currentUserQueryOptions } from "@/lib/auth/queries";
-import {
-  type ChannelSummary,
-  channelListQueryOptions,
-} from "@/lib/channels/queries";
-import { loopStageLabel } from "@/lib/channels/loop";
+import { channelListQueryOptions } from "@/lib/channels/queries";
+import { type GoalListStatus, normalizeGoalQuery } from "@/lib/channels/search";
 import { useChannelEvents } from "@/lib/channels/use-channel-events";
 import { appConfig } from "@/lib/generated/application-config";
 import { ownerNavItems } from "@/lib/nav/owner-nav";
-import { EASE_OUT, ENTRANCE_SECONDS } from "@/lib/motion";
 import { Button } from "../ui/button";
-import { Channel } from "./channel";
+import { GoalRoster } from "./goal-roster";
 
 const appLinkOptions = { to: "/" } satisfies LinkOptions;
 const adminLinkOptions = { to: "/admin" } satisfies LinkOptions;
@@ -78,104 +67,27 @@ function UserAvatar() {
   );
 }
 
-/**
- * Cap layout animation because `layout` measures every animated row on each reorder.
- */
-const MAX_ANIMATED_ROWS = 60;
-
-/**
- * The roster, narrowed to what the person typed.
- *
- * Matches the channel's name and the last thing said in it, because those are the two things the
- * row actually shows — searching against something invisible returns results a person cannot
- * account for. Message history beyond the last line is not here to search: it lives in the thread
- * store, and reaching for it is a server endpoint rather than a filter.
- *
- * An empty query returns the input array unchanged rather than a copy, so typing and clearing does
- * not hand `AnimatePresence` a new array identity and restage the whole list.
- */
-function matchingChannels(
-  channels: ChannelSummary[] | undefined,
-  query: string,
-): ChannelSummary[] {
-  if (!channels) {
-    return [];
-  }
-  const needle = query.trim().toLowerCase();
-  if (!needle) {
-    return channels;
-  }
-  return channels.filter((channel) =>
-    [channel.name, channel.lastMessage, channel.lastAction].some((field) =>
-      field?.toLowerCase().includes(needle),
-    ),
-  );
-}
-
-/**
- * A roster row that can animate.
- *
- * Two movements only: a channel that did not exist fades in, and a channel that was just spoken in
- * moves to the top. Nothing else animates, a roster that reacts to being read is a roster that
- * moves under the cursor.
- */
-function ChannelRow({
-  channel,
-  animateOrder,
-}: {
-  channel: ChannelSummary;
-  animateOrder: boolean;
-}) {
-  const shouldReduceMotion = useReducedMotion();
-  return (
-    <motion.div
-      animate={{ opacity: 1, transform: "translateY(0px)" }}
-      initial={{
-        opacity: 0,
-        transform: shouldReduceMotion ? "none" : "translateY(-8px)",
-      }}
-      exit={{ opacity: 0 }}
-      layout={animateOrder && !shouldReduceMotion ? "position" : false}
-      transition={{ duration: ENTRANCE_SECONDS, ease: EASE_OUT }}
-    >
-      <Channel
-        channelId={channel.id}
-        participantIds={channel.agentIds}
-        name={channel.name}
-        lastMessage={channel.lastAction ?? channel.lastMessage ?? undefined}
-        lastMessageAt={
-          channel.lastActionAt
-            ? relativeTime(channel.lastActionAt)
-            : channel.lastMessageAt
-              ? relativeTime(channel.lastMessageAt)
-              : undefined
-        }
-        goalStatus={channel.goalStatus}
-        loopStage={loopStageLabel(channel.loopStage)}
-      />
-    </motion.div>
-  );
-}
-
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { data: currentUser } = useQuery(currentUserQueryOptions());
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const signOut = useMutation(signOutMutationOptions(queryClient));
-  const channels = useInfiniteQuery(channelListQueryOptions());
+  /*
+   * Search and status live here, not on the URL, because the sidebar stays mounted while a goal
+   * opens and closes. Returning from a goal detail therefore keeps the same query and filter.
+   */
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState<GoalListStatus>("all");
+  const [query, setQuery] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => setQuery(normalizeGoalQuery(search)), 250);
+    return () => clearTimeout(timer);
+  }, [search]);
+  const channels = useInfiniteQuery(
+    channelListQueryOptions({ search: query, status }),
+  );
   // One socket for the app, opened where the roster is kept live.
   useChannelEvents();
-  const [search, setSearch] = useState("");
-  const searching = search.trim().length > 0;
-  const visibleChannels = matchingChannels(channels.data, search);
-  /*
-   * FILTERING DOES NOT ANIMATE. Rows exit and relayout on every keystroke otherwise, which is a
-   * list thrashing under somebody who is still typing — and the moving target is the very thing
-   * they are trying to read. Order animation is for a channel that was just spoken in, which is
-   * occasional; this is not.
-   */
-  const animateOrder =
-    !searching && (channels.data?.length ?? 0) <= MAX_ANIMATED_ROWS;
 
   const handleSignOut = async () => {
     await signOut.mutateAsync();
@@ -217,47 +129,20 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarContent className="scroll-fade-b max-md:flex-none max-md:overflow-visible">
         <SidebarMenu>
           <SidebarGroup className="gap-px">
-            <SidebarMenuItem>
-              <InputGroup className="bg-background text-sm rounded-lg h-9">
-                <InputGroupInput
-                  aria-label="Search goals"
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search..."
-                  value={search}
-                />
-                <InputGroupAddon>
-                  <IconSearch />
-                </InputGroupAddon>
-              </InputGroup>
-            </SidebarMenuItem>
-            <div className="w-full h-2" />
-            {/*
-             * TWO DIFFERENT NOTHINGS, AND SAYING THE WRONG ONE IS ALARMING. A roster nobody has
-             * used yet needs telling how to start. A roster that simply does not match what is in
-             * the box has to say so and quote it back — told "you don't have channels yet" while
-             * holding a typo, a person reads their conversations as gone.
-             */}
-            {searching && visibleChannels.length === 0 ? (
-              <p className="px-2 py-3 text-sm text-muted-foreground">
-                No goals match your search. Nothing here is named “
-                {search.trim()}”, and nobody has said it recently either.
-              </p>
-            ) : null}
-            {!searching && channels.data?.length === 0 ? (
-              <p className="px-2 py-3 text-sm text-muted-foreground">
-                You don't have goals yet. Ask LimitlessAI what the business
-                should get done.
-              </p>
-            ) : null}
-            <AnimatePresence initial={false}>
-              {visibleChannels.map((channel) => (
-                <ChannelRow
-                  key={channel.id}
-                  animateOrder={animateOrder}
-                  channel={channel}
-                />
-              ))}
-            </AnimatePresence>
+            <GoalRoster
+              channels={channels.data}
+              hasNextPage={channels.hasNextPage}
+              isError={channels.isError}
+              isFetchingNextPage={channels.isFetchingNextPage}
+              isPending={channels.isPending}
+              isPlaceholderData={channels.isPlaceholderData}
+              onLoadMore={() => void channels.fetchNextPage()}
+              onSearchChange={setSearch}
+              onStatusChange={setStatus}
+              query={query}
+              search={search}
+              status={status}
+            />
           </SidebarGroup>
         </SidebarMenu>
       </SidebarContent>
@@ -361,29 +246,5 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>
-  );
-}
-
-const RELATIVE_UNITS = [
-  { limit: 60_000, divisor: 1_000, unit: "second" },
-  { limit: 3_600_000, divisor: 60_000, unit: "minute" },
-  { limit: 86_400_000, divisor: 3_600_000, unit: "hour" },
-  { limit: 604_800_000, divisor: 86_400_000, unit: "day" },
-  { limit: Number.POSITIVE_INFINITY, divisor: 604_800_000, unit: "week" },
-] as const;
-
-const relativeFormat = new Intl.RelativeTimeFormat(undefined, {
-  numeric: "auto",
-});
-
-/** Locale-aware relative timestamp, e.g. "2 minutes ago". */
-function relativeTime(iso: string) {
-  const elapsed = Date.now() - new Date(iso).getTime();
-  const scale =
-    RELATIVE_UNITS.find(({ limit }) => Math.abs(elapsed) < limit) ??
-    RELATIVE_UNITS[RELATIVE_UNITS.length - 1];
-  return relativeFormat.format(
-    -Math.round(elapsed / scale.divisor),
-    scale.unit,
   );
 }

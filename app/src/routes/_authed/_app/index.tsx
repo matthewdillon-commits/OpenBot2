@@ -108,41 +108,53 @@ function RouteComponent() {
             What should the business get done?
           </p>
         ) : (
-          <ul className="mt-3 divide-y divide-border rounded-lg border border-border bg-card">
-            {goals.data?.map((goal) => (
-              <li key={goal.id}>
-                <Link
-                  className="flex flex-col gap-0.5 px-3 py-2.5 outline-none hover:bg-foreground/5 focus-visible:ring-3 focus-visible:ring-ring/50"
-                  params={{ channelId: goal.id }}
-                  to="/channel/$channelId"
-                >
-                  <div className="flex items-baseline justify-between gap-3">
-                    <span className="truncate text-sm tracking-tight">
-                      {goal.name}
-                    </span>
-                    <span className="shrink-0 text-[12px] text-muted-foreground/70 tabular-nums">
-                      {goal.lastActionAt
-                        ? relativeTime(goal.lastActionAt)
-                        : goal.lastMessageAt
-                          ? relativeTime(goal.lastMessageAt)
-                          : relativeTime(goal.createdAt)}
-                    </span>
-                  </div>
-                  <div className="flex h-4 items-center gap-1.5 text-[12px] leading-4 text-muted-foreground">
-                    <span className="shrink-0">{goal.goalStatus}</span>
-                    {loopStageLabel(goal.loopStage) ? (
-                      <span className="shrink-0 text-muted-foreground/70">
-                        {loopStageLabel(goal.loopStage)}
+          <>
+            <ul className="mt-3 divide-y divide-border rounded-lg border border-border bg-card">
+              {goals.data?.map((goal) => (
+                <li key={goal.id}>
+                  <Link
+                    className="flex flex-col gap-0.5 px-3 py-2.5 outline-none hover:bg-foreground/5 focus-visible:ring-3 focus-visible:ring-ring/50"
+                    params={{ channelId: goal.id }}
+                    to="/channel/$channelId"
+                  >
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="truncate text-sm tracking-tight">
+                        {goal.name}
                       </span>
-                    ) : null}
-                    <span className="min-w-0 truncate">
-                      {goal.lastAction ?? goal.lastMessage}
-                    </span>
-                  </div>
-                </Link>
-              </li>
-            ))}
-          </ul>
+                      <span className="shrink-0 text-[12px] text-muted-foreground/70 tabular-nums">
+                        {goal.lastActionAt
+                          ? relativeTime(goal.lastActionAt)
+                          : goal.lastMessageAt
+                            ? relativeTime(goal.lastMessageAt)
+                            : relativeTime(goal.createdAt)}
+                      </span>
+                    </div>
+                    <div className="flex h-4 items-center gap-1.5 text-[12px] leading-4 text-muted-foreground">
+                      <span className="shrink-0">{goal.goalStatus}</span>
+                      {loopStageLabel(goal.loopStage) ? (
+                        <span className="shrink-0 text-muted-foreground/70">
+                          {loopStageLabel(goal.loopStage)}
+                        </span>
+                      ) : null}
+                      <span className="min-w-0 truncate">
+                        {goal.lastAction ?? goal.lastMessage}
+                      </span>
+                    </div>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+            {goals.hasNextPage ? (
+              <button
+                className="mt-2 w-full rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-foreground/5"
+                disabled={goals.isFetchingNextPage}
+                onClick={() => void goals.fetchNextPage()}
+                type="button"
+              >
+                {goals.isFetchingNextPage ? "Loading…" : "Show more"}
+              </button>
+            ) : null}
+          </>
         )}
       </div>
     </div>

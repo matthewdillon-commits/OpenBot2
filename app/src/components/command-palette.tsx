@@ -1,6 +1,6 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogBody,
@@ -14,6 +14,7 @@ import {
   type ChannelSummary,
   channelListQueryOptions,
 } from "@/lib/channels/queries";
+import { goalEmptyKind, normalizeGoalQuery } from "@/lib/channels/search";
 
 /**
  * Cmd-K / Ctrl-K. Goals are the customer door. “Rooms” is the operator door
@@ -22,10 +23,15 @@ import {
 export function CommandPalette() {
   const { data: currentUser } = useQuery(currentUserQueryOptions());
   const canSeeTheWork = currentUser?.canSeeTheWork === true;
-  const channels = useInfiniteQuery(channelListQueryOptions());
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => setQuery(normalizeGoalQuery(search)), 250);
+    return () => clearTimeout(timer);
+  }, [search]);
+  const channels = useInfiniteQuery(channelListQueryOptions({ search: query }));
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -42,19 +48,19 @@ export function CommandPalette() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const goals = useMemo(() => {
-    const list = channels.data ?? [];
-    const needle = query.trim().toLowerCase();
-    if (!needle) return list;
-    return list.filter((goal) =>
-      [goal.name, goal.lastAction, goal.lastMessage].some((field) =>
-        field?.toLowerCase().includes(needle),
-      ),
-    );
-  }, [channels.data, query]);
+  const goals = channels.data ?? [];
+  const emptyKind = goalEmptyKind({
+    pending: channels.isPending,
+    placeholder: channels.isPlaceholderData,
+    exiting: false,
+    rowCount: goals.length,
+    query,
+    status: "all",
+  });
 
   const go = (goal: ChannelSummary, work: boolean) => {
     setOpen(false);
+    setSearch("");
     setQuery("");
     void navigate({
       params: { channelId: goal.id },
@@ -67,7 +73,10 @@ export function CommandPalette() {
     <Dialog
       onOpenChange={(next) => {
         setOpen(next);
-        if (!next) setQuery("");
+        if (!next) {
+          setSearch("");
+          setQuery("");
+        }
       }}
       open={open}
     >
@@ -79,9 +88,9 @@ export function CommandPalette() {
           <Input
             aria-label="Search goals"
             autoFocus
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => setSearch(event.target.value)}
             placeholder="Search goals…"
-            value={query}
+            value={search}
           />
           {channels.isPending ? null : channels.error ? (
             <p className="mt-3 text-sm text-destructive" role="alert">
@@ -93,11 +102,15 @@ export function CommandPalette() {
                 <h3 className="px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   Goals
                 </h3>
-                {goals.length === 0 ? (
+                {emptyKind === "no-goals" ? (
+                  <p className="px-1 py-2 text-sm text-muted-foreground">
+                    You don't have goals yet.
+                  </p>
+                ) : emptyKind === "no-matches" ? (
                   <p className="px-1 py-2 text-sm text-muted-foreground">
                     No goals match.
                   </p>
-                ) : (
+                ) : goals.length === 0 ? null : (
                   <ul className="mt-1">
                     {goals.map((goal) => (
                       <li key={`goal-${goal.id}`}>
@@ -122,11 +135,15 @@ export function CommandPalette() {
                   <h3 className="px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                     Rooms
                   </h3>
-                  {goals.length === 0 ? (
+                  {emptyKind === "no-goals" ? (
+                    <p className="px-1 py-2 text-sm text-muted-foreground">
+                      You don't have rooms yet.
+                    </p>
+                  ) : emptyKind === "no-matches" ? (
                     <p className="px-1 py-2 text-sm text-muted-foreground">
                       No rooms match.
                     </p>
-                  ) : (
+                  ) : goals.length === 0 ? null : (
                     <ul className="mt-1">
                       {goals.map((goal) => (
                         <li key={`room-${goal.id}`}>

@@ -14,6 +14,16 @@ describe("coworker query keys", () => {
       "detail",
       "channel_1",
     ]);
+    expect(channelKeys.lists()).toEqual(["channels", "list"]);
+    expect(channelKeys.list()).toEqual([
+      "channels",
+      "list",
+      { search: "", status: "all" },
+    ]);
+    expect(
+      channelKeys.list({ search: "  Ada  ", status: "completed" }),
+    ).toEqual(["channels", "list", { search: "Ada", status: "completed" }]);
+    expect(channelKeys.list()[0]).toBe(channelKeys.all[0]);
   });
 });
 
