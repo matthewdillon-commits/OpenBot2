@@ -3,15 +3,17 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { AgentActor, AgentProfile } from "../src/agents/profile-types";
 import type { AgentChannel } from "../src/channels/routes";
-import { createLoadToolsForActor } from "../src/jobs/tools";
+import type { EnqueueUnattendedInput } from "../src/jobs/enqueue";
 import {
   SPECIALIST_REFUSALS,
   specialistCrmOrgId,
+  specialistGetsComputer,
   startSpecialist,
 } from "../src/jobs/specialist";
 import { startSpecialistTool } from "../src/jobs/specialist-tool";
-import type { EnqueueUnattendedInput } from "../src/jobs/enqueue";
 import type { UnattendedJob } from "../src/jobs/store";
+import { createLoadToolsForActor } from "../src/jobs/tools";
+import { jsonSchemaForLlmTool } from "../src/plugins/llm-schema";
 import { REFUSAL_MARKER } from "../src/plugins/refusal";
 
 const now = new Date("2026-08-25T16:00:00.000Z");
@@ -161,7 +163,30 @@ describe("startSpecialist", () => {
     expect(started.enqueueCalls[0]?.prompt).toContain(
       "You share this organization’s CRM",
     );
+    expect(started.enqueueCalls[0]?.prompt).toContain("computer_navigate");
+    expect(started.enqueueCalls[0]?.prompt).not.toContain(
+      "The parent did not hand you a computer",
+    );
+    expect(started.enqueueCalls[0]?.withComputer).toBeUndefined();
     expect(started.enqueueCalls[0]?.expectedThreadId).toBe("thread-existing");
+  });
+
+  test("does not strip the computer unless withComputer is explicitly false", async () => {
+    const handed = deps();
+    const withheld = deps();
+    const omitted = await startSpecialist(baseInput, handed);
+    const explicitFalse = await startSpecialist(
+      { ...baseInput, withComputer: false },
+      withheld,
+    );
+    expect(omitted.ok).toBe(true);
+    expect(explicitFalse.ok).toBe(true);
+    expect(handed.enqueueCalls[0]?.withComputer).toBeUndefined();
+    expect(handed.enqueueCalls[0]?.prompt).toContain("computer_navigate");
+    expect(withheld.enqueueCalls[0]?.withComputer).toBe(false);
+    expect(withheld.enqueueCalls[0]?.prompt).toContain(
+      "The parent did not hand you a computer",
+    );
   });
 
   test("a skill/playbook specialist still enqueues on the org CRM", async () => {
@@ -245,6 +270,15 @@ describe("startSpecialist", () => {
   });
 });
 
+describe("specialistGetsComputer", () => {
+  test("is true unless the parent explicitly withheld the computer", () => {
+    expect(specialistGetsComputer()).toBe(true);
+    expect(specialistGetsComputer(undefined)).toBe(true);
+    expect(specialistGetsComputer(true)).toBe(true);
+    expect(specialistGetsComputer(false)).toBe(false);
+  });
+});
+
 describe("start_specialist tool", () => {
   test("refuses when this turn has no thread", async () => {
     const calls: unknown[] = [];
@@ -307,5 +341,62 @@ describe("start_specialist tool", () => {
       true,
     );
     expect(leftoverTools.some((tool) => tool.name === "crm_search")).toBe(true);
+  });
+
+  test("omitted with_computer hands the specialist the computer; false withholds it", async () => {
+    const calls: Array<{ withComputer?: boolean }> = [];
+    const tool = startSpecialistTool({
+      actor,
+      parentCoworkerId: "general-assistant",
+      runContext: {
+        channelId: "channel_1",
+        threadId: "thread-existing",
+        goalId: "channel_1",
+      },
+      start: async (input) => {
+        calls.push({ withComputer: input.withComputer });
+        return {
+          ok: true,
+          coworkerId: "knowledge",
+          jobId: "job_1",
+          orgId: "org_acme",
+          channelId: "channel_1",
+          threadId: "thread-existing",
+          skillInstructions: [],
+        };
+      },
+    });
+    const omitted = await tool.execute({
+      task: "Research Ada.",
+      specialist_id: "knowledge",
+    });
+    expect(omitted).toContain("Started specialist knowledge");
+    expect(calls[0]?.withComputer).not.toBe(false);
+
+    const withheld = await tool.execute({
+      task: "Research Ada.",
+      specialist_id: "knowledge",
+      with_computer: false,
+    });
+    expect(withheld).toContain("Started specialist knowledge");
+    expect(calls[1]?.withComputer).toBe(false);
+  });
+
+  test("the schema the model sees defaults with_computer to true", () => {
+    const tool = startSpecialistTool({
+      actor,
+      parentCoworkerId: "general-assistant",
+      start: async () => ({
+        ok: false,
+        error: "should not run",
+        status: 400,
+      }),
+    });
+    const schema = jsonSchemaForLlmTool(tool.parameters);
+    const withComputer = (
+      schema.properties as Record<string, { default?: unknown }>
+    ).with_computer;
+    expect(withComputer?.default).toBe(true);
+    expect(tool.description).toContain("with_computer to false");
   });
 });

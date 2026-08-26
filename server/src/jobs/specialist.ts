@@ -11,7 +11,7 @@ import type { ChannelStore } from "../channels/routes";
 import { agentIsOrchestrator } from "../orchestrator";
 import { orgIdOf } from "../orgs/constants";
 import type { SpendStore } from "../orgs/spend";
-import { enqueueUnattendedJob, type EnqueueUnattendedResult } from "./enqueue";
+import { type EnqueueUnattendedResult, enqueueUnattendedJob } from "./enqueue";
 import type { JobStore } from "./store";
 
 export const SPECIALIST_REFUSALS = {
@@ -71,6 +71,10 @@ export type StartSpecialistOk = {
 export type StartSpecialistResult =
   | StartSpecialistOk
   | { ok: false; error: string; status: 400 | 404 | 409 | 402 };
+
+export function specialistGetsComputer(withComputer?: boolean): boolean {
+  return withComputer !== false;
+}
 
 /**
  * The CRM book a specialist reads is the organization’s, never a private copy.
@@ -192,10 +196,9 @@ export async function startSpecialist(
     }
   }
 
-  const computerNote =
-    input.withComputer === false
-      ? "The parent did not hand you a computer for this chunk. Use CRM, search, and knowledge."
-      : "The parent handed you this chunk including a computer when this deployment has one. Use it when the work needs the browser, files, or shell.";
+  const computerNote = specialistGetsComputer(input.withComputer)
+    ? "The parent handed you this chunk including a computer when this deployment has one. Use computer_navigate, snapshot, click and type when the work needs a live website, files, or the shell. Do not ask the owner to paste pages."
+    : "The parent did not hand you a computer for this chunk. Use CRM, search, and knowledge.";
 
   const prompt = [
     "You are a specialist on this goal. When you finish, state the result in one sentence for the orchestrator.",
@@ -216,6 +219,9 @@ export async function startSpecialist(
     actorRole: actorRole(input.actor),
     prompt,
     ...(skillInstructions.length > 0 ? { skillInstructions } : {}),
+    ...(specialistGetsComputer(input.withComputer)
+      ? {}
+      : { withComputer: false }),
     expectedThreadId: room.threadId,
     // Use the room we just updated. A second get can lag a stale fake, and
     // enqueue refuses a coworker who is not yet in agentIds.

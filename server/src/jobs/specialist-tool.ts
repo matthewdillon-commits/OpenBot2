@@ -33,9 +33,9 @@ const parameters = z.object({
     ),
   with_computer: z
     .boolean()
-    .optional()
+    .default(true)
     .describe(
-      "Whether to hand the specialist computer work. Defaults to true when this deployment has a computer.",
+      "Hand the specialist this deployment's computer (browser, files, shell). Defaults to true. Set false only to withhold it.",
     ),
 });
 
@@ -48,7 +48,7 @@ export function startSpecialistTool(options: {
   return {
     name: "start_specialist",
     description:
-      "Start a finite specialist on this goal. They join this goal’s room, share the organization’s CRM, and continue after the tab closes. Use this instead of asking the owner to pick a worker from a roster.",
+      "Start a finite specialist on this goal. They join this goal’s room, share the organization’s CRM, get this computer unless you set with_computer to false, and continue after the tab closes. Use this instead of asking the owner to pick a worker from a roster.",
     parameters,
     execute: async (args) => {
       const parsed = parameters.safeParse(args);

@@ -3,6 +3,7 @@
  * for durable threads and memory. Configuration the product cannot function without belongs at the
  * boot boundary.
  */
+import { sameImageComputerToken } from "../../shared/computer-token";
 import { singleUserEnabled } from "./auth/dev-actor";
 import type { ActionPolicy } from "./computer/policy";
 import { parseActionPolicy } from "./computer/policy-store";
@@ -541,6 +542,11 @@ function runtimeCapabilities(environment: Environment): RuntimeCapabilities {
   };
 }
 
+function sameImageComputerSecret(environment: Environment): string | undefined {
+  const key = optional(environment, "KEY_ENCRYPTION_KEY");
+  return key ? sameImageComputerToken(key) : undefined;
+}
+
 function computerConfig(environment: Environment): ComputerConfig | undefined {
   const supervisorAddress = optional(environment, "COMPUTER_SUPERVISOR_URL");
   const sharedAddress = optional(environment, "AGENT_COMPUTER_URL");
@@ -552,8 +558,15 @@ function computerConfig(environment: Environment): ComputerConfig | undefined {
    * The secret the computers require. Without it every call to a computer is refused, and that is the
    * intended failure: `agent-computer` drives a browser holding real logins and must not answer
    * unauthenticated callers that can reach its port.
+   *
+   * An empty token on a same-image boot is the silent break: tools are offered (the URL is set in
+   * the Dockerfile) and every call is 401. When the operator did not set COMPUTER_TOKEN, derive one
+   * from KEY_ENCRYPTION_KEY — already required to boot, and already in this container next to the
+   * computer process, which derives the same digest.
    */
-  const computerToken = optional(environment, "COMPUTER_TOKEN");
+  const computerToken =
+    optional(environment, "COMPUTER_TOKEN") ??
+    sameImageComputerSecret(environment);
 
   const allowPrivateHosts =
     optional(environment, "AGENT_COMPUTER_ALLOW_PRIVATE_HOSTS") === "true";

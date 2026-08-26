@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { sameImageComputerToken } from "../../shared/computer-token";
 import { configuredAuthProviders, loadConfig } from "../src/config";
 
 // Intelligence is part of the MINIMUM contract, so it belongs in the base environment every other
@@ -505,6 +506,26 @@ describe("deployment configuration", () => {
       token: "computer-token",
       allowPrivateHosts: false,
     });
+  });
+
+  test("derives a same-image computer token when COMPUTER_TOKEN is empty", () => {
+    const config = loadConfig({
+      ...baseEnvironment,
+      AGENT_COMPUTER_URL: "http://localhost:4100",
+    });
+    expect(config.computer?.provider).toBe("shared");
+    expect(config.computer?.token).toBe(
+      sameImageComputerToken(baseEnvironment.KEY_ENCRYPTION_KEY),
+    );
+  });
+
+  test("an explicit COMPUTER_TOKEN wins over the same-image digest", () => {
+    const config = loadConfig({
+      ...baseEnvironment,
+      AGENT_COMPUTER_URL: "http://localhost:4100",
+      COMPUTER_TOKEN: "operator-set-token",
+    });
+    expect(config.computer?.token).toBe("operator-set-token");
   });
 
   test("leaves computers off when no provider address is configured", () => {

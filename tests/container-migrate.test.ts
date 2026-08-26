@@ -45,6 +45,27 @@ test("starts the API only after migrate has finished", () => {
   ).toBe(true);
 });
 
+test("starts the worker after the computer, not only after migrate", () => {
+  expect(
+    existsSync(
+      join(repositoryRoot, "docker/s6/s6-rc.d/worker/dependencies.d/computer"),
+    ),
+  ).toBe(true);
+  expect(
+    existsSync(
+      join(
+        repositoryRoot,
+        "docker/s6/s6-rc.d/worker/dependencies.d/computer-token",
+      ),
+    ),
+  ).toBe(true);
+  expect(
+    existsSync(
+      join(repositoryRoot, "docker/s6/s6-rc.d/api/dependencies.d/computer"),
+    ),
+  ).toBe(true);
+});
+
 /**
  * s6 compiles every directory under s6-rc.d, but it only launches names listed
  * in user/contents.d. The worker service existed while jobs stayed queued

@@ -22,21 +22,18 @@ import { crmTools } from "../crm/tools";
 import type { Database } from "../db/client";
 import { askerFor, type KnowledgeSearch } from "../knowledge/search";
 import { knowledgeSearchTool } from "../knowledge/tool";
+import { currentGoalActionScope, runInGoalActionScope } from "../loop/scope";
+import { agentIsOrchestrator } from "../orchestrator";
 import { orgIdOf } from "../orgs/constants";
 import { REFUSAL_MARKER } from "../plugins/refusal";
 import type { PluginStore } from "../plugins/store";
 import { type GrantedTool, grantedTools } from "../plugins/tools";
 import type { WebSearch } from "../web-search/tavily";
 import { webSearchTool } from "../web-search/tool";
-import type { JobStore } from "./store";
 import type { ToolRunContext } from "./run-context";
-import {
-  type StartSpecialistInput,
-  type StartSpecialistResult,
-} from "./specialist";
+import type { StartSpecialistInput, StartSpecialistResult } from "./specialist";
 import { startSpecialistTool } from "./specialist-tool";
-import { agentIsOrchestrator } from "../orchestrator";
-import { currentGoalActionScope, runInGoalActionScope } from "../loop/scope";
+import type { JobStore } from "./store";
 
 export type UserOAuthLookup = {
   hasConnection: (input: {
@@ -84,6 +81,24 @@ export function isFrontendOnlyTool(name: string): boolean {
 
 export function serverSideToolsOnly(tools: GrantedTool[]): GrantedTool[] {
   return tools.filter((tool) => !isFrontendOnlyTool(tool.name));
+}
+
+/**
+ * Whether this actor is offered computer_* on this turn.
+ *
+ * Gateway present, browser policy on, and the parent did not explicitly
+ * withhold the computer (`withComputer === false`).
+ */
+export function computerToolsOffered(input: {
+  gateway?: ComputerGateway | null;
+  policy: ActionPolicy | undefined | null;
+  withComputer?: boolean;
+}): boolean {
+  return Boolean(
+    input.gateway &&
+      isBrowserEnabled(input.policy) &&
+      input.withComputer !== false,
+  );
 }
 
 const USER_OAUTH_REFUSAL = `${REFUSAL_MARKER} This tool needs a connected account for the acting user, and none is connected.`;
@@ -176,8 +191,9 @@ function wrapGoalScope(
  * What one Bot may call, for an explicit actor, with no Request.
  *
  * Same list as an open-tab turn: granted MCP, knowledge when there are documents, `search_web`
- * when a Tavily key exists, CRM, and computer tools when the gateway is configured and the
- * browser is on. The gateway still decides every acting call.
+ * when a Tavily key exists, CRM, and computer tools when the gateway is configured, the
+ * browser is on, and the parent did not set withComputer false. The gateway still decides every
+ * acting call.
  */
 export function createLoadToolsForActor(deps: LoadToolsForActorDeps) {
   return (actorId: string, orgId?: string, runContext?: ToolRunContext) =>
@@ -226,7 +242,14 @@ export function createLoadToolsForActor(deps: LoadToolsForActorDeps) {
           publicOrigin: deps.publicOrigin,
         }),
       );
-      if (deps.computerGateway && isBrowserEnabled(deps.policyFor(scoped))) {
+      if (
+        deps.computerGateway &&
+        computerToolsOffered({
+          gateway: deps.computerGateway,
+          policy: deps.policyFor(scoped),
+          withComputer: runContext?.withComputer,
+        })
+      ) {
         extra.push(
           ...computerTools({
             computer: deps.computerGateway,
@@ -237,16 +260,20 @@ export function createLoadToolsForActor(deps: LoadToolsForActorDeps) {
               orgId: scoped,
             },
             onNeedsYou: async (event) => {
-              if (!deps.jobStore) return;
               const lastAction = lastActionForNeedsYou(event);
-              const paused = await deps.jobStore.markNeedsYou({
-                orgId: scoped,
-                coworkerId: botId,
-                actingUserId: actorId,
-                lastAction,
-              });
+              let paused: Array<{ channelId: string }> = [];
+              if (deps.jobStore) {
+                paused = await deps.jobStore.markNeedsYou({
+                  orgId: scoped,
+                  coworkerId: botId,
+                  actingUserId: actorId,
+                  lastAction,
+                });
+              }
               if (!deps.recordActivity) return;
-              for (const job of paused) {
+              const channelIds = new Set(paused.map((job) => job.channelId));
+              if (runContext?.channelId) channelIds.add(runContext.channelId);
+              for (const channelId of channelIds) {
                 try {
                   await deps.recordActivity({
                     actor: {
@@ -254,7 +281,7 @@ export function createLoadToolsForActor(deps: LoadToolsForActorDeps) {
                       role: "user",
                       orgId: scoped,
                     },
-                    channelId: job.channelId,
+                    channelId,
                     activity: {
                       text: lastAction,
                       agentId: botId,

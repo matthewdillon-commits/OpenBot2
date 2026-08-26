@@ -534,6 +534,19 @@ describe("unattended thread persist", () => {
       result: { text: "Ada is at Acme.", persisted: false },
     });
   });
+
+  test("job payload keeps withComputer only when it is false", () => {
+    expect(asJobPayload({ prompt: "Find Ada.", withComputer: false })).toEqual({
+      prompt: "Find Ada.",
+      withComputer: false,
+    });
+    expect(asJobPayload({ prompt: "Find Ada.", withComputer: true })).toEqual({
+      prompt: "Find Ada.",
+    });
+    expect(asJobPayload({ prompt: "Find Ada." })).toEqual({
+      prompt: "Find Ada.",
+    });
+  });
 });
 
 describe("first-contact thread open", () => {

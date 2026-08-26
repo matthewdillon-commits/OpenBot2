@@ -323,7 +323,19 @@ export async function createUnattendedWorkerRuntime(
           await channelStore.recordActivity(activityActor, channelId, activity);
         },
         loadAgents,
-        loadTools: loadToolsForActor,
+        loadTools: (actorId, orgId, runContext) =>
+          loadToolsForActor(
+            actorId,
+            orgId,
+            runContext
+              ? {
+                  ...runContext,
+                  ...(job.payload.withComputer === false
+                    ? { withComputer: false as const }
+                    : {}),
+                }
+              : runContext,
+          ),
         signRun: (actorId, orgId) => (botId, runId) =>
           mintRunAssertion(
             { botId, actorId, runId, orgId: orgIdOf({ orgId }) },
@@ -341,7 +353,9 @@ export async function createUnattendedWorkerRuntime(
         timeoutMs: config.unattendedJobTimeoutMs,
         threadWaitMs: 15_000,
         computerGuidance:
-          config.computer && isBrowserEnabled(policyStore.get(job.orgId))
+          config.computer &&
+          isBrowserEnabled(policyStore.get(job.orgId)) &&
+          job.payload.withComputer !== false
             ? COMPUTER_GUIDANCE
             : undefined,
         goalLoopGuidance: orchestratorContextFromLoop(loop) || undefined,

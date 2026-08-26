@@ -1,5 +1,6 @@
 import { serve } from "bun";
 import type { Page } from "playwright";
+import { sameImageComputerToken } from "../../shared/computer-token";
 import { parseAriaSnapshot, type SnapshotElement } from "./aria-snapshot";
 import { isOpenPath, matchesToken, offeredToken } from "./authorisation";
 import { isPlainBotId } from "./bot-id";
@@ -62,7 +63,11 @@ import {
  * Refusing to start without a token makes missing authentication a deployment failure, never an open
  * computer.
  */
-const COMPUTER_TOKEN = process.env.COMPUTER_TOKEN?.trim();
+const COMPUTER_TOKEN =
+  process.env.COMPUTER_TOKEN?.trim() ||
+  (process.env.KEY_ENCRYPTION_KEY?.trim()
+    ? sameImageComputerToken(process.env.KEY_ENCRYPTION_KEY.trim())
+    : "");
 if (!COMPUTER_TOKEN) {
   console.error(
     "COMPUTER_TOKEN is not set. This process drives a browser holding real logins and will not start without the secret its caller must present.",

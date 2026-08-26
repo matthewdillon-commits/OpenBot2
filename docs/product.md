@@ -229,9 +229,10 @@ turn is told the last decision and outcome.
 **Two doors.** Home is Composer to LimitlessAI plus Goals (the existing
 channel list: name, Active | Needs you | Done, last action, time). Opening a
 goal talks to the orchestrator, not a worker. The orchestrator starts a
-finite specialist with `start_specialist` (a skill/playbook or a coworker,
-including one with a computer). That call enqueues via `enqueueUnattendedJob`
-on the same runner. Specialists share the organization’s CRM. “See the work”
+finite specialist with `start_specialist` (a skill/playbook or a coworker).
+They get this deployment’s computer unless the parent sets `with_computer`
+to false. That call enqueues via `enqueueUnattendedJob` on the same runner.
+Specialists share the organization’s CRM. “See the work”
 (deployment admin, or org owner/admin) opens the A2A room for this goal:
 members, jobs, computers, traces. Cmd-K Rooms is the same door for power
 users. A typical owner does not see Sales / Website / Marketing / Customer /
@@ -262,14 +263,22 @@ Once a turn has started — in the tab or from a claimed job:
   when the computer gateway is configured and the browser is on. Built-in
   Bots may take twenty of those steps in one run. A remote AG-UI Bot calls
   the same list back through `/api/agent-tools/call`. An unattended job uses
-  this same list.
+  this same list (`createLoadToolsForActor` in the API process and in the
+  worker bootstrap). Specialists spawned on a goal get those computer tools
+  by default; the parent withholds them only by setting `with_computer`
+  false. When a job needs a live website (research a market, open a company
+  page, fill a form), the orchestrator and packaged workers call
+  `computer_navigate` / snapshot / click / type — `search_web` is extra
+  context, not a substitute, and they do not ask the owner to paste the page.
 - **The watch tab renders computer tools; it does not execute them.** Click,
   type, snapshot, files, and the shell go through `ComputerGateway` on the
   server. The open tab paints the watch pane and Activity lines. Close it and
   the coworker still acts. Human-in-the-loop (login, 2FA, a secret) asks on
   the computer, persists `jobs.needs_you`, notifies the channel, and returns
-  immediately — it does not wait in the tab. Gallery and sandboxed components
-  still execute in the browser.
+  immediately — it does not wait in the tab. A computer that is not running
+  is the same pause: Needs you, last action “the computer is not available,”
+  with no environment-variable names in owner copy. Gallery and sandboxed
+  components still execute in the browser.
 - **The transcript is not the Activity tab.** Activity is held in the browser
   for the open conversation and is gone on reload. The audit trail is the
   record that survives. The roster preview is `channels.lastMessage`, updated
@@ -279,8 +288,9 @@ So: a person can send “research these two people, open their sites, and write
 the CRM” with Send-and-go, close the tab, and the worker still runs those
 server tools — including the computer. A standing cron, a signed webhook POST,
 or an inbound email to a mapped mailbox starts the same job after the tab is
-closed. A login or secret pauses as Needs you; the ask stays on the computer
-if the tab is closed. The first composer send and the first unattended job
+closed. A login, a secret, or a computer that is not running pauses as
+Needs you; the ask stays on the computer if the tab is closed. The first
+composer send and the first unattended job
 open the mapped Intelligence thread through CopilotRuntime and leave the
 assistant reply on it. A second job attaches to that same id. Reopen the
 channel: the transcript is that thread.
@@ -383,8 +393,11 @@ and no second runner.
 | Owner workspace seats / SSO / spend | `app/src/routes/_authed/_app/o.tsx` |
 | Turns start in the app or from a standing trigger | `app/src/components/channels/channel-chat.tsx` (`useAgent`); `server/src/jobs/enqueue.ts` |
 | Computer tools execute on the server | `server/src/computer/computer-tools.ts`, `server/src/jobs/tools.ts` `loadToolsForActor` |
+| Worker and API share `loadToolsForActor` | `server/src/index.ts`, `server/src/jobs/bootstrap.ts` `createLoadToolsForActor` |
+| Live web uses `computer_*`, not only `search_web` | `examples/fintech/agents.yaml` orchestrator; `shared/bot-prompt.ts` `COMPUTER_GUIDANCE` |
 | Watch pane is render-only | `app/src/lib/copilot/computer-tools.tsx` (`useRenderTool`) |
 | HITL is `needs_you`, not a tab wait | `server/src/jobs/store.ts` `markNeedsYou`, `jobs.needs_you` |
+| Computer down is Needs you | `server/src/computer/computer-tools.ts` `COMPUTER_UNAVAILABLE_OWNER` |
 | Shared Chromium refuses a second org | `server/src/computer/shared-claim.ts`, `server/src/computer/gateway.ts` `locate` |
 | Server CRM / search tools | `server/src/index.ts` `loadToolsForActor` |
 | Twenty tool steps | `server/src/copilot.ts` `TOOL_STEPS` |
@@ -397,6 +410,7 @@ and no second runner.
 | Owner thread hides raw tool traces | `app/src/components/channels/chat-messages.ts`, `app/src/components/channels/chat-transcript.tsx` |
 | `/admin` is platform / INITIAL_ADMIN, not org owner | `server/src/auth/guards.ts` `requireDeploymentAdmin`, `app/src/routes/_authed/admin/route.tsx` |
 | Specialist on demand | `server/src/jobs/specialist.ts` `startSpecialist`, `server/src/jobs/specialist-tool.ts` `start_specialist` |
+| Specialist inherits the org computer unless withheld | `server/src/jobs/specialist.ts` `specialistGetsComputer`; `server/src/jobs/specialist-tool.ts` `with_computer` default true |
 | Specialist shares org CRM | `server/src/jobs/specialist.ts` `specialistCrmOrgId`; tools from `loadToolsForActor` |
 | Cmd-K Rooms | `app/src/components/command-palette.tsx` |
 | Cron standing row and due claim | `server/src/jobs/triggers.ts` `CLAIM_DUE_CRON_SQL`, `tickDueCrons`; `job_triggers` |
