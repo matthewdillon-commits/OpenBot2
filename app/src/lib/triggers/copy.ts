@@ -51,6 +51,14 @@ export function inboundWebhookUrl(origin: string, triggerId: string): string {
   return `${origin.replace(/\/$/, "")}/api/inbound/webhook/${triggerId}`;
 }
 
+/**
+ * One-time create copy. The inbound route accepts only these two
+ * presentations of the secret — not other header names and not `?secret=`.
+ */
+export function webhookSecretAuthCopy(): string {
+  return "Send the secret as Authorization: Bearer or x-openbot-trigger-secret.";
+}
+
 export function inboundEmailUrl(origin: string): string {
   return `${origin.replace(/\/$/, "")}/api/inbound/email`;
 }

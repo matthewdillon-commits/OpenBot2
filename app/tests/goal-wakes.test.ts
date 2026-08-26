@@ -5,6 +5,7 @@ import {
   intervalLabel,
   wakeKindLabel,
   wakeSummary,
+  webhookSecretAuthCopy,
 } from "@/lib/triggers/copy";
 import { cronWakeInputFrom, INTERVAL_PRESETS } from "@/lib/triggers/form";
 import { triggerKeys, triggerListQueryOptions } from "@/lib/triggers/queries";
@@ -24,6 +25,14 @@ describe("standing wake copy", () => {
     expect(INTERVAL_PRESETS.map((preset) => preset.seconds)).toEqual([
       900, 3600, 21_600, 86_400,
     ]);
+  });
+
+  test("webhook create copy names the accepted secret headers", () => {
+    expect(webhookSecretAuthCopy()).toContain("Authorization: Bearer");
+    expect(webhookSecretAuthCopy()).toContain("x-openbot-trigger-secret");
+    expect(webhookSecretAuthCopy()).not.toContain("x-webhook-secret");
+    expect(webhookSecretAuthCopy()).not.toContain("x-obot-secret");
+    expect(webhookSecretAuthCopy()).not.toContain("?secret=");
   });
 
   test("webhook and inbound email URLs stay on this origin", () => {
