@@ -38,6 +38,9 @@ export function SeeTheWorkPanel({
         ? focusAgentId
         : members[0]?.id;
   const watchMember = members.find((member) => member.id === watchAgentId);
+  const traceAgentId =
+    members.find((member) => member.standingRole === "orchestrator")?.id ??
+    members[0]?.id;
 
   if (room.isPending) return null;
   if (room.error || !room.data) {
@@ -105,7 +108,13 @@ export function SeeTheWorkPanel({
           </ul>
         )}
       </div>
-      <WorkTraces channelId={channelId} threadId={room.data.threadId} />
+      {room.data.threadId && traceAgentId ? (
+        <WorkTraces
+          channelId={channelId}
+          runtimeAgentId={traceAgentId}
+          threadId={room.data.threadId}
+        />
+      ) : null}
       {watchAgentId ? (
         <WorkComputer
           agentId={watchAgentId}
@@ -122,13 +131,16 @@ export function SeeTheWorkPanel({
 
 function WorkTraces({
   channelId,
+  runtimeAgentId,
   threadId,
 }: {
   channelId: string;
+  runtimeAgentId: string;
   threadId: string;
 }) {
   const { agent } = useAgent({
     agentId: `channel:${channelId}`,
+    runtimeAgentId,
     threadId,
     updates: [UseAgentUpdate.OnMessagesChanged],
   });
