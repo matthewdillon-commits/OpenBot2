@@ -1,5 +1,14 @@
-import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
+import {
+  infiniteQueryOptions,
+  keepPreviousData,
+  queryOptions,
+} from "@tanstack/react-query";
 import { client } from "@/lib/client";
+import {
+  type GoalListStatus,
+  normalizeGoalQuery,
+  parseGoalListStatus,
+} from "./search";
 
 export type LoopOutcome = "worked" | "didn't" | "unknown";
 export type LoopDecision = "keep" | "revise" | "revert";
@@ -61,9 +70,27 @@ export type ChannelSummary = AgentChannel & {
   lastActionAt: string | null;
 };
 
+export type ChannelListFilters = {
+  search?: string;
+  status?: GoalListStatus;
+};
+
+export function channelListFilters(filters: ChannelListFilters = {}): {
+  search: string;
+  status: GoalListStatus;
+} {
+  return {
+    search: normalizeGoalQuery(filters.search ?? ""),
+    status: parseGoalListStatus(filters.status),
+  };
+}
+
 export const channelKeys = {
   all: ["channels"] as const,
-  list: () => ["channels", "list"] as const,
+  /** Prefix that matches every paged roster, whatever it is filtered by. */
+  lists: () => ["channels", "list"] as const,
+  list: (filters: ChannelListFilters = {}) =>
+    ["channels", "list", channelListFilters(filters)] as const,
   detail: (channelId: string) => ["channels", "detail", channelId] as const,
 };
 
@@ -73,6 +100,19 @@ export type ChannelPage = {
   nextCursor: string | null;
 };
 
+export function channelListPath(
+  filters: ChannelListFilters = {},
+  cursor = "",
+): string {
+  const { search, status } = channelListFilters(filters);
+  const query = new URLSearchParams();
+  if (search) query.set("search", search);
+  if (status !== "all") query.set("status", status);
+  if (cursor) query.set("cursor", cursor);
+  const suffix = query.size > 0 ? `?${query}` : "";
+  return `/api/channels${suffix}`;
+}
+
 /**
  * The sidebar's channels, a page at a time.
  *
@@ -80,20 +120,25 @@ export type ChannelPage = {
  * Nothing removes a channel, so somebody who talks to their Bot daily accumulates thousands and the
  * query grows monotonically for as long as they use the product.
  *
+ * Search and status go to the server. Filtering the page that arrived would only search the first
+ * fifty, which is how an existing goal used to vanish under a query.
+ *
  * The pages are flattened for the caller, so the sidebar and the socket that patches it both see one
  * array in recency order and neither has to know this is paged.
  */
-export function channelListQueryOptions() {
+export function channelListQueryOptions(filters: ChannelListFilters = {}) {
+  const normalised = channelListFilters(filters);
   return infiniteQueryOptions({
-    queryKey: channelKeys.list(),
+    queryKey: channelKeys.list(normalised),
     initialPageParam: "",
+    placeholderData: keepPreviousData,
     queryFn: async ({ pageParam }): Promise<ChannelPage> => {
-      const suffix = pageParam
-        ? `?cursor=${encodeURIComponent(pageParam as string)}`
-        : "";
-      const response = await client(`/api/channels${suffix}`, {
-        fallback: "Could not load channels",
-      });
+      const response = await client(
+        channelListPath(normalised, pageParam as string),
+        {
+          fallback: "Could not load channels",
+        },
+      );
       return (await response.json()) as ChannelPage;
     },
     getNextPageParam: (page: ChannelPage) => page.nextCursor ?? undefined,

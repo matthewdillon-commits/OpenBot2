@@ -19,6 +19,7 @@ import {
   intelligenceChannelMappings,
   users,
 } from "../src/db/schema";
+import { jobs } from "../src/db/schema/jobs";
 import { TEST_POOL } from "./support/database";
 
 const databaseUrl =
@@ -84,10 +85,55 @@ async function createAgent(owner: AgentActor, name = "Expense Manager") {
   return profile.id;
 }
 
-async function createChannel(owner: AgentActor, agentIds: string[]) {
-  const channel = await store.create(owner, agentIds);
+async function createChannel(
+  owner: AgentActor,
+  agentIds: string[],
+  name?: string,
+) {
+  const channel = await store.create(
+    owner,
+    agentIds,
+    name ? { name } : undefined,
+  );
   createdChannelIds.push(channel.id);
   return channel;
+}
+
+async function insertJob(
+  owner: AgentActor,
+  channel: { id: string; threadId: string },
+  agentId: string,
+  input: {
+    status: "queued" | "succeeded" | "failed";
+    goalStatus: "Active" | "Needs you" | "Done";
+    lastAction: string;
+    needsYou?: boolean;
+  },
+) {
+  await database.insert(jobs).values({
+    id: `job_${testPrefix}-${randomUUID()}`,
+    orgId: "org_local",
+    channelId: channel.id,
+    goalId: channel.id,
+    coworkerId: agentId,
+    actingUserId: owner.id,
+    trigger: "manual",
+    payload: { prompt: input.lastAction },
+    status: input.status,
+    threadId: channel.threadId,
+    needsYou: input.needsYou === true,
+    outcome: {
+      status: input.goalStatus,
+      last_action: input.lastAction,
+      last_action_at: new Date().toISOString(),
+      goalId: channel.id,
+      channelId: channel.id,
+      agentId,
+      orgId: "org_local",
+      actingUserId: owner.id,
+      summary: input.lastAction,
+    },
+  });
 }
 
 /**
@@ -199,6 +245,154 @@ describe("reading a person's channels", () => {
 
     expect(page.channels).toEqual([]);
     expect(page.nextCursor).toBeNull();
+  });
+});
+
+/**
+ * Search and status have to run on the server. Filtering the page the sidebar already
+ * loaded is how an existing goal used to vanish — the first page is 50, and nothing
+ * asked for the next one.
+ */
+describe("searching a person's goals", () => {
+  test("finds a goal that is not on the first page", async () => {
+    const owner = await createUser();
+    const agentId = await createAgent(owner);
+    const oldest = await createChannel(
+      owner,
+      [agentId],
+      "UniqueZebra research",
+    );
+    for (let index = 0; index < 50; index += 1) {
+      await createChannel(owner, [agentId], `Filler goal ${index}`);
+    }
+
+    const unfiltered = await store.list(owner, { limit: 50 });
+    expect(unfiltered.channels.map((channel) => channel.id)).not.toContain(
+      oldest.id,
+    );
+    expect(unfiltered.nextCursor).not.toBeNull();
+
+    const found = await store.list(owner, { search: "  uniquezebra  " });
+    expect(found.channels.map((channel) => channel.id)).toEqual([oldest.id]);
+  });
+
+  test("matches case, surrounding whitespace, a partial title, and a recent message", async () => {
+    const owner = await createUser();
+    const agentId = await createAgent(owner);
+    const named = await createChannel(
+      owner,
+      [agentId],
+      "Research Ada Lovelace",
+    );
+    const spoken = await createChannel(owner, [agentId], "Other work");
+    await store.recordActivity(owner, spoken.id, {
+      agentId,
+      at: new Date(),
+      text: "Filed the quarterly zebra report.",
+    });
+
+    const byTitle = await store.list(owner, { search: "  ADA  " });
+    expect(byTitle.channels.map((channel) => channel.id)).toEqual([named.id]);
+
+    const byPartial = await store.list(owner, { search: "Lovelace" });
+    expect(byPartial.channels.map((channel) => channel.id)).toEqual([named.id]);
+
+    const byMessage = await store.list(owner, { search: "zebra report" });
+    expect(byMessage.channels.map((channel) => channel.id)).toEqual([
+      spoken.id,
+    ]);
+
+    const cleared = await store.list(owner, { search: "   " });
+    expect(cleared.channels.map((channel) => channel.id).sort()).toEqual(
+      [named.id, spoken.id].sort(),
+    );
+  });
+
+  test("finds a last action that is not the last message", async () => {
+    const owner = await createUser();
+    const agentId = await createAgent(owner);
+    const channel = await createChannel(owner, [agentId], "Quiet goal");
+    await insertJob(owner, channel, agentId, {
+      status: "succeeded",
+      goalStatus: "Done",
+      lastAction: "Wrote the CRM person.",
+    });
+
+    const found = await store.list(owner, { search: "crm person" });
+    expect(found.channels.map((row) => row.id)).toEqual([channel.id]);
+  });
+
+  test("the same query returns the same eligible goals across All, Active, and Completed", async () => {
+    const owner = await createUser();
+    const agentId = await createAgent(owner);
+    const active = await createChannel(owner, [agentId], "Ada active work");
+    const needsYou = await createChannel(owner, [agentId], "Ada needs you");
+    const done = await createChannel(owner, [agentId], "Ada completed work");
+    await insertJob(owner, needsYou, agentId, {
+      status: "failed",
+      goalStatus: "Needs you",
+      lastAction: "Waiting on a login.",
+      needsYou: true,
+    });
+    await insertJob(owner, done, agentId, {
+      status: "succeeded",
+      goalStatus: "Done",
+      lastAction: "Ada filed.",
+    });
+
+    const needle = { search: "Ada" };
+    const all = await store.list(owner, { ...needle, status: "all" });
+    const unfinished = await store.list(owner, { ...needle, status: "active" });
+    const completed = await store.list(owner, {
+      ...needle,
+      status: "completed",
+    });
+
+    expect(all.channels.map((row) => row.id).sort()).toEqual(
+      [active.id, needsYou.id, done.id].sort(),
+    );
+    expect(unfinished.channels.map((row) => row.id).sort()).toEqual(
+      [active.id, needsYou.id].sort(),
+    );
+    expect(completed.channels.map((row) => row.id)).toEqual([done.id]);
+  });
+
+  test("a search for a wildcard finds that, not everything", async () => {
+    const owner = await createUser();
+    const agentId = await createAgent(owner);
+    const named = await createChannel(owner, [agentId], "100% coverage");
+    await createChannel(owner, [agentId], "Everything else");
+
+    const result = await store.list(owner, { search: "100%" });
+    expect(result.channels.map((row) => row.id)).toEqual([named.id]);
+  });
+
+  test("paging a search still reaches every match", async () => {
+    const owner = await createUser();
+    const agentId = await createAgent(owner);
+    const expected: string[] = [];
+    for (let index = 0; index < 5; index += 1) {
+      expected.push(
+        (await createChannel(owner, [agentId], `Shared needle ${index}`)).id,
+      );
+    }
+    await createChannel(owner, [agentId], "Unrelated");
+
+    const seen: string[] = [];
+    let cursor: string | undefined;
+    for (let page = 0; page < 10; page += 1) {
+      const result = await store.list(owner, {
+        search: "Shared needle",
+        limit: 2,
+        ...(cursor ? { cursor } : {}),
+      });
+      seen.push(...result.channels.map((channel) => channel.id));
+      if (!result.nextCursor) break;
+      cursor = result.nextCursor;
+    }
+
+    expect(new Set(seen).size).toBe(seen.length);
+    expect(seen.sort()).toEqual(expected.sort());
   });
 });
 

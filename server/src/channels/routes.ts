@@ -28,6 +28,11 @@ import {
 } from "../loop/types";
 import { orgIdOf } from "../orgs/constants";
 import {
+  type GoalListStatus,
+  normalizeGoalQuery,
+  parseGoalListStatus,
+} from "../../../shared/goal-search";
+import {
   CHANNEL_ACTIVITY_TOPIC,
   type ChannelActivityEvent,
   type ChannelEventHub,
@@ -75,7 +80,14 @@ export type ChannelPage = {
   nextCursor: string | null;
 };
 
-export type ChannelQuery = { cursor?: string; limit?: number };
+export type ChannelQuery = {
+  cursor?: string;
+  limit?: number;
+  /** Substring of the goal name, last message, or last action. */
+  search?: string;
+  /** All, unfinished (Active + Needs you), or Done. */
+  status?: GoalListStatus;
+};
 
 /**
  * How many channels one page holds.
@@ -112,6 +124,57 @@ function decodeChannelCursor(
   } catch {
     return undefined;
   }
+}
+
+/** So a search for `100%` finds that and not every goal. */
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (character) => `\\${character}`);
+}
+
+/**
+ * The roster's goal status, as SQL, matching the JavaScript that fills `goalStatus`.
+ *
+ * Approval waiting wins; otherwise the latest job; otherwise Active. Duplicated
+ * here because the page has to be chosen before those jobs are joined.
+ */
+function rosterGoalStatusSql(orgId: string) {
+  return sql`
+    case
+      when ${channels.loop} #>> '{approval,status}' = 'waiting' then 'Needs you'
+      else coalesce((
+        select
+          case
+            when j.needs_you then 'Needs you'
+            when j.outcome->>'status' in ('Active', 'Needs you', 'Done')
+              then j.outcome->>'status'
+            when j.status in ('queued', 'running') then 'Active'
+            when j.status = 'succeeded' then 'Done'
+            else 'Needs you'
+          end
+        from ${jobs} j
+        where j.channel_id = ${channels.id}
+          and j.org_id = ${orgId}
+        order by j.updated_at desc
+        limit 1
+      ), 'Active')
+    end
+  `;
+}
+
+function channelSearchSql(orgId: string, search: string) {
+  const pattern = `%${escapeLike(search)}%`;
+  return sql`(
+    ${channels.name} ilike ${pattern} escape '\\'
+    or coalesce(${channels.lastMessage}, '') ilike ${pattern} escape '\\'
+    or coalesce((
+      select j.outcome->>'last_action'
+      from ${jobs} j
+      where j.channel_id = ${channels.id}
+        and j.org_id = ${orgId}
+      order by j.updated_at desc
+      limit 1
+    ), '') ilike ${pattern} escape '\\'
+  )`;
 }
 
 export type ChannelStore = {
@@ -477,6 +540,9 @@ export function createChannelStore(
         MAX_CHANNEL_PAGE,
       );
       const cursor = decodeChannelCursor(query.cursor);
+      const orgId = orgIdOf(actor);
+      const search = normalizeGoalQuery(query.search ?? "");
+      const status = parseGoalListStatus(query.status);
 
       /*
        * The page of channels is chosen first, and the agents are joined to that page.
@@ -484,6 +550,10 @@ export function createChannelStore(
        * The row set below is one row per channel-agent pair, so a limit on rows would cut a channel
        * in half: its second Bot would arrive on the next page as a separate entry with the same id.
        * Limiting the channels and then joining keeps a channel whole whatever it holds.
+       *
+       * Search and status are applied here, before the page is cut, so a match that is not on the
+       * first page of the unfiltered roster is still found. Filtering the page in the browser is
+       * how a loaded goal used to disappear.
        */
       const page = await database
         .select({
@@ -500,10 +570,16 @@ export function createChannelStore(
         )
         .where(
           and(
-            eq(channels.orgId, orgIdOf(actor)),
+            eq(channels.orgId, orgId),
             cursor
               ? sql`(coalesce(${channels.lastMessageAt}, ${channels.createdAt}), ${channels.id}) < (${cursor.recency}::timestamptz, ${cursor.id})`
               : undefined,
+            search ? channelSearchSql(orgId, search) : undefined,
+            status === "completed"
+              ? sql`(${rosterGoalStatusSql(orgId)}) = 'Done'`
+              : status === "active"
+                ? sql`(${rosterGoalStatusSql(orgId)}) <> 'Done'`
+                : undefined,
           ),
         )
         .orderBy(
@@ -616,7 +692,7 @@ export function createChannelStore(
           .from(jobs)
           .where(
             and(
-              eq(jobs.orgId, orgIdOf(actor)),
+              eq(jobs.orgId, orgId),
               inArray(
                 jobs.channelId,
                 listed.map((channel) => channel.id),
@@ -909,6 +985,12 @@ export function createChannelRoutes(
           ? { cursor: url.searchParams.get("cursor") as string }
           : {}),
         ...(Number.isFinite(limit) ? { limit } : {}),
+        ...(url.searchParams.get("search")
+          ? { search: url.searchParams.get("search") as string }
+          : {}),
+        ...(url.searchParams.get("status")
+          ? { status: parseGoalListStatus(url.searchParams.get("status")) }
+          : {}),
       });
 
       return context.json({

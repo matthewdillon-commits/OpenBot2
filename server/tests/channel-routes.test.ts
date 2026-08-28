@@ -361,6 +361,18 @@ describe("channel routes", () => {
     expect(response.status).toBe(599);
     expect(await json(response)).toEqual({ sentinel: "database disconnected" });
   });
+
+  test("forwards search and status so the roster is not filtered in the browser", async () => {
+    const store = fakeStore();
+    const response = await appFor(store).request(
+      "http://openbot.test/?search=%20Ada%20&status=completed&limit=10",
+    );
+
+    expect(response.status).toBe(200);
+    expect(store.calls).toEqual([
+      ["list", actor, { limit: 10, search: " Ada ", status: "completed" }],
+    ]);
+  });
 });
 
 describe("channel route composition", () => {
