@@ -1,7 +1,4 @@
-import {
-  AGENT_COMPUTER_PATH,
-  AGENT_COMPUTER_START_CMD,
-} from "../../e2b/start";
+import { AGENT_COMPUTER_PATH, AGENT_COMPUTER_START_CMD } from "../../e2b/start";
 import { ComputerUnavailableError } from "./client";
 import type {
   E2BClient,
